@@ -1,3 +1,5 @@
+pub const REFRESH_RESOLUTION: u64 = 250;
+
 pub fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
