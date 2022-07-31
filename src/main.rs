@@ -13,7 +13,7 @@ use crate::{
     cli::{Cli, Commands},
     player::Playlist,
     qobuz::{client, PlaylistTrack},
-    state::{app::PlayerKey, ClockValue},
+    state::app::PlayerKey,
 };
 use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
@@ -30,7 +30,7 @@ use self::{
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
-    pretty_env_logger::init_timed();
+    pretty_env_logger::init();
     let cli = Cli::parse();
     let mut base_dir = dirs::data_local_dir().unwrap();
     base_dir.push("hifi-rs");
@@ -41,13 +41,11 @@ async fn main() -> Result<(), String> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume {} => {
-            if let (Some(playlist), Some(next_up), Some(_position)) = (
+            if let (Some(playlist), Some(next_up)) = (
                 db.player
                     .get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist)),
                 db.player
                     .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp)),
-                db.player
-                    .get::<String, ClockValue>(AppKey::Player(PlayerKey::Position)),
             ) {
                 if let Some(track_url) = next_up.track_url {
                     let (mut player, broadcast) = player::new(db.clone());
@@ -55,8 +53,7 @@ async fn main() -> Result<(), String> {
                     let mut client = client::new(db.clone()).await;
                     client.setup(cli.username, cli.password).await;
 
-                    player.setup(client).await;
-                    player.ready();
+                    player.setup(client, true).await;
 
                     if let Some(prev_playlist) = db
                         .player
@@ -68,10 +65,6 @@ async fn main() -> Result<(), String> {
                     player.set_playlist(playlist);
                     player.set_uri(track_url);
 
-                    // player.seek(
-                    //     position,
-                    //     SeekFlags::FLUSH | SeekFlags::TRICKMODE | SeekFlags::TRICKMODE_NO_AUDIO,
-                    // );
                     player.play();
 
                     let mut tui = ui::terminal::new();
@@ -80,10 +73,9 @@ async fn main() -> Result<(), String> {
                     error!("Track is missing url.");
                 }
             } else {
-                error!("cannot resume");
+                println!("Sorry, the previous session could not be resumed.");
             }
 
-            db.flush();
             Ok(())
         }
         Commands::Play { query, quality } => {
@@ -119,7 +111,8 @@ async fn main() -> Result<(), String> {
                 if let Some(index) = selected {
                     let selected_album = results.albums.items.remove(index);
 
-                    player.setup(client.clone()).await;
+                    db.player.clear();
+                    player.setup(client.clone(), false).await;
 
                     let quality = if let Some(q) = quality {
                         q
@@ -135,7 +128,6 @@ async fn main() -> Result<(), String> {
                     }
                 }
 
-                db.flush();
                 Ok(())
             } else {
                 Err("".to_string())
@@ -267,14 +259,14 @@ async fn main() -> Result<(), String> {
 
             client.check_auth().await;
             if let Some(track) = client.track(track_id.to_string()).await {
-                player.setup(client.clone()).await;
+                db.player.clear();
+                player.setup(client.clone(), false).await;
                 player.play_track(track, quality.unwrap(), client).await;
 
                 let mut tui = ui::terminal::new();
                 tui.event_loop(broadcast, player).await;
             }
 
-            db.flush();
             Ok(())
         }
         Commands::StreamAlbum {
@@ -289,7 +281,8 @@ async fn main() -> Result<(), String> {
 
             client.check_auth().await;
             if let Some(album) = client.album(album_id).await {
-                player.setup(client.clone()).await;
+                db.player.clear();
+                player.setup(client.clone(), false).await;
 
                 let quality = if let Some(q) = quality {
                     q
@@ -300,6 +293,12 @@ async fn main() -> Result<(), String> {
                 player.play_album(album, quality, client.clone()).await;
 
                 if no_tui {
+                    ctrlc::set_handler(move || {
+                        db.flush();
+                        std::process::exit(0);
+                    })
+                    .expect("error setting ctrlc handler");
+
                     loop {
                         std::thread::sleep(Duration::from_millis(hifi_rs::REFRESH_RESOLUTION));
                     }
@@ -309,7 +308,6 @@ async fn main() -> Result<(), String> {
                 }
             }
 
-            db.flush();
             Ok(())
         }
         Commands::Download { id, quality } => {
@@ -339,7 +337,6 @@ async fn main() -> Result<(), String> {
 
                 println!("Username saved.");
 
-                db.flush();
                 Ok(())
             }
             ConfigCommands::Password {} => {
@@ -359,7 +356,6 @@ async fn main() -> Result<(), String> {
 
                 println!("Password saved.");
 
-                db.flush();
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
@@ -370,7 +366,6 @@ async fn main() -> Result<(), String> {
 
                 println!("Default quality saved.");
 
-                db.flush();
                 Ok(())
             }
             ConfigCommands::Clear {} => {
@@ -383,7 +378,6 @@ async fn main() -> Result<(), String> {
 
                     println!("Database cleared.");
 
-                    db.flush();
                     Ok(())
                 } else {
                     Ok(())
