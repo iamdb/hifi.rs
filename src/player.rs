@@ -535,7 +535,7 @@ impl Player {
             );
         }
     }
-    pub async fn setup(&self, client: Client) {
+    pub async fn setup(&self, client: Client, resume: bool) {
         let mpris = new_mpris(self.clone());
         let mpris_player = new_mpris_player(self.clone());
 
@@ -558,7 +558,7 @@ impl Player {
 
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
-            cloned_self.player_loop(client).await;
+            cloned_self.player_loop(client, resume).await;
         });
 
         let url_request = self.url_request.sender.clone();
@@ -598,7 +598,7 @@ impl Player {
                 None
             });
     }
-    async fn player_loop(&mut self, mut client: Client) {
+    async fn player_loop(&mut self, mut client: Client, mut resume: bool) {
         let mut messages = self.playbin.bus().unwrap().stream();
         let mut url_request = self.url_request.receiver.stream();
 
@@ -630,6 +630,13 @@ impl Player {
 
                             if let Some(next_track) = state.player.get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp)) {
                                state.player.insert::<String, ClockValue>(AppKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
+                            }
+
+                            if resume {
+                                if let Some(position) = state.player.get::<String, ClockValue>(AppKey::Player(PlayerKey::Position)) {
+                                    self.seek(position, SeekFlags::FLUSH | SeekFlags::KEY_UNIT);
+                                    resume = false;
+                                }
                             }
                         }
                         MessageView::Buffering(_) => {

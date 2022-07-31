@@ -79,9 +79,15 @@ pub fn new(base_dir: PathBuf) -> AppState {
     let db = HifiDB(
         sled::Config::default()
             .path(db_dir)
+            .use_compression(true)
+            .compression_factor(10)
+            .mode(sled::Mode::LowSpace)
+            .print_profile_on_drop(false)
             .open()
             .expect("could not open database"),
     );
+
+    warn!("db was recovered: {}", db.0.was_recovered());
 
     AppState {
         config: db.open_tree("config"),
@@ -92,6 +98,7 @@ pub fn new(base_dir: PathBuf) -> AppState {
 
 impl AppState {
     pub fn flush(&self) {
-        self.db.0.flush().expect("ERROR: Failed to flush database.");
+        debug!("flushing db");
+        self.db.0.flush().expect("failed to flush db");
     }
 }
