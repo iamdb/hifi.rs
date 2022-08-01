@@ -9,10 +9,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{
-    select, sync::broadcast::Receiver as BroadcastReceiver,
-    sync::broadcast::Sender as BroadcastSender,
-};
+use tokio::{select, sync::broadcast::Receiver as BroadcastReceiver};
 use tokio_stream::StreamExt;
 use tui::{
     backend::TermionBackend,
@@ -54,12 +51,7 @@ pub fn new() -> Tui {
 }
 
 impl Tui {
-    pub async fn event_loop(
-        &mut self,
-        mut broadcast: BroadcastReceiver<AppState>,
-        player: Player,
-        quit_sender: BroadcastSender<bool>,
-    ) {
+    pub async fn event_loop(&mut self, mut broadcast: BroadcastReceiver<AppState>, player: Player) {
         let sender = self.tx.clone();
         thread::spawn(move || {
             let stdin = std::io::stdin();
@@ -73,9 +65,16 @@ impl Tui {
 
         let mut event_stream = self.rx.stream();
         let mut track_list = TrackList::new(None);
+        let mut quitter = player.app_state().quitter();
 
         loop {
             select! {
+                Ok(quit) = quitter.recv() => {
+                    if quit {
+                        debug!("quitting");
+                        break;
+                    }
+                }
                 Ok(state) = broadcast.recv() => {
                     if let Some(playlist) = state.player.get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist)) {
                         let mut items = playlist
@@ -107,7 +106,7 @@ impl Tui {
                     self.terminal.draw(|f| player::draw(f, state, track_list.clone())).unwrap();
                 }
                 Some(event) = event_stream.next() => {
-                    if !player::key_events(event, player.clone(), track_list.clone(), quit_sender.clone()) {
+                    if !player::key_events(event, player.clone(), track_list.clone()) {
                         break;
                     }
                 }

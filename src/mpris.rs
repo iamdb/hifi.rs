@@ -170,11 +170,11 @@ impl MprisPlayer {
     }
     #[dbus_interface(property)]
     fn can_go_next(&self) -> bool {
-        self.player.playlist().read().len() > 0
+        true
     }
     #[dbus_interface(property)]
     fn can_go_previous(&self) -> bool {
-        self.player.prev_playlist().read().len() > 0
+        true
     }
     #[dbus_interface(property)]
     fn can_play(&self) -> bool {

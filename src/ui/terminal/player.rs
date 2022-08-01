@@ -12,7 +12,6 @@ use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use parking_lot::RwLock;
 use termion::event::Key;
-use tokio::sync::broadcast::Sender as BroadcastSender;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -315,17 +314,12 @@ where
     f.render_stateful_widget(list, area, &mut playlist.state.read().clone());
 }
 
-pub fn key_events(
-    event: Event,
-    player: Player,
-    track_list: TrackList,
-    quit_sender: BroadcastSender<bool>,
-) -> bool {
+pub fn key_events(event: Event, player: Player, track_list: TrackList) -> bool {
     let Event::Input(key) = event;
     match key {
         Key::Char(c) => match c {
             'q' => {
-                quit_sender.send(true).expect("failed to send quit message");
+                player.app_state().send_quit();
                 player.stop();
                 return false;
             }

@@ -25,7 +25,10 @@ pub enum Commands {
         quality: Option<AudioQuality>,
     },
     /// Resume previous session
-    Resume {},
+    Resume {
+        #[clap(long, short)]
+        no_tui: bool,
+    },
     /// Search for tracks, albums, artists and playlists
     Search {
         #[clap(value_parser)]
@@ -36,6 +39,7 @@ pub enum Commands {
         #[clap(value_parser)]
         query: String,
     },
+    /// Get information for a specific album.
     GetAlbum {
         #[clap(value_parser)]
         id: String,
@@ -45,26 +49,31 @@ pub enum Commands {
         #[clap(value_parser)]
         query: String,
     },
+    /// Get information for a specific artist.
     GetArtist {
         #[clap(value_parser)]
         id: String,
     },
+    /// Get information for a specific track.
     GetTrack {
         #[clap(value_parser)]
         id: String,
     },
+    /// Get the url needed to play a track.
     TrackURL {
         #[clap(value_parser)]
         id: i32,
         #[clap(short, long, value_enum)]
         quality: Option<AudioQuality>,
     },
+    /// Stream an individual track by its ID.
     StreamTrack {
         #[clap(value_parser)]
         track_id: i32,
         #[clap(short, long, value_enum)]
         quality: Option<AudioQuality>,
     },
+    /// Stream a full album by its ID.
     StreamAlbum {
         #[clap(value_parser)]
         album_id: String,
@@ -73,10 +82,11 @@ pub enum Commands {
         #[clap(short, long)]
         no_tui: bool,
     },
+    /// Retreive a list of your playlsits.
     MyPlaylists {},
-    Playlist {
-        playlist_id: String,
-    },
+    /// Retreive information about a specific playlist.
+    Playlist { playlist_id: String },
+    /// Download a track to disk.
     Download {
         #[clap(value_parser)]
         id: i32,
