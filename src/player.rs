@@ -345,18 +345,16 @@ impl Player {
             debug!("skipping forward to next track");
             self.ready();
 
-            if next_track.track_url.is_none() {
-                let url_request = &self.url_request.sender;
-                let url_return = &self.url_return.receiver;
+            let url_request = &self.url_request.sender;
+            let url_return = &self.url_return.receiver;
 
-                debug!("requesting track url");
-                url_request
-                    .send(next_track.clone())
-                    .expect("failed to send url to request");
+            debug!("requesting track url");
+            url_request
+                .send(next_track.clone())
+                .expect("failed to send url to request");
 
-                debug!("receiving track url");
-                next_track = url_return.recv().expect("failed to get track url");
-            };
+            debug!("receiving track url");
+            next_track = url_return.recv().expect("failed to get track url");
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -383,6 +381,7 @@ impl Player {
             let one_second = ClockTime::from_seconds(1);
 
             if current_position > one_second && num.is_none() {
+                debug!("current track position >1s, seeking to start of track");
                 self.playbin
                     .seek_simple(SeekFlags::FLUSH, ClockTime::default())
                     .expect("failed to seek");
@@ -421,16 +420,14 @@ impl Player {
             debug!("skipping backward to previous track");
             self.ready();
 
-            if prev_track.track_url.is_none() {
-                let url_request = &self.url_request.sender;
-                let url_return = &self.url_return.receiver;
+            let url_request = &self.url_request.sender;
+            let url_return = &self.url_return.receiver;
 
-                url_request
-                    .send(prev_track.clone())
-                    .expect("failed to send url to request");
+            url_request
+                .send(prev_track.clone())
+                .expect("failed to send url to request");
 
-                prev_track = url_return.recv().expect("failed to get track url");
-            };
+            prev_track = url_return.recv().expect("failed to get track url");
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -461,7 +458,9 @@ impl Player {
             true
         }
     }
-    async fn position_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
+    /// Adds the most recent position and progress values to the state
+    /// then broadcasts the state to listeners.
+    async fn broadcast_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
         loop {
             if let Ok(quit) = quit_receiver.try_recv() {
                 if quit {
@@ -580,7 +579,7 @@ impl Player {
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
         tokio::spawn(async move {
-            cloned_self.position_loop(quitter).await;
+            cloned_self.broadcast_loop(quitter).await;
         });
 
         let mut cloned_self = self.clone();
