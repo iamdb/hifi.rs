@@ -319,6 +319,7 @@ pub fn key_events(event: Event, player: Player, track_list: TrackList) -> bool {
     match key {
         Key::Char(c) => match c {
             'q' => {
+                player.app_state().send_quit();
                 player.stop();
                 return false;
             }

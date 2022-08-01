@@ -36,26 +36,28 @@ async fn main() -> Result<(), String> {
     base_dir.push("hifi-rs");
 
     // SETUP DATABASE
-    let db = state::app::new(base_dir);
+    let app_state = state::app::new(base_dir);
 
     // CLI COMMANDS
     match cli.command {
-        Commands::Resume {} => {
+        Commands::Resume { no_tui } => {
             if let (Some(playlist), Some(next_up)) = (
-                db.player
+                app_state
+                    .player
                     .get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist)),
-                db.player
+                app_state
+                    .player
                     .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp)),
             ) {
                 if let Some(track_url) = next_up.track_url {
-                    let (mut player, broadcast) = player::new(db.clone());
+                    let (mut player, broadcast) = player::new(app_state.clone());
 
-                    let mut client = client::new(db.clone()).await;
+                    let mut client = client::new(app_state.clone()).await;
                     client.setup(cli.username, cli.password).await;
 
                     player.setup(client, true).await;
 
-                    if let Some(prev_playlist) = db
+                    if let Some(prev_playlist) = app_state
                         .player
                         .get::<String, Playlist>(AppKey::Player(PlayerKey::PreviousPlaylist))
                     {
@@ -67,8 +69,28 @@ async fn main() -> Result<(), String> {
 
                     player.play();
 
-                    let mut tui = ui::terminal::new();
-                    tui.event_loop(broadcast, player).await;
+                    if no_tui {
+                        let mut quitter = app_state.quitter();
+
+                        ctrlc::set_handler(move || {
+                            app_state.send_quit();
+                            std::process::exit(0);
+                        })
+                        .expect("error setting ctrlc handler");
+
+                        loop {
+                            if let Ok(quit) = quitter.try_recv() {
+                                if quit {
+                                    debug!("quitting");
+                                    break;
+                                }
+                            }
+                            std::thread::sleep(Duration::from_millis(hifi_rs::REFRESH_RESOLUTION));
+                        }
+                    } else {
+                        let mut tui = ui::terminal::new();
+                        tui.event_loop(broadcast, player).await;
+                    }
                 } else {
                     error!("Track is missing url.");
                 }
@@ -79,9 +101,9 @@ async fn main() -> Result<(), String> {
             Ok(())
         }
         Commands::Play { query, quality } => {
-            let (player, broadcast) = player::new(db.clone());
+            let (player, broadcast) = player::new(app_state.clone());
 
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -111,7 +133,7 @@ async fn main() -> Result<(), String> {
                 if let Some(index) = selected {
                     let selected_album = results.albums.items.remove(index);
 
-                    db.player.clear();
+                    app_state.player.clear();
                     player.setup(client.clone(), false).await;
 
                     let quality = if let Some(q) = quality {
@@ -134,7 +156,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::Search { query } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -147,7 +169,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::SearchAlbums { query } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -160,7 +182,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::GetAlbum { id } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -173,7 +195,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::SearchArtists { query } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -186,7 +208,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::GetArtist { id } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -199,7 +221,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::GetTrack { id } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -212,7 +234,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::TrackURL { id, quality } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -226,7 +248,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::MyPlaylists {} => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -239,7 +261,7 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::Playlist { playlist_id } => {
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -252,14 +274,14 @@ async fn main() -> Result<(), String> {
             }
         }
         Commands::StreamTrack { track_id, quality } => {
-            let (player, broadcast) = player::new(db.clone());
+            let (player, broadcast) = player::new(app_state.clone());
 
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
             if let Some(track) = client.track(track_id.to_string()).await {
-                db.player.clear();
+                app_state.player.clear();
                 player.setup(client.clone(), false).await;
                 player.play_track(track, quality.unwrap(), client).await;
 
@@ -274,14 +296,14 @@ async fn main() -> Result<(), String> {
             quality,
             no_tui,
         } => {
-            let (player, broadcast) = player::new(db.clone());
+            let (player, broadcast) = player::new(app_state.clone());
 
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
             if let Some(album) = client.album(album_id).await {
-                db.player.clear();
+                app_state.player.clear();
                 player.setup(client.clone(), false).await;
 
                 let quality = if let Some(q) = quality {
@@ -293,13 +315,21 @@ async fn main() -> Result<(), String> {
                 player.play_album(album, quality, client.clone()).await;
 
                 if no_tui {
+                    let mut quitter = app_state.quitter();
+
                     ctrlc::set_handler(move || {
-                        db.flush();
+                        app_state.send_quit();
                         std::process::exit(0);
                     })
                     .expect("error setting ctrlc handler");
 
                     loop {
+                        if let Ok(quit) = quitter.try_recv() {
+                            if quit {
+                                debug!("quitting");
+                                break;
+                            }
+                        }
                         std::thread::sleep(Duration::from_millis(hifi_rs::REFRESH_RESOLUTION));
                     }
                 } else {
@@ -312,7 +342,7 @@ async fn main() -> Result<(), String> {
         }
         Commands::Download { id, quality } => {
             // SETUP API CLIENT
-            let mut client = client::new(db.clone()).await;
+            let mut client = client::new(app_state.clone()).await;
             client.setup(cli.username, cli.password).await;
 
             client.check_auth().await;
@@ -330,7 +360,7 @@ async fn main() -> Result<(), String> {
                     .interact_text()
                     .expect("failed to get username");
 
-                db.config.insert::<String, StringValue>(
+                app_state.config.insert::<String, StringValue>(
                     AppKey::Client(ClientKey::Username),
                     username.into(),
                 );
@@ -349,7 +379,7 @@ async fn main() -> Result<(), String> {
 
                 debug!("saving password to database: {}", md5_pw);
 
-                db.config.insert::<String, StringValue>(
+                app_state.config.insert::<String, StringValue>(
                     AppKey::Client(ClientKey::Password),
                     md5_pw.into(),
                 );
@@ -359,7 +389,7 @@ async fn main() -> Result<(), String> {
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
-                db.config.insert::<String, AudioQuality>(
+                app_state.config.insert::<String, AudioQuality>(
                     AppKey::Client(ClientKey::DefaultQuality),
                     quality,
                 );
@@ -374,7 +404,7 @@ async fn main() -> Result<(), String> {
                     .interact()
                     .expect("failed to get response")
                 {
-                    db.config.clear();
+                    app_state.config.clear();
 
                     println!("Database cleared.");
 

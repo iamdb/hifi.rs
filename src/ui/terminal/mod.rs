@@ -65,9 +65,16 @@ impl Tui {
 
         let mut event_stream = self.rx.stream();
         let mut track_list = TrackList::new(None);
+        let mut quitter = player.app_state().quitter();
 
         loop {
             select! {
+                Ok(quit) = quitter.recv() => {
+                    if quit {
+                        debug!("quitting");
+                        break;
+                    }
+                }
                 Ok(state) = broadcast.recv() => {
                     if let Some(playlist) = state.player.get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist)) {
                         let mut items = playlist

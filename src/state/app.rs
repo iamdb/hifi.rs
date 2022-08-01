@@ -1,3 +1,5 @@
+use tokio::sync::broadcast::{Receiver, Sender};
+
 use super::{HifiDB, StateTree};
 use std::path::PathBuf;
 
@@ -69,36 +71,73 @@ impl PlayerKey {
 pub struct AppState {
     pub player: StateTree,
     pub config: StateTree,
-    db: HifiDB,
+    quit_sender: Sender<bool>,
+    _db: HifiDB,
 }
 
 pub fn new(base_dir: PathBuf) -> AppState {
     let mut db_dir = base_dir;
     db_dir.push("database");
 
-    let db = HifiDB(
-        sled::Config::default()
-            .path(db_dir)
-            .use_compression(true)
-            .compression_factor(10)
-            .mode(sled::Mode::LowSpace)
-            .print_profile_on_drop(false)
-            .open()
-            .expect("could not open database"),
-    );
+    let db = match sled::Config::default()
+        .path(db_dir)
+        .use_compression(true)
+        .compression_factor(10)
+        .mode(sled::Mode::LowSpace)
+        .print_profile_on_drop(false)
+        .open()
+    {
+        Ok(db) => HifiDB(db),
+        Err(err) => match err {
+            sled::Error::CollectionNotFound(e) => {
+                println!("ERROR: {:?}", e);
+                std::process::exit(1);
+            }
+            sled::Error::Unsupported(e) => {
+                println!("ERROR: {}", e);
+                std::process::exit(1);
+            }
+            sled::Error::ReportableBug(_) => {
+                println!("ERROR: There is a bug in the database. :(");
+                std::process::exit(1);
+            }
+            sled::Error::Io(_) => {
+                println!("The database is in use. Is another session running?");
+                std::process::exit(1);
+            }
+            sled::Error::Corruption { at, bt: _ } => {
+                println!("ERROR: Databast corruption at {}", at.unwrap(),);
+                std::process::exit(1);
+            }
+        },
+    };
+
+    // Quit channel
+    let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
     warn!("db was recovered: {}", db.0.was_recovered());
 
     AppState {
         config: db.open_tree("config"),
         player: db.open_tree("player"),
-        db,
+        quit_sender,
+        _db: db,
     }
 }
 
+#[allow(dead_code)]
 impl AppState {
     pub fn flush(&self) {
         debug!("flushing db");
-        self.db.0.flush().expect("failed to flush db");
+        self._db.0.flush().expect("failed to flush db");
+    }
+    pub fn quitter(&self) -> Receiver<bool> {
+        self.quit_sender.subscribe()
+    }
+
+    pub fn send_quit(&self) {
+        self.quit_sender
+            .send(true)
+            .expect("failed to send quit message");
     }
 }
