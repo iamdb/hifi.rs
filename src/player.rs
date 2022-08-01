@@ -505,8 +505,9 @@ impl Player {
                 self.broadcast_sender
                     .send(state)
                     .expect("failed to broadcast app state");
+
+                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
-            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         }
     }
     /// Plays a single track.
