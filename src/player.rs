@@ -427,8 +427,14 @@ impl Player {
             true
         }
     }
-    async fn broadcast_loop(&self) {
+    async fn broadcast_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
         loop {
+            if let Ok(quit) = quit_receiver.try_recv() {
+                if quit {
+                    debug!("quitting");
+                    break;
+                }
+            }
             if self.playbin.current_state() != GstState::VoidPending
                 || self.playbin.current_state() != GstState::Null
             {
@@ -535,7 +541,7 @@ impl Player {
             );
         }
     }
-    pub async fn setup(&self, client: Client, resume: bool) {
+    pub async fn setup(&self, client: Client, resume: bool, quit_sender: BroadcastSender<bool>) {
         let mpris = new_mpris(self.clone());
         let mpris_player = new_mpris_player(self.clone());
 
@@ -552,13 +558,16 @@ impl Player {
             .expect("failed to attach to dbus");
 
         let cloned_self = self.clone();
+        let quitter = quit_sender.subscribe();
         tokio::spawn(async move {
-            cloned_self.broadcast_loop().await;
+            cloned_self.broadcast_loop(quitter).await;
         });
 
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
-            cloned_self.player_loop(client, resume).await;
+            cloned_self
+                .player_loop(client, resume, quit_sender.subscribe())
+                .await;
         });
 
         let url_request = self.url_request.sender.clone();
@@ -598,12 +607,23 @@ impl Player {
                 None
             });
     }
-    async fn player_loop(&mut self, mut client: Client, mut resume: bool) {
+    async fn player_loop(
+        &mut self,
+        mut client: Client,
+        mut resume: bool,
+        mut quit_receiver: BroadcastReceiver<bool>,
+    ) {
         let mut messages = self.playbin.bus().unwrap().stream();
         let mut url_request = self.url_request.receiver.stream();
 
         loop {
             select! {
+                Ok(quit) = quit_receiver.recv() => {
+                    if quit {
+                        debug!("quitting");
+                        break;
+                    }
+                }
                 Some(mut playlist_track) = url_request.next() => {
                     if let Ok(track_url) = client.track_url(playlist_track.track.id,playlist_track.quality.clone(), None).await {
                         let with_track_url = playlist_track.set_track_url(track_url);

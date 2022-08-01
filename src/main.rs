@@ -38,6 +38,9 @@ async fn main() -> Result<(), String> {
     // SETUP DATABASE
     let db = state::app::new(base_dir);
 
+    // Quit channel
+    let (quit_sender, mut quit_receiver) = tokio::sync::broadcast::channel::<bool>(1);
+
     // CLI COMMANDS
     match cli.command {
         Commands::Resume {} => {
@@ -53,7 +56,7 @@ async fn main() -> Result<(), String> {
                     let mut client = client::new(db.clone()).await;
                     client.setup(cli.username, cli.password).await;
 
-                    player.setup(client, true).await;
+                    player.setup(client, true, quit_sender.clone()).await;
 
                     if let Some(prev_playlist) = db
                         .player
@@ -68,7 +71,7 @@ async fn main() -> Result<(), String> {
                     player.play();
 
                     let mut tui = ui::terminal::new();
-                    tui.event_loop(broadcast, player).await;
+                    tui.event_loop(broadcast, player, quit_sender).await;
                 } else {
                     error!("Track is missing url.");
                 }
@@ -112,7 +115,9 @@ async fn main() -> Result<(), String> {
                     let selected_album = results.albums.items.remove(index);
 
                     db.player.clear();
-                    player.setup(client.clone(), false).await;
+                    player
+                        .setup(client.clone(), false, quit_sender.clone())
+                        .await;
 
                     let quality = if let Some(q) = quality {
                         q
@@ -124,7 +129,7 @@ async fn main() -> Result<(), String> {
                         player.play_album(album, quality, client.clone()).await;
 
                         let mut tui = ui::terminal::new();
-                        tui.event_loop(broadcast, player).await;
+                        tui.event_loop(broadcast, player, quit_sender).await;
                     }
                 }
 
@@ -260,11 +265,13 @@ async fn main() -> Result<(), String> {
             client.check_auth().await;
             if let Some(track) = client.track(track_id.to_string()).await {
                 db.player.clear();
-                player.setup(client.clone(), false).await;
+                player
+                    .setup(client.clone(), false, quit_sender.clone())
+                    .await;
                 player.play_track(track, quality.unwrap(), client).await;
 
                 let mut tui = ui::terminal::new();
-                tui.event_loop(broadcast, player).await;
+                tui.event_loop(broadcast, player, quit_sender).await;
             }
 
             Ok(())
@@ -282,7 +289,9 @@ async fn main() -> Result<(), String> {
             client.check_auth().await;
             if let Some(album) = client.album(album_id).await {
                 db.player.clear();
-                player.setup(client.clone(), false).await;
+                player
+                    .setup(client.clone(), false, quit_sender.clone())
+                    .await;
 
                 let quality = if let Some(q) = quality {
                     q
@@ -294,17 +303,23 @@ async fn main() -> Result<(), String> {
 
                 if no_tui {
                     ctrlc::set_handler(move || {
-                        db.flush();
+                        quit_sender.send(true).expect("failed to send quit message");
                         std::process::exit(0);
                     })
                     .expect("error setting ctrlc handler");
 
                     loop {
+                        if let Ok(quit) = quit_receiver.try_recv() {
+                            if quit {
+                                debug!("quitting");
+                                break;
+                            }
+                        }
                         std::thread::sleep(Duration::from_millis(hifi_rs::REFRESH_RESOLUTION));
                     }
                 } else {
                     let mut tui = ui::terminal::new();
-                    tui.event_loop(broadcast, player).await;
+                    tui.event_loop(broadcast, player, quit_sender.clone()).await;
                 }
             }
 
