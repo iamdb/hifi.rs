@@ -62,7 +62,7 @@ where
             .player
             .get::<String, FloatValue>(AppKey::Player(PlayerKey::Progress)),
     ) {
-        if duration.clock_time() > ClockTime::default() {
+        if duration.inner_clocktime() > ClockTime::default() {
             progress(position, duration, prog, f, screen[1]);
         } else {
             let loading = Paragraph::new("LOADING")

@@ -244,7 +244,7 @@ impl Player {
     }
     /// Seek to a specified time in the current track.
     pub fn seek(&self, time: ClockValue, flag: SeekFlags) {
-        match self.playbin.seek_simple(flag, time.clock_time()) {
+        match self.playbin.seek_simple(flag, time.inner_clocktime()) {
             Ok(_) => (),
             Err(error) => {
                 error!("{}", error.message);

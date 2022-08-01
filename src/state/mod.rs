@@ -113,7 +113,8 @@ impl From<StatusValue> for GstState {
 pub struct ClockValue(ClockTime);
 
 impl ClockValue {
-    pub fn clock_time(&self) -> ClockTime {
+    /// Retreive the ClockTime value wrapped by this type.
+    pub fn inner_clocktime(&self) -> ClockTime {
         self.0
     }
 }
