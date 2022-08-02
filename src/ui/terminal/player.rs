@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    player::{Player, Playlist},
+    player::Player,
     qobuz::PlaylistTrack,
     state::{
         app::{AppKey, AppState, PlayerKey},
-        ClockValue, FloatValue, StatusValue,
+        ClockValue, FloatValue, PlaylistValue, StatusValue,
     },
 };
 use gst::{ClockTime, State as GstState};
@@ -29,7 +29,7 @@ where
 {
     if let Some(playlist) = state
         .player
-        .get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist))
+        .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::Playlist))
     {
         let mut items = playlist
             .into_iter()
@@ -42,7 +42,7 @@ where
 
         if let Some(prev_playlist) = state
             .player
-            .get::<String, Playlist>(AppKey::Player(PlayerKey::PreviousPlaylist))
+            .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::PreviousPlaylist))
         {
             let mut prev_items = prev_playlist
                 .into_iter()

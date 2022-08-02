@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::player::AudioQuality;
+use crate::state::AudioQuality;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]

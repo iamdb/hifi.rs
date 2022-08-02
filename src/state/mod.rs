@@ -1,10 +1,14 @@
 pub mod app;
 
+use crate::qobuz::PlaylistTrack;
+
 use self::app::AppKey;
+use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Tree};
+use std::collections::VecDeque;
 use std::fmt::Display;
 use std::str::FromStr;
 
@@ -45,25 +49,38 @@ impl StateTree {
     pub fn get<'a, K, T>(&self, key: AppKey) -> Option<T>
     where
         K: FromStr,
-        T: Into<T> + From<IVec> + Deserialize<'a>,
+        T: Into<T> + From<Bytes> + Deserialize<'a>,
     {
         if let Ok(record) = self.db.get(key.as_str()) {
-            record.map(|value| value.into())
+            record.map(|value| {
+                let bytes: Bytes = value.into();
+
+                bytes.into()
+            })
         } else {
             None
         }
     }
 }
 
+/// A wrapper for string values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StringValue(String);
 
-impl From<IVec> for StringValue {
-    fn from(ivec: IVec) -> Self {
+impl From<Bytes> for StringValue {
+    fn from(bytes: Bytes) -> Self {
         let deserialized: StringValue =
-            bincode::deserialize(&ivec).expect("failed to deserialize status value");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
 
         deserialized
+    }
+}
+
+impl From<StringValue> for Bytes {
+    fn from(string_value: StringValue) -> Self {
+        bincode::serialize(&string_value)
+            .expect("failed to serialize string value")
+            .into()
     }
 }
 
@@ -85,13 +102,14 @@ impl StringValue {
     }
 }
 
+/// A wrapper for gstreamer state values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusValue(GstState);
 
-impl From<IVec> for StatusValue {
-    fn from(ivec: IVec) -> Self {
+impl From<Bytes> for StatusValue {
+    fn from(bytes: Bytes) -> Self {
         let deserialized: StatusValue =
-            bincode::deserialize(&ivec).expect("failed to deserialize status value");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
 
         deserialized
     }
@@ -109,6 +127,7 @@ impl From<StatusValue> for GstState {
     }
 }
 
+/// A wrapper for ClockTime values
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
 pub struct ClockValue(ClockTime);
 
@@ -119,12 +138,17 @@ impl ClockValue {
     }
 }
 
-impl From<IVec> for ClockValue {
-    fn from(ivec: IVec) -> Self {
-        let deserialized: ClockValue =
-            bincode::deserialize(&ivec).expect("failed to deserialize status value");
+impl From<ClockValue> for Bytes {
+    fn from(clock_value: ClockValue) -> Self {
+        bincode::serialize(&clock_value)
+            .expect("failed to serialize clock value")
+            .into()
+    }
+}
 
-        deserialized
+impl From<Bytes> for ClockValue {
+    fn from(bytes: Bytes) -> Self {
+        bincode::deserialize(&bytes.vec()).expect("failed to deserialize vec<u8>")
     }
 }
 
@@ -134,19 +158,26 @@ impl From<ClockTime> for ClockValue {
     }
 }
 
+impl From<ClockValue> for ClockTime {
+    fn from(clock_value: ClockValue) -> Self {
+        clock_value.0
+    }
+}
+
 impl Display for ClockValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0.to_string().as_str())
     }
 }
 
+/// A wrapper for float values
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
 pub struct FloatValue(f64);
 
-impl From<IVec> for FloatValue {
-    fn from(ivec: IVec) -> Self {
+impl From<Bytes> for FloatValue {
+    fn from(bytes: Bytes) -> Self {
         let deserialized: FloatValue =
-            bincode::deserialize(&ivec).expect("failed to deserialize status value");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
 
         deserialized
     }
@@ -161,5 +192,144 @@ impl From<f64> for FloatValue {
 impl From<FloatValue> for f64 {
     fn from(float: FloatValue) -> Self {
         float.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Bytes(Vec<u8>);
+
+impl From<IVec> for Bytes {
+    fn from(ivec: IVec) -> Self {
+        ivec.to_vec().into()
+    }
+}
+
+impl From<Bytes> for IVec {
+    fn from(bytes: Bytes) -> Self {
+        bytes.into()
+    }
+}
+
+impl From<Vec<u8>> for Bytes {
+    fn from(vec: Vec<u8>) -> Self {
+        Bytes(vec)
+    }
+}
+
+impl From<Bytes> for Vec<u8> {
+    fn from(bytes: Bytes) -> Self {
+        bytes.0
+    }
+}
+
+impl Bytes {
+    pub fn vec(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
+
+/// The audio quality as defined by the Qobuz API.
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+pub enum AudioQuality {
+    Mp3 = 5,
+    CD = 6,
+    HIFI96 = 7,
+    HIFI192 = 27,
+}
+
+impl Display for AudioQuality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.clone() as u32))
+    }
+}
+
+impl From<Bytes> for AudioQuality {
+    fn from(bytes: Bytes) -> Self {
+        let deserialized: AudioQuality =
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize audio quality");
+
+        deserialized
+    }
+}
+
+impl From<AudioQuality> for Bytes {
+    fn from(audio_quality: AudioQuality) -> Self {
+        bincode::serialize(&audio_quality)
+            .expect("failed to serialize audio quality")
+            .into()
+    }
+}
+
+/// A playlist is a list of tracks.
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistValue(VecDeque<PlaylistTrack>);
+
+impl From<Bytes> for PlaylistValue {
+    fn from(bytes: Bytes) -> Self {
+        let deserialized: PlaylistValue =
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
+
+        deserialized
+    }
+}
+
+impl From<PlaylistValue> for Bytes {
+    fn from(playlist: PlaylistValue) -> Self {
+        bincode::serialize(&playlist)
+            .expect("failed to serialize playlist")
+            .into()
+    }
+}
+
+impl IntoIterator for PlaylistValue {
+    type Item = PlaylistTrack;
+
+    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[allow(dead_code)]
+impl PlaylistValue {
+    pub fn new() -> PlaylistValue {
+        PlaylistValue(VecDeque::new())
+    }
+
+    pub fn vec(&self) -> VecDeque<PlaylistTrack> {
+        self.0.clone()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn front(&self) -> Option<&PlaylistTrack> {
+        self.0.front()
+    }
+
+    pub fn back(&self) -> Option<&PlaylistTrack> {
+        self.0.back()
+    }
+
+    pub fn pop_front(&mut self) -> Option<PlaylistTrack> {
+        self.0.pop_front()
+    }
+
+    pub fn pop_back(&mut self) -> Option<PlaylistTrack> {
+        self.0.pop_back()
+    }
+
+    pub fn push_front(&mut self, track: PlaylistTrack) {
+        self.0.push_front(track)
+    }
+
+    pub fn push_back(&mut self, track: PlaylistTrack) {
+        self.0.push_back(track)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }

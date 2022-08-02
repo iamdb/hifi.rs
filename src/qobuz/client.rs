@@ -3,18 +3,18 @@ use super::{
     UserPlaylists,
 };
 use crate::{
-    player::AudioQuality,
     state::{
         app::{AppKey, AppState, ClientKey},
-        StringValue,
+        AudioQuality, StringValue,
     },
+    Credentials,
 };
-use hifi_rs::capitalize;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method, Response, StatusCode,
 };
 use serde_json::Value;
+use snafu::prelude::*;
 use std::{collections::HashMap, fs::File};
 use tokio_stream::StreamExt;
 
@@ -29,6 +29,30 @@ macro_rules! format_info {
         r#"name:"\w+/(?P<timezone>{}([a-z]?))",info:"(?P<info>[\w=]+)",extras:"(?P<extras>[\w=]+)""#
     };
 }
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("No username provided."))]
+    NoPassword,
+    #[snafu(display("No password provided."))]
+    NoUsername,
+    #[snafu(display("No audio quality provided."))]
+    NoQuality,
+    #[snafu(display("Failed to get a usable secret from Qobuz."))]
+    ActiveSecret,
+    #[snafu(display("Failed to get an app id from Qobuz."))]
+    AppID,
+    #[snafu(display("Failed to login."))]
+    Login,
+    #[snafu(display("Authorization missing."))]
+    Authorization,
+    #[snafu(display("Failed to create client"))]
+    Create,
+    #[snafu(display("Call to API failed."))]
+    API,
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -47,7 +71,7 @@ pub struct Client {
     state: AppState,
 }
 
-pub async fn new(state: AppState) -> Client {
+pub async fn new(state: AppState, creds: Credentials) -> Result<Client> {
     let mut headers = HeaderMap::new();
     headers.insert(
             "User-Agent",
@@ -87,6 +111,8 @@ pub async fn new(state: AppState) -> Client {
         app_id_regex: regex::Regex::new(APP_REGEX).unwrap(),
         seed_regex: regex::Regex::new(SEED_REGEX).unwrap(),
     }
+    .setup(creds)
+    .await
 }
 
 #[non_exhaustive]
@@ -126,7 +152,7 @@ impl Client {
         self.default_quality.clone()
     }
     /// Setup app_id, secret and user credentials for authentication
-    pub async fn setup(&mut self, username: Option<String>, password: Option<String>) {
+    pub async fn setup(&mut self, creds: Credentials) -> Result<Self> {
         info!("setting up the api client");
 
         let mut refresh_config = false;
@@ -157,7 +183,7 @@ impl Client {
         }
 
         if refresh_config {
-            self.get_config().await;
+            self.get_config().await.expect("failed to get config");
         }
 
         if let Some(token) = self
@@ -167,10 +193,9 @@ impl Client {
         {
             info!("using token from cache");
             self.set_token(token);
-            return;
         }
 
-        if let Some(u) = username {
+        if let Some(u) = creds.username {
             debug!("using username from cli argument: {}", u);
             self.set_username(u.into());
         } else if let Some(u) = self
@@ -181,11 +206,10 @@ impl Client {
             debug!("using username stored in database: {}", u);
             self.set_username(u);
         } else {
-            println!("No username.");
-            std::process::exit(1);
+            return Err(Error::NoUsername);
         }
 
-        if let Some(p) = password {
+        if let Some(p) = creds.password {
             debug!("using password from cli argument: {}", p);
             self.set_password(p.into());
         } else if let Some(p) = self
@@ -196,13 +220,22 @@ impl Client {
             debug!("using password stored in database: {}", p);
             self.set_password(p);
         } else {
-            println!("No password.");
-            std::process::exit(1);
+            return Err(Error::NoPassword);
+        }
+
+        if self.user_token.is_none() && self.username.is_some() && self.password.is_some() {
+            if self.login().await.is_ok() {
+                Ok(self.clone())
+            } else {
+                Err(Error::Login)
+            }
+        } else {
+            Err(Error::Create)
         }
     }
 
     /// Login a user
-    pub async fn login(&mut self) -> Option<String> {
+    pub async fn login(&mut self) -> Result<()> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
         let app_id = self.app_id.clone().unwrap();
         let username = self
@@ -234,35 +267,31 @@ impl Client {
                 token = token[1..token.len() - 1].to_string();
 
                 self.user_token = Some(token.clone().into());
-                self.state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::Token),
-                    token.clone().into(),
-                );
-                Some(token)
+                self.state
+                    .config
+                    .insert::<String, StringValue>(AppKey::Client(ClientKey::Token), token.into());
+                Ok(())
             }
-            Err(_) => {
-                println!("ERROR: Invalid username/email and password combination.");
-                std::process::exit(1);
-            }
+            Err(_) => Err(Error::Login),
         }
     }
 
     /// Retrieve a list of the user's playlists
-    pub async fn user_playlists(&mut self) -> Option<UserPlaylists> {
+    pub async fn user_playlists(&mut self) -> Result<UserPlaylists> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let playlist_response: UserPlaylists = serde_json::from_str(response.as_str()).unwrap();
 
-            Some(playlist_response)
+            Ok(playlist_response)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     /// Retrieve a playlist
-    pub async fn playlist(&mut self, playlist_id: String) -> Option<Playlist> {
+    pub async fn playlist(&mut self, playlist_id: String) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
         let params = vec![
             ("limit", "500"),
@@ -274,22 +303,22 @@ impl Client {
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let playlist = serde_json::from_str(response.as_str()).unwrap();
 
-            Some(playlist)
+            Ok(playlist)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     /// Retrieve track information
-    pub async fn track(&mut self, track_id: String) -> Option<Track> {
+    pub async fn track(&mut self, track_id: String) -> Result<Track> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Track.as_str());
         let params = vec![("track_id", track_id.as_str())];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let track_info: Track = serde_json::from_str(response.as_str()).unwrap();
-            Some(track_info)
+            Ok(track_info)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
@@ -299,7 +328,7 @@ impl Client {
         track_id: i32,
         fmt_id: Option<AudioQuality>,
         sec: Option<String>,
-    ) -> Result<TrackURL, String> {
+    ) -> Result<TrackURL> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::TrackURL.as_str());
         let now = format!("{}", chrono::Utc::now().timestamp());
         let secret = if let Some(secret) = sec {
@@ -342,51 +371,51 @@ impl Client {
                 let track_url: TrackURL = serde_json::from_str(response.as_str()).unwrap();
                 Ok(track_url)
             }
-            Err(response) => Err(response),
+            Err(_) => Err(Error::API),
         }
     }
 
-    pub async fn search_all(&mut self, query: String) -> Option<String> {
+    pub async fn search_all(&mut self, query: String) -> Result<String> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             //let album: Album = serde_json::from_str(response.as_str()).unwrap();
-            Some(response)
+            Ok(response)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     // Retrieve information about an album
-    pub async fn album(&mut self, album_id: String) -> Option<Album> {
+    pub async fn album(&mut self, album_id: String) -> Result<Album> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
         let params = vec![("album_id", album_id.as_str())];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let album: Album = serde_json::from_str(response.as_str()).unwrap();
-            Some(album)
+            Ok(album)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     // Search the database for albums
-    pub async fn search_albums(&mut self, query: String, limit: i32) -> Option<AlbumSearchResults> {
+    pub async fn search_albums(&mut self, query: String, limit: i32) -> Result<AlbumSearchResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::SearchAlbums.as_str());
         let limit = limit.to_string();
         let params = vec![("query", query.as_str()), ("limit", limit.as_str())];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let results: AlbumSearchResults = serde_json::from_str(response.as_str()).unwrap();
-            Some(results)
+            Ok(results)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     // Retrieve information about an artist
-    pub async fn artist(&mut self, artist_id: String) -> Option<Artist> {
+    pub async fn artist(&mut self, artist_id: String) -> Result<Artist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
         let app_id = self.app_id.clone();
         let params = vec![
@@ -405,22 +434,22 @@ impl Client {
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let artist: Artist = serde_json::from_str(response.as_str()).unwrap();
-            Some(artist)
+            Ok(artist)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
     // Search the database for artists
-    pub async fn search_artists(&mut self, query: String) -> Option<ArtistSearchResults> {
+    pub async fn search_artists(&mut self, query: String) -> Result<ArtistSearchResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::SearchArtists.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
         if let Ok(response) = self.make_call(endpoint, Some(params)).await {
             let results: ArtistSearchResults = serde_json::from_str(response.as_str()).unwrap();
-            Some(results)
+            Ok(results)
         } else {
-            None
+            Err(Error::API)
         }
     }
 
@@ -475,31 +504,12 @@ impl Client {
         self.active_secret = active_secret;
     }
 
-    // Verify that the client has the needed
-    // credentials to access the api.
-    pub async fn check_auth(&mut self) {
-        if self.app_id.is_none() {
-            self.get_config().await;
-        }
-
-        if self.active_secret.is_none() {
-            self.test_secrets().await;
-        }
-
-        if self.username.is_some() && self.password.is_some() {
-            self.login().await;
-        } else if self.user_token.is_none() {
-            println!("Username and password required.");
-            std::process::exit(1);
-        }
-    }
-
     // Call the api and retrieve the JSON payload
     async fn make_call(
         &mut self,
         endpoint: String,
         params: Option<Vec<(&str, &str)>>,
-    ) -> Result<String, String> {
+    ) -> Result<String> {
         let mut headers = HeaderMap::new();
 
         if let Some(app_id) = &self.app_id {
@@ -523,7 +533,7 @@ impl Client {
                 Ok(r) => self.handle_response(r).await,
                 Err(err) => {
                     error!("call to api failed: {}", err.to_string());
-                    Err(err.to_string())
+                    Err(Error::API)
                 }
             }
         } else {
@@ -532,19 +542,19 @@ impl Client {
                 Ok(r) => self.handle_response(r).await,
                 Err(err) => {
                     error!("call to api failed: {}", err.to_string());
-                    Err(err.to_string())
+                    Err(Error::API)
                 }
             }
         }
     }
 
     // Handle a response retrieved from the api
-    async fn handle_response(&mut self, response: Response) -> Result<String, String> {
+    async fn handle_response(&mut self, response: Response) -> Result<String> {
         match response.status() {
             StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND => {
                 let res = response.text().await.unwrap();
                 debug!("{}", res);
-                Err(res)
+                Err(Error::API)
             }
             StatusCode::OK => {
                 let res = response.text().await.unwrap();
@@ -556,7 +566,7 @@ impl Client {
 
     // ported from https://github.com/vitiko98/qobuz-dl/blob/master/qobuz_dl/bundle.py
     // Retrieve the app_id and generate the secrets needed to authenticate
-    async fn get_config(&mut self) {
+    async fn get_config(&mut self) -> Result<()> {
         let play_url = "https://play.qobuz.com";
         let login_page = self
             .client
@@ -579,51 +589,54 @@ impl Client {
 
         let bundle_contents = bundle_page.text().await.unwrap();
 
-        let app_id: StringValue = self
-            .app_id_regex
-            .captures(bundle_contents.as_str())
-            .expect("regex failed")
-            .name("app_id")
-            .map_or("".to_string(), |m| m.as_str().to_string())
-            .into();
+        if let Some(captures) = self.app_id_regex.captures(bundle_contents.as_str()) {
+            let app_id: StringValue = captures
+                .name("app_id")
+                .map_or("".to_string(), |m| m.as_str().to_string())
+                .into();
 
-        self.app_id = Some(app_id.clone());
-        self.state
-            .config
-            .insert::<String, StringValue>(AppKey::Client(ClientKey::AppID), app_id.clone());
+            self.app_id = Some(app_id.clone());
+            self.state
+                .config
+                .insert::<String, StringValue>(AppKey::Client(ClientKey::AppID), app_id.clone());
 
-        let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
+            let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 
-        seed_data.for_each(|s| {
-            let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
-            let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
+            seed_data.for_each(|s| {
+                let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
+                let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-            let info_regex = format!(format_info!(), capitalize(&timezone));
-            let info_regex_str = info_regex.as_str();
-            regex::Regex::new(info_regex_str)
-                .unwrap()
-                .captures_iter(bundle_contents.as_str())
-                .for_each(|c| {
-                    let timezone = c.name("timezone").map_or("", |m| m.as_str()).to_string();
-                    let info = c.name("info").map_or("", |m| m.as_str()).to_string();
-                    let extras = c.name("extras").map_or("", |m| m.as_str()).to_string();
+                let info_regex = format!(format_info!(), crate::capitalize(&timezone));
+                let info_regex_str = info_regex.as_str();
+                regex::Regex::new(info_regex_str)
+                    .unwrap()
+                    .captures_iter(bundle_contents.as_str())
+                    .for_each(|c| {
+                        let timezone = c.name("timezone").map_or("", |m| m.as_str()).to_string();
+                        let info = c.name("info").map_or("", |m| m.as_str()).to_string();
+                        let extras = c.name("extras").map_or("", |m| m.as_str()).to_string();
 
-                    let chars = format!("{}{}{}", seed, info, extras);
-                    let encoded_secret = chars[..chars.len() - 44].to_string();
-                    let decoded_secret =
-                        base64::decode(encoded_secret).expect("failed to decode base64 secret");
-                    let secret_utf8 = std::str::from_utf8(&decoded_secret)
-                        .expect("failed to convert base64 to string")
-                        .to_string();
+                        let chars = format!("{}{}{}", seed, info, extras);
+                        let encoded_secret = chars[..chars.len() - 44].to_string();
+                        let decoded_secret =
+                            base64::decode(encoded_secret).expect("failed to decode base64 secret");
+                        let secret_utf8 = std::str::from_utf8(&decoded_secret)
+                            .expect("failed to convert base64 to string")
+                            .to_string();
 
-                    debug!("{}\t{}\t{}", app_id, timezone.to_lowercase(), secret_utf8);
-                    self.secrets.insert(timezone, secret_utf8);
-                });
-        });
+                        debug!("{}\t{}\t{}", app_id, timezone.to_lowercase(), secret_utf8);
+                        self.secrets.insert(timezone, secret_utf8);
+                    });
+            });
+
+            Ok(())
+        } else {
+            Err(Error::AppID)
+        }
     }
 
     // Check the retrieved secrets to see which one works.
-    async fn test_secrets(&mut self) {
+    async fn test_secrets(&mut self) -> Result<()> {
         debug!("testing secrets");
         let secrets = self.secrets.clone();
 
@@ -640,7 +653,11 @@ impl Client {
                     secret_string.clone().into(),
                 );
                 self.active_secret = Some(secret_string.into());
+            } else {
+                return Err(Error::ActiveSecret);
             }
         }
+
+        Ok(())
     }
 }

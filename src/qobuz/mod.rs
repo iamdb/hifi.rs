@@ -3,7 +3,7 @@ pub mod client;
 use serde::{Deserialize, Serialize};
 use sled::IVec;
 
-use crate::player::AudioQuality;
+use crate::{state::AudioQuality, state::Bytes};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {
@@ -88,16 +88,10 @@ pub struct PlaylistTrack {
     pub album: Option<Album>,
 }
 
-impl From<PlaylistTrack> for Vec<u8> {
-    fn from(track: PlaylistTrack) -> Vec<u8> {
-        bincode::serialize(&track).expect("failed to serialize playlist track")
-    }
-}
-
-impl From<IVec> for PlaylistTrack {
-    fn from(ivec: IVec) -> PlaylistTrack {
+impl From<Bytes> for PlaylistTrack {
+    fn from(bytes: Bytes) -> Self {
         let deserialized: PlaylistTrack =
-            bincode::deserialize(&ivec).expect("failed to deserialize playlist track");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize playlist track");
 
         deserialized
     }
@@ -309,7 +303,7 @@ pub struct Playlist {
     pub slug: Option<String>,
     #[serde(default)]
     pub stores: Vec<String>,
-    pub tracks: Tracks,
+    pub tracks: Option<Tracks>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -3,53 +3,21 @@ use crate::{
     qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
     state::{
         app::{AppKey, AppState, PlayerKey},
-        ClockValue, FloatValue, StatusValue,
+        AudioQuality, ClockValue, FloatValue, PlaylistValue, StatusValue,
     },
+    REFRESH_RESOLUTION,
 };
-use clap::ValueEnum;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
-use hifi_rs::REFRESH_RESOLUTION;
 use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use sled::IVec;
-use std::{
-    collections::{vec_deque::IntoIter, VecDeque},
-    fmt::Display,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::{
     select,
     sync::broadcast::{self, Receiver as BroadcastReceiver, Sender as BroadcastSender},
 };
 use zbus::ConnectionBuilder;
-
-/// The audio quality as defined by the Qobuz API.
-#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
-pub enum AudioQuality {
-    Mp3 = 5,
-    CD = 6,
-    HIFI96 = 7,
-    HIFI192 = 27,
-}
-
-impl Display for AudioQuality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.clone() as u32))
-    }
-}
-
-impl From<IVec> for AudioQuality {
-    fn from(ivec: IVec) -> Self {
-        let deserialized: AudioQuality =
-            bincode::deserialize(&ivec).expect("ERROR: failed to deserialize audio quality.");
-
-        deserialized
-    }
-}
 
 /// Signal is a sender and receiver in a single struct.
 #[derive(Debug, Clone)]
@@ -70,9 +38,9 @@ pub struct Player {
     /// Used to broadcast the player state out to other components.
     playbin: Element,
     /// List of tracks that will play.
-    playlist: Arc<RwLock<Playlist>>,
+    playlist: Arc<RwLock<PlaylistValue>>,
     /// List of tracks that have played.
-    playlist_previous: Arc<RwLock<Playlist>>,
+    playlist_previous: Arc<RwLock<PlaylistValue>>,
     /// The app state to save player inforamtion into.
     state: AppState,
     /// Request URLs for tracks.
@@ -80,62 +48,6 @@ pub struct Player {
     /// Receive URLs for tracks
     url_return: Signal<PlaylistTrack>,
     broadcast_sender: BroadcastSender<AppState>,
-}
-
-/// A playlist is a list of tracks.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Playlist(VecDeque<PlaylistTrack>);
-
-impl From<IVec> for Playlist {
-    fn from(ivec: IVec) -> Self {
-        let deserialized: Playlist =
-            bincode::deserialize(&ivec).expect("failed to deserialize status value");
-
-        deserialized
-    }
-}
-
-#[allow(dead_code)]
-impl Playlist {
-    pub fn new() -> Playlist {
-        Playlist(VecDeque::new())
-    }
-
-    pub fn into_iter(self) -> IntoIter<PlaylistTrack> {
-        self.0.into_iter()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn front(&self) -> Option<&PlaylistTrack> {
-        self.0.front()
-    }
-
-    pub fn back(&self) -> Option<&PlaylistTrack> {
-        self.0.back()
-    }
-
-    pub fn pop_front(&mut self) -> Option<PlaylistTrack> {
-        self.0.pop_front()
-    }
-
-    pub fn pop_back(&mut self) -> Option<PlaylistTrack> {
-        self.0.pop_back()
-    }
-
-    pub fn push_front(&mut self, track: PlaylistTrack) {
-        self.0.push_front(track)
-    }
-
-    pub fn push_back(&mut self, track: PlaylistTrack) {
-        self.0.push_back(track)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
 }
 
 pub fn new(state: AppState) -> (Player, BroadcastReceiver<AppState>) {
@@ -148,8 +60,8 @@ pub fn new(state: AppState) -> (Player, BroadcastReceiver<AppState>) {
     (
         Player {
             playbin,
-            playlist: Arc::new(RwLock::new(Playlist::new())),
-            playlist_previous: Arc::new(RwLock::new(Playlist::new())),
+            playlist: Arc::new(RwLock::new(PlaylistValue::new())),
+            playlist_previous: Arc::new(RwLock::new(PlaylistValue::new())),
             state,
             url_request,
             url_return,
@@ -166,19 +78,19 @@ impl Player {
         self.clone().state
     }
     /// Retreive the active playlist.
-    pub fn playlist(&self) -> Arc<RwLock<Playlist>> {
+    pub fn playlist(&self) -> Arc<RwLock<PlaylistValue>> {
         self.playlist.clone()
     }
     /// Set the active playlist.
-    pub fn set_playlist(&mut self, playlist: Playlist) {
+    pub fn set_playlist(&mut self, playlist: PlaylistValue) {
         self.playlist = Arc::new(RwLock::new(playlist));
     }
     /// Retreive the playlist of tracks played previously.
-    pub fn prev_playlist(&self) -> Arc<RwLock<Playlist>> {
+    pub fn prev_playlist(&self) -> Arc<RwLock<PlaylistValue>> {
         self.playlist_previous.clone()
     }
     /// Set the previous playlist.
-    pub fn set_prev_playlist(&mut self, playlist: Playlist) {
+    pub fn set_prev_playlist(&mut self, playlist: PlaylistValue) {
         self.playlist_previous = Arc::new(RwLock::new(playlist));
     }
     /// Play the player.
@@ -331,13 +243,13 @@ impl Player {
 
         if let Some(number) = num {
             // Grab all of the tracks, up to the next one to play.
-            let mut playlist = self.playlist.write();
+            let playlist = self.playlist.write();
             let mut skipped_tracks = playlist
-                .0
+                .vec()
                 .drain(..number - 1)
                 .collect::<VecDeque<PlaylistTrack>>();
 
-            prev_playlist.0.append(&mut skipped_tracks);
+            prev_playlist.vec().append(&mut skipped_tracks);
         }
 
         let mut playlist = self.playlist.write();
@@ -353,11 +265,12 @@ impl Player {
                 next_track.clone(),
             );
 
-            self.state
-                .player
-                .insert::<String, Playlist>(AppKey::Player(PlayerKey::Playlist), playlist.clone());
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::Playlist),
+                playlist.clone(),
+            );
 
-            self.state.player.insert::<String, Playlist>(
+            self.state.player.insert::<String, PlaylistValue>(
                 AppKey::Player(PlayerKey::PreviousPlaylist),
                 prev_playlist.clone(),
             );
@@ -395,9 +308,9 @@ impl Player {
             // Grab all of the tracks, up to the next one to play.
             let diff = number - playlist.len();
 
-            let mut prev_playlist = self.playlist_previous.write();
+            let prev_playlist = self.playlist_previous.write();
             let skipped_tracks = prev_playlist
-                .0
+                .vec()
                 .drain(diff + 1..)
                 .rev()
                 .collect::<VecDeque<PlaylistTrack>>();
@@ -419,10 +332,11 @@ impl Player {
                 prev_track.clone(),
             );
 
-            self.state
-                .player
-                .insert::<String, Playlist>(AppKey::Player(PlayerKey::Playlist), playlist.clone());
-            self.state.player.insert::<String, Playlist>(
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::Playlist),
+                playlist.clone(),
+            );
+            self.state.player.insert::<String, PlaylistValue>(
                 AppKey::Player(PlayerKey::PreviousPlaylist),
                 prev_playlist.clone(),
             );
@@ -532,7 +446,7 @@ impl Player {
                 next_track.clone(),
             );
 
-            self.state.player.insert::<String, Playlist>(
+            self.state.player.insert::<String, PlaylistValue>(
                 AppKey::Player(PlayerKey::Playlist),
                 self.playlist.read().clone(),
             );
