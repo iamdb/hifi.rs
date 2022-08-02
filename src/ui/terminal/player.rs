@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    player::Player,
+    player::{Player, Playlist},
     qobuz::PlaylistTrack,
     state::{
         app::{AppKey, AppState, PlayerKey},
@@ -23,10 +23,46 @@ use tui::{
 
 use super::Event;
 
-pub fn draw<B>(f: &mut Frame<B>, state: AppState, tracks: TrackList)
+pub fn draw<B>(f: &mut Frame<B>, state: AppState, mut tracks: TrackList)
 where
     B: Backend,
 {
+    if let Some(playlist) = state
+        .player
+        .get::<String, Playlist>(AppKey::Player(PlayerKey::Playlist))
+    {
+        let mut items = playlist
+            .into_iter()
+            .map(|t| {
+                let title = t.track.title;
+                ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
+                    .style(Style::default())
+            })
+            .collect::<Vec<ListItem>>();
+
+        if let Some(prev_playlist) = state
+            .player
+            .get::<String, Playlist>(AppKey::Player(PlayerKey::PreviousPlaylist))
+        {
+            let mut prev_items = prev_playlist
+                .into_iter()
+                .map(|t| {
+                    let title = t.track.title;
+                    ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
+                        .style(Style::default().add_modifier(Modifier::DIM))
+                })
+                .collect::<Vec<ListItem>>();
+
+            items.append(&mut prev_items);
+        }
+
+        tracks.set_items(items);
+
+        if tracks.selected().is_none() {
+            tracks.select(0);
+        }
+    }
+
     let screen = Layout::default()
         .direction(Direction::Vertical)
         .constraints([

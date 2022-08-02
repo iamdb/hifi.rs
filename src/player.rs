@@ -345,16 +345,8 @@ impl Player {
             debug!("skipping forward to next track");
             self.ready();
 
-            let url_request = &self.url_request.sender;
-            let url_return = &self.url_return.receiver;
-
-            debug!("requesting track url");
-            url_request
-                .send(next_track.clone())
-                .expect("failed to send url to request");
-
             debug!("receiving track url");
-            next_track = url_return.recv().expect("failed to get track url");
+            next_track = self.fetch_track_url(next_track);
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -420,14 +412,7 @@ impl Player {
             debug!("skipping backward to previous track");
             self.ready();
 
-            let url_request = &self.url_request.sender;
-            let url_return = &self.url_return.receiver;
-
-            url_request
-                .send(prev_track.clone())
-                .expect("failed to send url to request");
-
-            prev_track = url_return.recv().expect("failed to get track url");
+            prev_track = self.fetch_track_url(prev_track);
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -624,6 +609,16 @@ impl Player {
 
                 None
             });
+    }
+    pub fn fetch_track_url(&self, track: PlaylistTrack) -> PlaylistTrack {
+        let url_request = &self.url_request.sender;
+        let url_return = &self.url_return.receiver;
+
+        url_request
+            .send(track)
+            .expect("failed to send url to request");
+
+        url_return.recv().expect("failed to get track url")
     }
     /// Handles messages from the player and takes necessary action.
     async fn player_loop(&mut self, mut client: Client, mut resume: bool) {

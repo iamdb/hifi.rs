@@ -49,21 +49,21 @@ async fn main() -> Result<(), String> {
                     .player
                     .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp)),
             ) {
-                if let Some(track_url) = next_up.track_url {
-                    let (mut player, broadcast) = player::new(app_state.clone());
+                let (mut player, broadcast) = player::new(app_state.clone());
 
-                    let mut client = client::new(app_state.clone()).await;
-                    client.setup(cli.username, cli.password).await;
+                let mut client = client::new(app_state.clone()).await;
+                client.setup(cli.username, cli.password).await;
 
-                    player.setup(client, true).await;
+                player.setup(client, true).await;
 
-                    if let Some(prev_playlist) = app_state
-                        .player
-                        .get::<String, Playlist>(AppKey::Player(PlayerKey::PreviousPlaylist))
-                    {
-                        player.set_prev_playlist(prev_playlist);
-                    }
+                if let Some(prev_playlist) = app_state
+                    .player
+                    .get::<String, Playlist>(AppKey::Player(PlayerKey::PreviousPlaylist))
+                {
+                    player.set_prev_playlist(prev_playlist);
+                }
 
+                if let Some(track_url) = player.fetch_track_url(next_up).track_url {
                     player.set_playlist(playlist);
                     player.set_uri(track_url);
 
@@ -91,8 +91,6 @@ async fn main() -> Result<(), String> {
                         let mut tui = ui::terminal::new();
                         tui.event_loop(broadcast, player).await;
                     }
-                } else {
-                    error!("Track is missing url.");
                 }
             } else {
                 println!("Sorry, the previous session could not be resumed.");
