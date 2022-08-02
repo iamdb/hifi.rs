@@ -63,6 +63,20 @@ impl StateTree {
     }
 }
 
+#[macro_export]
+macro_rules! get_client {
+    ($tree_key:path, $tree:ident, $value_type:ty) => {
+        $tree.get::<String, $value_type>(AppKey::Client($tree_key))
+    };
+}
+
+#[macro_export]
+macro_rules! get_player {
+    ($tree_key:path, $tree:ident, $value_type:ty) => {
+        $tree.get::<String, $value_type>(AppKey::Player($tree_key))
+    };
+}
+
 /// A wrapper for string values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StringValue(String);

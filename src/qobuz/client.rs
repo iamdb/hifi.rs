@@ -3,6 +3,7 @@ use super::{
     UserPlaylists,
 };
 use crate::{
+    get_client,
     state::{
         app::{AppKey, AppState, ClientKey},
         AudioQuality, StringValue,
@@ -50,6 +51,8 @@ pub enum Error {
     Create,
     #[snafu(display("Call to API failed."))]
     API,
+    #[snafu(display("Failed to deserialize json: {}", message))]
+    DeserializeJSON { message: String },
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -146,6 +149,20 @@ impl Endpoint {
     }
 }
 
+macro_rules! call {
+    ($self:ident, $endpoint:expr, $params:expr) => {
+        match $self.make_call($endpoint, $params).await {
+            Ok(response) => match serde_json::from_str(response.as_str()) {
+                Ok(track_url) => Ok(track_url),
+                Err(error) => Err(Error::DeserializeJSON {
+                    message: error.to_string(),
+                }),
+            },
+            Err(_) => Err(Error::API),
+        }
+    };
+}
+
 #[allow(dead_code)]
 impl Client {
     pub fn quality(&self) -> AudioQuality {
@@ -156,20 +173,13 @@ impl Client {
         info!("setting up the api client");
 
         let mut refresh_config = false;
+        let tree = self.state.config.clone();
 
-        if let Some(app_id) = self
-            .state
-            .config
-            .get::<String, StringValue>(AppKey::Client(ClientKey::AppID))
-        {
+        if let Some(app_id) = get_client!(ClientKey::AppID, tree, StringValue) {
             info!("using app_id from cache: {}", app_id);
             self.set_app_id(Some(app_id));
 
-            if let Some(active_secret) = self
-                .state
-                .config
-                .get::<String, StringValue>(AppKey::Client(ClientKey::ActiveSecret))
-            {
+            if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
                 info!("using app_secret from cache: {}", active_secret);
                 self.set_active_secret(Some(active_secret));
             } else {
@@ -186,11 +196,7 @@ impl Client {
             self.get_config().await.expect("failed to get config");
         }
 
-        if let Some(token) = self
-            .state
-            .config
-            .get::<String, StringValue>(AppKey::Client(ClientKey::Token))
-        {
+        if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
             info!("using token from cache");
             self.set_token(token);
         }
@@ -198,11 +204,7 @@ impl Client {
         if let Some(u) = creds.username {
             debug!("using username from cli argument: {}", u);
             self.set_username(u.into());
-        } else if let Some(u) = self
-            .state
-            .config
-            .get::<String, StringValue>(AppKey::Client(ClientKey::Username))
-        {
+        } else if let Some(u) = get_client!(ClientKey::Username, tree, StringValue) {
             debug!("using username stored in database: {}", u);
             self.set_username(u);
         } else {
@@ -212,11 +214,7 @@ impl Client {
         if let Some(p) = creds.password {
             debug!("using password from cli argument: {}", p);
             self.set_password(p.into());
-        } else if let Some(p) = self
-            .state
-            .config
-            .get::<String, StringValue>(AppKey::Client(ClientKey::Password))
-        {
+        } else if let Some(p) = get_client!(ClientKey::Password, tree, StringValue) {
             debug!("using password stored in database: {}", p);
             self.set_password(p);
         } else {
@@ -281,13 +279,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let playlist_response: UserPlaylists = serde_json::from_str(response.as_str()).unwrap();
-
-            Ok(playlist_response)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     /// Retrieve a playlist
@@ -300,13 +292,7 @@ impl Client {
             ("offset", "0"),
         ];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let playlist = serde_json::from_str(response.as_str()).unwrap();
-
-            Ok(playlist)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     /// Retrieve track information
@@ -314,12 +300,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Track.as_str());
         let params = vec![("track_id", track_id.as_str())];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let track_info: Track = serde_json::from_str(response.as_str()).unwrap();
-            Ok(track_info)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     /// Retrieve url information for a track's audio file
@@ -366,25 +347,14 @@ impl Client {
             ("intent", "stream"),
         ];
 
-        match self.make_call(endpoint, Some(params)).await {
-            Ok(response) => {
-                let track_url: TrackURL = serde_json::from_str(response.as_str()).unwrap();
-                Ok(track_url)
-            }
-            Err(_) => Err(Error::API),
-        }
+        call!(self, endpoint, Some(params))
     }
 
     pub async fn search_all(&mut self, query: String) -> Result<String> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            //let album: Album = serde_json::from_str(response.as_str()).unwrap();
-            Ok(response)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an album
@@ -392,32 +362,35 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
         let params = vec![("album_id", album_id.as_str())];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let album: Album = serde_json::from_str(response.as_str()).unwrap();
-            Ok(album)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     // Search the database for albums
-    pub async fn search_albums(&mut self, query: String, limit: i32) -> Result<AlbumSearchResults> {
+    pub async fn search_albums(
+        &mut self,
+        query: String,
+        limit: Option<i32>,
+    ) -> Result<AlbumSearchResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::SearchAlbums.as_str());
-        let limit = limit.to_string();
+        let limit = if let Some(limit) = limit {
+            limit.to_string()
+        } else {
+            100.to_string()
+        };
         let params = vec![("query", query.as_str()), ("limit", limit.as_str())];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let results: AlbumSearchResults = serde_json::from_str(response.as_str()).unwrap();
-            Ok(results)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an artist
-    pub async fn artist(&mut self, artist_id: String) -> Result<Artist> {
+    pub async fn artist(&mut self, artist_id: String, limit: Option<i32>) -> Result<Artist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
         let app_id = self.app_id.clone();
+        let limit = if let Some(limit) = limit {
+            limit.to_string()
+        } else {
+            100.to_string()
+        };
         let params = vec![
             ("artist_id", artist_id.as_str()),
             (
@@ -427,17 +400,12 @@ impl Client {
                     .expect("missing app id. this should not have happened.")
                     .as_str(),
             ),
-            ("limit", "500"),
+            ("limit", limit.as_str()),
             ("offset", "0"),
             ("extra", "albums"),
         ];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let artist: Artist = serde_json::from_str(response.as_str()).unwrap();
-            Ok(artist)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     // Search the database for artists
@@ -445,12 +413,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::SearchArtists.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
-        if let Ok(response) = self.make_call(endpoint, Some(params)).await {
-            let results: ArtistSearchResults = serde_json::from_str(response.as_str()).unwrap();
-            Ok(results)
-        } else {
-            Err(Error::API)
-        }
+        call!(self, endpoint, Some(params))
     }
 
     // Download a track to disk

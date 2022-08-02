@@ -205,7 +205,7 @@ pub struct Composer {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     pub small: String,
-    pub thumbnail: String,
+    pub thumbnail: Option<String>,
     pub large: String,
     pub back: Option<String>,
 }

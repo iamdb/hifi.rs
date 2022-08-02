@@ -42,13 +42,10 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
     // CLI COMMANDS
     match command {
         Commands::Resume { no_tui } => {
+            let tree = app_state.player.clone();
             if let (Some(playlist), Some(next_up)) = (
-                app_state
-                    .player
-                    .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::Playlist)),
-                app_state
-                    .player
-                    .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp)),
+                get_player!(PlayerKey::Playlist, tree, PlaylistValue),
+                get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
             ) {
                 let (mut player, broadcast) = player::new(app_state.clone());
 
@@ -58,9 +55,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
                 player.setup(client, true).await;
 
-                if let Some(prev_playlist) = app_state
-                    .player
-                    .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::PreviousPlaylist))
+                if let Some(prev_playlist) =
+                    get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
                 {
                     player.set_prev_playlist(prev_playlist);
                 }
@@ -107,7 +103,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to client");
 
-            match client.search_albums(query, 100).await {
+            match client.search_albums(query, Some(100)).await {
                 Ok(mut results) => {
                     let album_list = results
                         .albums
@@ -174,7 +170,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to create client");
 
-            match client.search_albums(query, 10).await {
+            match client.search_albums(query, Some(10)).await {
                 Ok(results) => {
                     let json = serde_json::to_string(&results);
                     print!("{}", json.expect("failed to convert results to string"));
@@ -214,7 +210,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to create client");
 
-            if let Ok(results) = client.artist(id).await {
+            if let Ok(results) = client.artist(id, None).await {
                 let json = serde_json::to_string(&results);
                 print!("{}", json.expect("failed to convert results to string"));
                 Ok(())

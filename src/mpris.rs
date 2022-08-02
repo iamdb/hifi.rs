@@ -138,7 +138,9 @@ impl MprisPlayer {
             );
 
             if let Some(album) = next_up.album {
-                meta.insert("mpris:artUrl", zvariant::Value::new(album.image.thumbnail));
+                if let Some(thumb) = album.image.thumbnail {
+                    meta.insert("mpris:artUrl", zvariant::Value::new(thumb));
+                }
                 meta.insert("xesam:album", zvariant::Value::new(album.title));
                 meta.insert(
                     "xesam:albumArtist",
