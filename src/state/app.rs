@@ -72,7 +72,6 @@ pub struct AppState {
     pub player: StateTree,
     pub config: StateTree,
     quit_sender: Sender<bool>,
-    _db: HifiDB,
 }
 
 pub fn new(base_dir: PathBuf) -> AppState {
@@ -121,16 +120,11 @@ pub fn new(base_dir: PathBuf) -> AppState {
         config: db.open_tree("config"),
         player: db.open_tree("player"),
         quit_sender,
-        _db: db,
     }
 }
 
 #[allow(dead_code)]
 impl AppState {
-    pub fn flush(&self) {
-        debug!("flushing db");
-        self._db.0.flush().expect("failed to flush db");
-    }
     pub fn quitter(&self) -> Receiver<bool> {
         self.quit_sender.subscribe()
     }

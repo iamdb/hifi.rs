@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-use crate::player::AudioQuality;
+use crate::state::AudioQuality;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -52,12 +52,12 @@ pub enum Commands {
     /// Get information for a specific artist.
     GetArtist {
         #[clap(value_parser)]
-        id: String,
+        id: i32,
     },
     /// Get information for a specific track.
     GetTrack {
         #[clap(value_parser)]
-        id: String,
+        id: i32,
     },
     /// Get the url needed to play a track.
     TrackURL {
