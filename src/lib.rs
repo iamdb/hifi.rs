@@ -197,7 +197,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to create client");
 
-            if let Ok(results) = client.search_artists(query).await {
+            if let Ok(results) = client.search_artists(query, None).await {
                 let json = serde_json::to_string(&results);
                 print!("{}", json.expect("failed to convert results to string"));
                 Ok(())
@@ -280,7 +280,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to create client");
 
-            match client.track(track_id.to_string()).await {
+            match client.track(track_id).await {
                 Ok(track) => {
                     app_state.player.clear();
                     player.setup(client.clone(), false).await;
@@ -301,48 +301,47 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         } => {
             let (player, broadcast) = player::new(app_state.clone());
 
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            match client::new(app_state.clone(), creds).await {
+                Ok(mut client) => match client.album(album_id).await {
+                    Ok(album) => {
+                        app_state.player.clear();
+                        player.setup(client.clone(), false).await;
 
-            match client.album(album_id).await {
-                Ok(album) => {
-                    app_state.player.clear();
-                    player.setup(client.clone(), false).await;
+                        let quality = if let Some(q) = quality {
+                            q
+                        } else {
+                            client.quality()
+                        };
 
-                    let quality = if let Some(q) = quality {
-                        q
-                    } else {
-                        client.quality()
-                    };
+                        player.play_album(album, quality, client.clone()).await;
 
-                    player.play_album(album, quality, client.clone()).await;
+                        if no_tui {
+                            let mut quitter = app_state.quitter();
 
-                    if no_tui {
-                        let mut quitter = app_state.quitter();
+                            ctrlc::set_handler(move || {
+                                app_state.send_quit();
+                                std::process::exit(0);
+                            })
+                            .expect("error setting ctrlc handler");
 
-                        ctrlc::set_handler(move || {
-                            app_state.send_quit();
-                            std::process::exit(0);
-                        })
-                        .expect("error setting ctrlc handler");
-
-                        loop {
-                            if let Ok(quit) = quitter.try_recv() {
-                                if quit {
-                                    debug!("quitting");
-                                    break;
+                            loop {
+                                if let Ok(quit) = quitter.try_recv() {
+                                    if quit {
+                                        debug!("quitting");
+                                        break;
+                                    }
                                 }
+                                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                             }
-                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+                        } else {
+                            let mut tui = ui::terminal::new();
+                            tui.event_loop(broadcast, player).await;
                         }
-                    } else {
-                        let mut tui = ui::terminal::new();
-                        tui.event_loop(broadcast, player).await;
-                    }
 
-                    Ok(())
-                }
+                        Ok(())
+                    }
+                    Err(error) => Err(error.to_string()),
+                },
                 Err(error) => Err(error.to_string()),
             }
         }

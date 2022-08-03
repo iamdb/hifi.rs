@@ -1,34 +1,33 @@
-use hifi_rs::{self, qobuz::client};
+use hifi_rs::state::AudioQuality;
 use tokio_test::assert_ok;
 
 mod common;
 
-/// NOTE: Tests must be run consecutively. `cargo test -- --test-threads=1`
-
-#[tokio::test]
-async fn can_create_client() {
-    let (app_state, creds) = common::setup(1);
-
-    assert_ok!(client::new(app_state.clone(), creds).await);
-
-    common::teardown(1);
-}
-
 #[tokio::test]
 async fn can_use_methods() {
-    let (app_state, creds) = common::setup(2);
-
-    let mut client = client::new(app_state, creds)
-        .await
-        .expect("failed to create client");
+    let (_, mut client, path) = common::setup().await;
 
     assert_ok!(client.user_playlists().await);
-    assert_ok!(
+    let album_response = assert_ok!(
         client
-            .search_albums("pink_floyd".to_string(), Some(10))
+            .search_albums("a love supreme".to_string(), Some(10))
             .await
     );
-    assert_ok!(client.search_artists("pink_floyd".to_string()).await);
+    assert_eq!(album_response.albums.items.len(), 10);
+    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await);
+    let artist_response = assert_ok!(
+        client
+            .search_artists("pink floyd".to_string(), Some(10))
+            .await
+    );
+    assert_eq!(artist_response.artists.items.len(), 10);
+    assert_ok!(client.artist(148745, Some(10)).await);
+    assert_ok!(client.track(155999429).await);
+    assert_ok!(
+        client
+            .track_url(155999429, Some(AudioQuality::Mp3), None)
+            .await
+    );
 
-    common::teardown(2);
+    common::teardown(path);
 }

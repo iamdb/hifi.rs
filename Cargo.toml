@@ -34,6 +34,7 @@ zbus = { version = "2", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+nanoid = "0.4.0"
 
 [profile.release]
 codegen-units = 1

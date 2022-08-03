@@ -178,22 +178,23 @@ impl Client {
         if let Some(app_id) = get_client!(ClientKey::AppID, tree, StringValue) {
             info!("using app_id from cache: {}", app_id);
             self.set_app_id(Some(app_id));
-
-            if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
-                info!("using app_secret from cache: {}", active_secret);
-                self.set_active_secret(Some(active_secret));
-            } else {
-                self.set_active_secret(None);
-                self.set_app_id(None);
-                refresh_config = true;
-            }
         } else {
+            self.set_app_id(None);
+            refresh_config = true;
+        }
+
+        if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
+            info!("using app_secret from cache: {}", active_secret);
+            self.set_active_secret(Some(active_secret));
+        } else {
+            self.set_active_secret(None);
             self.set_app_id(None);
             refresh_config = true;
         }
 
         if refresh_config {
             self.get_config().await.expect("failed to get config");
+            self.test_secrets().await.expect("failed to get secrets");
         }
 
         if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
@@ -221,7 +222,7 @@ impl Client {
             return Err(Error::NoPassword);
         }
 
-        if self.user_token.is_none() && self.username.is_some() && self.password.is_some() {
+        if self.user_token.is_none() || self.username.is_some() && self.password.is_some() {
             if self.login().await.is_ok() {
                 Ok(self.clone())
             } else {
@@ -296,9 +297,10 @@ impl Client {
     }
 
     /// Retrieve track information
-    pub async fn track(&mut self, track_id: String) -> Result<Track> {
+    pub async fn track(&mut self, track_id: i32) -> Result<Track> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Track.as_str());
-        let params = vec![("track_id", track_id.as_str())];
+        let track_id_string = track_id.to_string();
+        let params = vec![("track_id", track_id_string.as_str())];
 
         call!(self, endpoint, Some(params))
     }
@@ -317,8 +319,7 @@ impl Client {
         } else if let Some(secret) = &self.active_secret {
             secret.clone()
         } else {
-            println!("The secret needed to fetch the track url could not be found.");
-            std::process::exit(1);
+            return Err(Error::ActiveSecret);
         };
 
         let format_id = if let Some(quality) = fmt_id {
@@ -383,7 +384,7 @@ impl Client {
     }
 
     // Retrieve information about an artist
-    pub async fn artist(&mut self, artist_id: String, limit: Option<i32>) -> Result<Artist> {
+    pub async fn artist(&mut self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
         let app_id = self.app_id.clone();
         let limit = if let Some(limit) = limit {
@@ -391,8 +392,11 @@ impl Client {
         } else {
             100.to_string()
         };
+
+        let artistid_string = artist_id.to_string();
+
         let params = vec![
-            ("artist_id", artist_id.as_str()),
+            ("artist_id", artistid_string.as_str()),
             (
                 "app_id",
                 app_id
@@ -409,9 +413,18 @@ impl Client {
     }
 
     // Search the database for artists
-    pub async fn search_artists(&mut self, query: String) -> Result<ArtistSearchResults> {
+    pub async fn search_artists(
+        &mut self,
+        query: String,
+        limit: Option<i32>,
+    ) -> Result<ArtistSearchResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::SearchArtists.as_str());
-        let params = vec![("query", query.as_str()), ("limit", "500")];
+        let limit = if let Some(limit) = limit {
+            limit.to_string()
+        } else {
+            100.to_string()
+        };
+        let params = vec![("query", query.as_str()), ("limit", &limit)];
 
         call!(self, endpoint, Some(params))
     }
@@ -602,6 +615,7 @@ impl Client {
     async fn test_secrets(&mut self) -> Result<()> {
         debug!("testing secrets");
         let secrets = self.secrets.clone();
+        let mut active_secret: Option<String> = None;
 
         for (timezone, secret) in secrets.iter() {
             let response = self
@@ -615,12 +629,17 @@ impl Client {
                     AppKey::Client(ClientKey::ActiveSecret),
                     secret_string.clone().into(),
                 );
-                self.active_secret = Some(secret_string.into());
-            } else {
-                return Err(Error::ActiveSecret);
-            }
+                active_secret = Some(secret_string);
+
+                break;
+            };
         }
 
-        Ok(())
+        if let Some(secret) = active_secret {
+            self.set_active_secret(Some(secret.into()));
+            Ok(())
+        } else {
+            Err(Error::ActiveSecret)
+        }
     }
 }
