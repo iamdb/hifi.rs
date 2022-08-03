@@ -305,7 +305,6 @@ impl IntoIterator for PlaylistValue {
     }
 }
 
-#[allow(dead_code)]
 impl PlaylistValue {
     pub fn new() -> PlaylistValue {
         PlaylistValue(VecDeque::new())

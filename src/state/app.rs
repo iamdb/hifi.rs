@@ -123,7 +123,6 @@ pub fn new(base_dir: PathBuf) -> AppState {
     }
 }
 
-#[allow(dead_code)]
 impl AppState {
     pub fn quitter(&self) -> Receiver<bool> {
         self.quit_sender.subscribe()

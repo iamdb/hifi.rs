@@ -71,7 +71,6 @@ pub fn new(state: AppState) -> (Player, BroadcastReceiver<AppState>) {
     )
 }
 
-#[allow(dead_code)]
 impl Player {
     /// Retreive the current app state from the player.
     pub fn app_state(&self) -> AppState {
@@ -84,10 +83,6 @@ impl Player {
     /// Set the active playlist.
     pub fn set_playlist(&mut self, playlist: PlaylistValue) {
         self.playlist = Arc::new(RwLock::new(playlist));
-    }
-    /// Retreive the playlist of tracks played previously.
-    pub fn prev_playlist(&self) -> Arc<RwLock<PlaylistValue>> {
-        self.playlist_previous.clone()
     }
     /// Set the previous playlist.
     pub fn set_prev_playlist(&mut self, playlist: PlaylistValue) {
@@ -129,18 +124,6 @@ impl Player {
     /// Is the player playing?
     pub fn is_playing(&self) -> bool {
         self.playbin.current_state() == gst::State::Playing
-    }
-    /// Is the player in a VoidPending state?
-    pub fn is_void(&self) -> bool {
-        self.playbin.current_state() == gst::State::VoidPending
-    }
-    /// Is the player stopped?
-    pub fn is_stopped(&self) -> bool {
-        self.playbin.current_state() == gst::State::Null
-    }
-    /// Is the player ready?
-    pub fn is_ready(&self) -> bool {
-        self.playbin.current_state() == gst::State::Ready
     }
     /// Retreive the current Gstreamer state of the player.
     pub fn current_state(&self) -> GstState {

@@ -163,7 +163,6 @@ macro_rules! call {
     };
 }
 
-#[allow(dead_code)]
 impl Client {
     pub fn quality(&self) -> AudioQuality {
         self.default_quality.clone()
@@ -200,36 +199,38 @@ impl Client {
         if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
             info!("using token from cache");
             self.set_token(token);
-        }
 
-        if let Some(u) = creds.username {
-            debug!("using username from cli argument: {}", u);
-            self.set_username(u.into());
-        } else if let Some(u) = get_client!(ClientKey::Username, tree, StringValue) {
-            debug!("using username stored in database: {}", u);
-            self.set_username(u);
+            Ok(self.clone())
         } else {
-            return Err(Error::NoUsername);
-        }
-
-        if let Some(p) = creds.password {
-            debug!("using password from cli argument: {}", p);
-            self.set_password(p.into());
-        } else if let Some(p) = get_client!(ClientKey::Password, tree, StringValue) {
-            debug!("using password stored in database: {}", p);
-            self.set_password(p);
-        } else {
-            return Err(Error::NoPassword);
-        }
-
-        if self.user_token.is_none() || self.username.is_some() && self.password.is_some() {
-            if self.login().await.is_ok() {
-                Ok(self.clone())
+            if let Some(u) = creds.username {
+                debug!("using username from cli argument: {}", u);
+                self.set_username(u.into());
+            } else if let Some(u) = get_client!(ClientKey::Username, tree, StringValue) {
+                debug!("using username stored in database: {}", u);
+                self.set_username(u);
             } else {
-                Err(Error::Login)
+                return Err(Error::NoUsername);
             }
-        } else {
-            Err(Error::Create)
+
+            if let Some(p) = creds.password {
+                debug!("using password from cli argument: {}", p);
+                self.set_password(p.into());
+            } else if let Some(p) = get_client!(ClientKey::Password, tree, StringValue) {
+                debug!("using password stored in database: {}", p);
+                self.set_password(p);
+            } else {
+                return Err(Error::NoPassword);
+            }
+
+            if self.username.is_some() && self.password.is_some() {
+                if self.login().await.is_ok() {
+                    Ok(self.clone())
+                } else {
+                    Err(Error::Login)
+                }
+            } else {
+                Err(Error::Create)
+            }
         }
     }
 
