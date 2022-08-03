@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
+    get_player,
     player::Player,
     qobuz::PlaylistTrack,
     state::{
@@ -23,35 +24,32 @@ use tui::{
 
 use super::Event;
 
-pub fn draw<B>(f: &mut Frame<B>, state: AppState, tracks: Arc<RwLock<TrackList>>)
+pub fn draw<'a, B>(f: &mut Frame<B>, state: AppState, tracks: Arc<RwLock<TrackList<'a>>>)
 where
     B: Backend,
 {
-    if let Some(playlist) = state
-        .player
-        .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::Playlist))
-    {
+    let tree = state.player.clone();
+    if let Some(playlist) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
         let mut items = playlist
             .into_iter()
             .map(|t| {
                 let title = t.track.title;
                 ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
                     .style(Style::default())
+                    .into()
             })
-            .collect::<Vec<ListItem>>();
+            .collect::<Vec<Item>>();
 
-        if let Some(prev_playlist) = state
-            .player
-            .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::PreviousPlaylist))
-        {
+        if let Some(prev_playlist) = get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue) {
             let mut prev_items = prev_playlist
                 .into_iter()
                 .map(|t| {
                     let title = t.track.title;
                     ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
                         .style(Style::default().add_modifier(Modifier::DIM))
+                        .into()
                 })
-                .collect::<Vec<ListItem>>();
+                .collect::<Vec<Item>>();
 
             items.append(&mut prev_items);
         }
@@ -265,13 +263,28 @@ fn current_track<B>(
 }
 
 #[derive(Clone, Debug)]
+pub struct Item<'a>(ListItem<'a>);
+
+impl<'a> From<ListItem<'a>> for Item<'a> {
+    fn from(item: ListItem<'a>) -> Self {
+        Item(item)
+    }
+}
+
+impl<'a> From<Item<'a>> for ListItem<'a> {
+    fn from(item: Item<'a>) -> Self {
+        item.0
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct TrackList<'a> {
-    pub items: Vec<ListItem<'a>>,
+    pub items: Vec<Item<'a>>,
     state: ListState,
 }
 
 impl<'a> TrackList<'a> {
-    pub fn new(items: Option<Vec<ListItem<'a>>>) -> TrackList<'a> {
+    pub fn new(items: Option<Vec<Item<'a>>>) -> TrackList<'a> {
         if let Some(i) = items {
             TrackList {
                 items: i,
@@ -285,7 +298,14 @@ impl<'a> TrackList<'a> {
         }
     }
 
-    pub fn set_items(&mut self, items: Vec<ListItem<'a>>) {
+    pub fn list_items(&self) -> Vec<ListItem<'_>> {
+        self.items
+            .iter()
+            .map(|item| item.clone().into())
+            .collect::<Vec<ListItem<'_>>>()
+    }
+
+    pub fn set_items(&mut self, items: Vec<Item<'a>>) {
         if let Some(selected) = self.state.selected() {
             if selected > items.len() {
                 self.state.select(Some(items.len()));
@@ -333,11 +353,12 @@ impl<'a> TrackList<'a> {
     }
 }
 
-fn track_list<B>(f: &mut Frame<B>, playlist: Arc<RwLock<TrackList>>, area: Rect)
+fn track_list<'a, B>(f: &mut Frame<B>, playlist: Arc<RwLock<TrackList<'a>>>, area: Rect)
 where
     B: Backend,
 {
-    let list = List::new(playlist.read().items.clone())
+    let list = playlist.read();
+    let list = List::new(list.list_items())
         .block(
             Block::default()
                 .style(Style::default().bg(Color::Indexed(0)))
@@ -350,7 +371,11 @@ where
     f.render_stateful_widget(list, area, &mut playlist.read().state.clone());
 }
 
-pub fn key_events(event: Event, player: Player, track_list: Arc<RwLock<TrackList>>) -> bool {
+pub fn key_events(
+    event: Event,
+    mut player: Player,
+    track_list: Arc<RwLock<TrackList<'_>>>,
+) -> bool {
     let Event::Input(key) = event;
     match key {
         Key::Char(c) => match c {

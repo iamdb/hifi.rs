@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
+    get_player,
     player::Player,
     qobuz::PlaylistTrack,
     state::app::{AppKey, PlayerKey},
@@ -89,7 +90,7 @@ impl MprisPlayer {
     fn next(&mut self) {
         self.player.skip_forward(None);
     }
-    fn previous(&self) {
+    fn previous(&mut self) {
         self.player.skip_backward(None);
     }
     fn seek(&self) -> Result<()> {
@@ -121,13 +122,9 @@ impl MprisPlayer {
     #[dbus_interface(property)]
     fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         let mut meta = HashMap::new();
+        let tree = self.player.app_state().player;
 
-        if let Some(next_up) = self
-            .player
-            .app_state()
-            .player
-            .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp))
-        {
+        if let Some(next_up) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
             meta.insert(
                 "mpris:trackid",
                 zvariant::Value::new(format!("/org/hifirs/Player/TrackList/{}", next_up.track.id)),

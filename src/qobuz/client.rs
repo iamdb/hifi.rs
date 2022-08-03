@@ -90,14 +90,13 @@ pub async fn new(state: AppState, creds: Credentials) -> Result<Client> {
         .build()
         .unwrap();
 
-    let default_quality = if let Some(quality) = state
-        .config
-        .get::<String, AudioQuality>(AppKey::Client(ClientKey::DefaultQuality))
-    {
-        quality
-    } else {
-        AudioQuality::Mp3
-    };
+    let tree = state.player.clone();
+    let default_quality =
+        if let Some(quality) = get_client!(ClientKey::DefaultQuality, tree, AudioQuality) {
+            quality
+        } else {
+            AudioQuality::Mp3
+        };
 
     Client {
         client,
