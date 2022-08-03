@@ -47,13 +47,12 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 get_player!(PlayerKey::Playlist, tree, PlaylistValue),
                 get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
             ) {
-                let (mut player, broadcast) = player::new(app_state.clone());
-
                 let client = client::new(app_state.clone(), creds)
                     .await
                     .expect("failed to create client");
 
-                player.setup(client, true).await;
+                let (mut player, broadcast) = player::new(app_state.clone(), client.clone());
+                player.setup(true).await;
 
                 if let Some(prev_playlist) =
                     get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
@@ -61,33 +60,35 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.set_prev_playlist(prev_playlist);
                 }
 
-                if let Some(track_url) = player.fetch_track_url(next_up).track_url {
-                    player.set_playlist(playlist);
-                    player.set_uri(track_url);
+                if let Ok(track) = player.attach_track_url(next_up).await {
+                    if let Some(track_url) = track.track_url {
+                        player.set_playlist(playlist);
+                        player.set_uri(track_url);
 
-                    player.play();
+                        player.play();
 
-                    if no_tui {
-                        let mut quitter = app_state.quitter();
+                        if no_tui {
+                            let mut quitter = app_state.quitter();
 
-                        ctrlc::set_handler(move || {
-                            app_state.send_quit();
-                            std::process::exit(0);
-                        })
-                        .expect("error setting ctrlc handler");
+                            ctrlc::set_handler(move || {
+                                app_state.send_quit();
+                                std::process::exit(0);
+                            })
+                            .expect("error setting ctrlc handler");
 
-                        loop {
-                            if let Ok(quit) = quitter.try_recv() {
-                                if quit {
-                                    debug!("quitting");
-                                    break;
+                            loop {
+                                if let Ok(quit) = quitter.try_recv() {
+                                    if quit {
+                                        debug!("quitting");
+                                        break;
+                                    }
                                 }
+                                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                             }
-                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+                        } else {
+                            let mut tui = ui::terminal::new();
+                            tui.event_loop(broadcast, player).await;
                         }
-                    } else {
-                        let mut tui = ui::terminal::new();
-                        tui.event_loop(broadcast, player).await;
                     }
                 }
             } else {
@@ -97,11 +98,12 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             Ok(())
         }
         Commands::Play { query, quality } => {
-            let (player, broadcast) = player::new(app_state.clone());
-
             let mut client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to client");
+
+            let (player, broadcast) = player::new(app_state.clone(), client.clone());
+            player.setup(false).await;
 
             match client.search_albums(query, Some(100)).await {
                 Ok(mut results) => {
@@ -130,7 +132,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                         let selected_album = results.albums.items.remove(index);
 
                         app_state.player.clear();
-                        player.setup(client.clone(), false).await;
+                        player.setup(false).await;
 
                         let quality = if let Some(q) = quality {
                             q
@@ -274,16 +276,16 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::StreamTrack { track_id, quality } => {
-            let (player, broadcast) = player::new(app_state.clone());
-
             let mut client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
+            let (player, broadcast) = player::new(app_state.clone(), client.clone());
+
             match client.track(track_id).await {
                 Ok(track) => {
                     app_state.player.clear();
-                    player.setup(client.clone(), false).await;
+                    player.setup(false).await;
                     player.play_track(track, quality.unwrap(), client).await;
 
                     let mut tui = ui::terminal::new();
@@ -299,49 +301,50 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             quality,
             no_tui,
         } => {
-            let (player, broadcast) = player::new(app_state.clone());
+            let mut client = client::new(app_state.clone(), creds)
+                .await
+                .expect("failed to create client");
 
-            match client::new(app_state.clone(), creds).await {
-                Ok(mut client) => match client.album(album_id).await {
-                    Ok(album) => {
-                        app_state.player.clear();
-                        player.setup(client.clone(), false).await;
+            let (player, broadcast) = player::new(app_state.clone(), client.clone());
 
-                        let quality = if let Some(q) = quality {
-                            q
-                        } else {
-                            client.quality()
-                        };
+            match client.album(album_id).await {
+                Ok(album) => {
+                    app_state.player.clear();
+                    player.setup(false).await;
 
-                        player.play_album(album, quality, client.clone()).await;
+                    let quality = if let Some(q) = quality {
+                        q
+                    } else {
+                        client.quality()
+                    };
 
-                        if no_tui {
-                            let mut quitter = app_state.quitter();
+                    player.play_album(album, quality, client.clone()).await;
 
-                            ctrlc::set_handler(move || {
-                                app_state.send_quit();
-                                std::process::exit(0);
-                            })
-                            .expect("error setting ctrlc handler");
+                    if no_tui {
+                        let mut quitter = app_state.quitter();
 
-                            loop {
-                                if let Ok(quit) = quitter.try_recv() {
-                                    if quit {
-                                        debug!("quitting");
-                                        break;
-                                    }
+                        ctrlc::set_handler(move || {
+                            app_state.send_quit();
+                            std::process::exit(0);
+                        })
+                        .expect("error setting ctrlc handler");
+
+                        loop {
+                            if let Ok(quit) = quitter.try_recv() {
+                                if quit {
+                                    debug!("quitting");
+                                    break;
                                 }
-                                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                             }
-                        } else {
-                            let mut tui = ui::terminal::new();
-                            tui.event_loop(broadcast, player).await;
+                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                         }
-
-                        Ok(())
+                    } else {
+                        let mut tui = ui::terminal::new();
+                        tui.event_loop(broadcast, player).await;
                     }
-                    Err(error) => Err(error.to_string()),
-                },
+
+                    Ok(())
+                }
                 Err(error) => Err(error.to_string()),
             }
         }

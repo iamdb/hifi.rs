@@ -7,13 +7,29 @@ use crate::{
 };
 use gst::State as GstState;
 use gstreamer as gst;
-use zbus::{dbus_interface, fdo::Result, zvariant};
+use zbus::{dbus_interface, fdo::Result, zvariant, ConnectionBuilder};
 
 pub struct Mpris {
     player: Player,
 }
-pub fn new_mpris(player: Player) -> Mpris {
-    Mpris { player }
+
+pub async fn init(player: Player) {
+    let mpris = Mpris {
+        player: player.clone(),
+    };
+    let mpris_player = MprisPlayer { player };
+
+    ConnectionBuilder::session()
+        .unwrap()
+        .name("org.mpris.MediaPlayer2.hifirs")
+        .unwrap()
+        .serve_at("/org/mpris/MediaPlayer2", mpris)
+        .unwrap()
+        .serve_at("/org/mpris/MediaPlayer2", mpris_player)
+        .unwrap()
+        .build()
+        .await
+        .expect("failed to attach to dbus");
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
@@ -52,40 +68,29 @@ pub struct MprisPlayer {
     player: Player,
 }
 
-pub fn new_mpris_player(player: Player) -> MprisPlayer {
-    MprisPlayer { player }
-}
-
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
-    fn play(&self) -> Result<()> {
+    fn play(&self) {
         self.player.play();
-        Ok(())
     }
-    fn pause(&self) -> Result<()> {
+    fn pause(&self) {
         self.player.pause();
-        Ok(())
     }
-    fn stop(&self) -> Result<()> {
+    fn stop(&self) {
         self.player.stop();
-        Ok(())
     }
-    fn play_pause(&self) -> Result<()> {
+    fn play_pause(&self) {
         if self.player.is_playing() {
             self.player.pause();
         } else if self.player.is_paused() {
             self.player.play()
         }
-
-        Ok(())
     }
-    fn next(&self) -> Result<()> {
+    fn next(&mut self) {
         self.player.skip_forward(None);
-        Ok(())
     }
-    fn previous(&self) -> Result<()> {
+    fn previous(&self) {
         self.player.skip_backward(None);
-        Ok(())
     }
     fn seek(&self) -> Result<()> {
         Ok(())

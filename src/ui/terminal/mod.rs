@@ -1,8 +1,9 @@
 pub mod player;
 
-use std::{io::Stdout, thread};
+use std::{io::Stdout, sync::Arc, thread};
 
 use flume::{Receiver, Sender};
+use parking_lot::RwLock;
 use termion::{
     event::Key,
     input::{MouseTerminal, TermRead},
@@ -56,7 +57,7 @@ impl Tui {
         });
 
         let mut event_stream = self.rx.stream();
-        let track_list = TrackList::new(None);
+        let track_list = Arc::new(RwLock::new(TrackList::new(None)));
         let mut quitter = player.app_state().quitter();
 
         loop {
@@ -71,9 +72,7 @@ impl Tui {
                     self.terminal.draw(|f| player::draw(f, state, track_list.clone())).expect("failed to draw terminal screen");
                 }
                 Some(event) = event_stream.next() => {
-                    if !player::key_events(event, player.clone(), track_list.clone()) {
-                        break;
-                    }
+                    player::key_events(event, player.clone(), track_list.clone());
                 }
             }
         }

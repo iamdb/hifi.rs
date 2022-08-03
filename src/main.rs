@@ -11,7 +11,7 @@ async fn main() -> Result<(), String> {
     base_dir.push("hifi-rs");
 
     // SETUP DATABASE
-    let app_state = state::app::new(base_dir);
+    let app_state = state::app::new(base_dir).expect("failed to setup database");
 
     hifi_rs::cli(
         cli.command,

@@ -1,5 +1,5 @@
 use crate::{
-    mpris::{new_mpris, new_mpris_player},
+    get_player, mpris,
     qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
     state::{
         app::{AppKey, AppState, PlayerKey},
@@ -8,16 +8,16 @@ use crate::{
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
-use futures::prelude::*;
+use futures::{executor, prelude::*};
 use gst::{glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
 use parking_lot::RwLock;
+use snafu::prelude::*;
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::{
     select,
     sync::broadcast::{self, Receiver as BroadcastReceiver, Sender as BroadcastSender},
 };
-use zbus::ConnectionBuilder;
 
 /// Signal is a sender and receiver in a single struct.
 #[derive(Debug, Clone)]
@@ -31,6 +31,14 @@ fn new_signal<T>(_: T, size: i32) -> Signal<T> {
     let (sender, receiver) = flume::bounded::<T>(size.try_into().unwrap());
     Signal { sender, receiver }
 }
+
+#[derive(Snafu, Debug)]
+pub enum Error {
+    #[snafu(display("Failed to retrieve a track url."))]
+    TrackURL,
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// A player handles playing media to a device.
 #[derive(Debug, Clone)]
@@ -47,10 +55,13 @@ pub struct Player {
     url_request: Signal<PlaylistTrack>,
     /// Receive URLs for tracks
     url_return: Signal<PlaylistTrack>,
+    /// Broadcasts the player state to consumers.
     broadcast_sender: BroadcastSender<AppState>,
+    /// Qobuz client
+    client: Client,
 }
 
-pub fn new(state: AppState) -> (Player, BroadcastReceiver<AppState>) {
+pub fn new(state: AppState, client: Client) -> (Player, BroadcastReceiver<AppState>) {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).unwrap();
     let url_request = new_signal(PlaylistTrack::default(), 1);
@@ -66,6 +77,7 @@ pub fn new(state: AppState) -> (Player, BroadcastReceiver<AppState>) {
             url_request,
             url_return,
             broadcast_sender,
+            client,
         },
         broadcast_receiver,
     )
@@ -215,13 +227,10 @@ impl Player {
     /// Skip forward to the next track in the playlist.
     pub fn skip_forward(&self, num: Option<usize>) {
         let mut prev_playlist = self.playlist_previous.write();
+        let tree = self.state.player.clone();
 
-        if let Some(previous_track) = &self
-            .state
-            .player
-            .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp))
-        {
-            prev_playlist.push_back(previous_track.clone());
+        if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+            prev_playlist.push_back(previous_track);
         }
 
         if let Some(number) = num {
@@ -240,8 +249,13 @@ impl Player {
             debug!("skipping forward to next track");
             self.ready();
 
-            debug!("receiving track url");
-            next_track = self.fetch_track_url(next_track);
+            debug!("fetching url for next track");
+            let mut client = self.client.clone();
+            let next_track_url =
+                executor::block_on(client.track_url(next_track.track.id, None, None))
+                    .expect("failed to get track url");
+
+            next_track.set_track_url(next_track_url);
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -258,7 +272,9 @@ impl Player {
                 prev_playlist.clone(),
             );
 
-            let track_url = next_track.track_url.expect("missing track url");
+            let track_url = next_track
+                .track_url
+                .expect("missing track url. should definitely have one by now.");
             self.playbin.set_property("uri", Some(track_url.url));
             self.play();
         }
@@ -278,13 +294,10 @@ impl Player {
         }
 
         let mut playlist = self.playlist.write();
+        let tree = self.state.player.clone();
 
-        if let Some(previous_track) = &self
-            .state
-            .player
-            .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp))
-        {
-            playlist.push_front(previous_track.clone());
+        if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+            playlist.push_front(previous_track);
         }
 
         if let Some(number) = num {
@@ -308,7 +321,9 @@ impl Player {
             debug!("skipping backward to previous track");
             self.ready();
 
-            prev_track = self.fetch_track_url(prev_track);
+            let mut cloned_self = self.clone();
+            prev_track = executor::block_on(cloned_self.attach_track_url(prev_track))
+                .expect("failed to receive track url");
 
             self.state.player.insert::<String, PlaylistTrack>(
                 AppKey::Player(PlayerKey::NextUp),
@@ -324,7 +339,9 @@ impl Player {
                 prev_playlist.clone(),
             );
 
-            let track_url = prev_track.track_url.expect("missing track url");
+            let track_url = prev_track
+                .track_url
+                .expect("missing track url. should definitely have one by now.");
             self.playbin.set_property("uri", Some(track_url.url));
 
             self.play();
@@ -443,21 +460,8 @@ impl Player {
         }
     }
     /// Sets up basic functionality for the player.
-    pub async fn setup(&self, client: Client, resume: bool) {
-        let mpris = new_mpris(self.clone());
-        let mpris_player = new_mpris_player(self.clone());
-
-        ConnectionBuilder::session()
-            .unwrap()
-            .name("org.mpris.MediaPlayer2.hifirs")
-            .unwrap()
-            .serve_at("/org/mpris/MediaPlayer2", mpris)
-            .unwrap()
-            .serve_at("/org/mpris/MediaPlayer2", mpris_player)
-            .unwrap()
-            .build()
-            .await
-            .expect("failed to attach to dbus");
+    pub async fn setup(&self, resume: bool) {
+        mpris::init(self.clone()).await;
 
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
@@ -467,7 +471,7 @@ impl Player {
 
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
-            cloned_self.player_loop(client, resume).await;
+            cloned_self.player_loop(resume).await;
         });
 
         let url_request = self.url_request.sender.clone();
@@ -476,6 +480,8 @@ impl Player {
         let prev_playlist = self.playlist_previous.clone();
         let state = self.state.clone();
 
+        // Connects to the `about-to-finish` signal so the player
+        // can setup the next track to play. Enables gapless playback.
         self.playbin
             .connect("about-to-finish", false, move |values| {
                 debug!("about to finish");
@@ -507,18 +513,17 @@ impl Player {
                 None
             });
     }
-    pub fn fetch_track_url(&self, track: PlaylistTrack) -> PlaylistTrack {
-        let url_request = &self.url_request.sender;
-        let url_return = &self.url_return.receiver;
-
-        url_request
-            .send(track)
-            .expect("failed to send url to request");
-
-        url_return.recv().expect("failed to get track url")
+    /// Attach a `TrackURL` to the given track.
+    pub async fn attach_track_url(&mut self, mut track: PlaylistTrack) -> Result<PlaylistTrack> {
+        if let Ok(track_url) = self.client.track_url(track.track.id, None, None).await {
+            track.set_track_url(track_url);
+            Ok(track)
+        } else {
+            Err(Error::TrackURL)
+        }
     }
     /// Handles messages from the player and takes necessary action.
-    async fn player_loop(&mut self, mut client: Client, mut resume: bool) {
+    async fn player_loop(&mut self, mut resume: bool) {
         let mut messages = self.playbin.bus().unwrap().stream();
         let mut url_request = self.url_request.receiver.stream();
         let mut quitter = self.state.quitter();
@@ -532,10 +537,12 @@ impl Player {
                     }
                 }
                 Some(mut playlist_track) = url_request.next() => {
-                    if let Ok(track_url) = client.track_url(playlist_track.track.id,playlist_track.quality.clone(), None).await {
+                    debug!("requesting track url");
+                    if let Ok(track_url) = self.client.track_url(playlist_track.track.id,playlist_track.quality.clone(), None).await {
+                        debug!("received track url");
                         let with_track_url = playlist_track.set_track_url(track_url);
 
-                        match self.url_return.sender.send_async(with_track_url).await {
+                        match self.url_return.sender.send(with_track_url) {
                             Ok(_) => (),
                             Err(error) => {
                                 error!("{:?}", error);

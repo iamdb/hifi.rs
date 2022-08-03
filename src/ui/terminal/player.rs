@@ -23,7 +23,7 @@ use tui::{
 
 use super::Event;
 
-pub fn draw<B>(f: &mut Frame<B>, state: AppState, mut tracks: TrackList)
+pub fn draw<B>(f: &mut Frame<B>, state: AppState, tracks: Arc<RwLock<TrackList>>)
 where
     B: Backend,
 {
@@ -56,10 +56,10 @@ where
             items.append(&mut prev_items);
         }
 
-        tracks.set_items(items);
+        tracks.write().set_items(items);
 
-        if tracks.selected().is_none() {
-            tracks.select(0);
+        if tracks.read().selected().is_none() {
+            tracks.write().select(0);
         }
     }
 
@@ -267,7 +267,7 @@ fn current_track<B>(
 #[derive(Clone, Debug)]
 pub struct TrackList<'a> {
     pub items: Vec<ListItem<'a>>,
-    state: Arc<RwLock<ListState>>,
+    state: ListState,
 }
 
 impl<'a> TrackList<'a> {
@@ -275,27 +275,27 @@ impl<'a> TrackList<'a> {
         if let Some(i) = items {
             TrackList {
                 items: i,
-                state: Arc::new(RwLock::new(ListState::default())),
+                state: ListState::default(),
             }
         } else {
             TrackList {
                 items: Vec::new(),
-                state: Arc::new(RwLock::new(ListState::default())),
+                state: ListState::default(),
             }
         }
     }
 
     pub fn set_items(&mut self, items: Vec<ListItem<'a>>) {
-        if let Some(selected) = self.state.read().selected() {
+        if let Some(selected) = self.state.selected() {
             if selected > items.len() {
-                self.state.write().select(Some(items.len()));
+                self.state.select(Some(items.len()));
             }
         }
         self.items = items;
     }
 
-    pub fn next(&self) {
-        let i = match self.state.read().selected() {
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() {
                     0
@@ -307,11 +307,11 @@ impl<'a> TrackList<'a> {
             }
             None => 0,
         };
-        self.state.write().select(Some(i));
+        self.state.select(Some(i));
     }
 
-    pub fn previous(&self) {
-        let i = match self.state.read().selected() {
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() || i == 0 {
                     0
@@ -321,23 +321,23 @@ impl<'a> TrackList<'a> {
             }
             None => 0,
         };
-        self.state.write().select(Some(i));
+        self.state.select(Some(i));
     }
 
     pub fn selected(&self) -> Option<usize> {
-        self.state.read().selected()
+        self.state.selected()
     }
 
-    pub fn select(&self, num: usize) {
-        self.state.write().select(Some(num));
+    pub fn select(&mut self, num: usize) {
+        self.state.select(Some(num));
     }
 }
 
-fn track_list<B>(f: &mut Frame<B>, playlist: TrackList, area: Rect)
+fn track_list<B>(f: &mut Frame<B>, playlist: Arc<RwLock<TrackList>>, area: Rect)
 where
     B: Backend,
 {
-    let list = List::new(playlist.items)
+    let list = List::new(playlist.read().items.clone())
         .block(
             Block::default()
                 .style(Style::default().bg(Color::Indexed(0)))
@@ -347,17 +347,16 @@ where
         .highlight_style(Style::default().fg(Color::Cyan))
         .highlight_symbol("•");
 
-    f.render_stateful_widget(list, area, &mut playlist.state.read().clone());
+    f.render_stateful_widget(list, area, &mut playlist.read().state.clone());
 }
 
-pub fn key_events(event: Event, player: Player, track_list: TrackList) -> bool {
+pub fn key_events(event: Event, player: Player, track_list: Arc<RwLock<TrackList>>) -> bool {
     let Event::Input(key) = event;
     match key {
         Key::Char(c) => match c {
             'q' => {
                 player.app_state().send_quit();
                 player.stop();
-                return false;
             }
             ' ' => {
                 if player.is_playing() {
@@ -373,19 +372,20 @@ pub fn key_events(event: Event, player: Player, track_list: TrackList) -> bool {
                 player.skip_backward(None);
             }
             '\n' => {
-                if let Some(selection) = track_list.selected() {
+                if let Some(selection) = track_list.read().selected() {
+                    debug!("playing selected track {}", selection);
                     if player.skip_to(selection + 1) {
-                        track_list.select(0);
+                        track_list.write().select(0);
                     }
                 }
             }
             _ => (),
         },
         Key::Down => {
-            track_list.next();
+            track_list.write().next();
         }
         Key::Up => {
-            track_list.previous();
+            track_list.write().previous();
         }
         Key::Right => {
             player.jump_forward();
