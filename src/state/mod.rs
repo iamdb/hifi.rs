@@ -65,7 +65,7 @@ impl StateTree {
             None
         }
     }
-    pub fn item_list(self) -> Option<Vec<Item<'static>>> {
+    pub fn item_list(&self) -> Option<Vec<Item<'static>>> {
         if let Some(playlist) = crate::get_player!(PlayerKey::Playlist, self, PlaylistValue) {
             let mut items = playlist
                 .into_iter()

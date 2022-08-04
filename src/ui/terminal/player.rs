@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     get_player,
     player::Player,
@@ -9,6 +11,7 @@ use crate::{
 };
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
+use parking_lot::Mutex;
 use termion::event::Key;
 use tui::{
     backend::Backend,
@@ -263,7 +266,11 @@ impl<'t> TrackList<'t> {
         if let Some(selected) = self.state.selected() {
             if selected > items.len() {
                 self.state.select(Some(items.len()));
+            } else {
+                self.state.select(Some(selected))
             }
+        } else {
+            self.state.select(Some(0));
         }
         self.items = items;
     }
@@ -301,13 +308,9 @@ impl<'t> TrackList<'t> {
     pub fn selected(&self) -> Option<usize> {
         self.state.selected()
     }
-
-    pub fn select(&mut self, num: usize) {
-        self.state.select(Some(num));
-    }
 }
 
-fn track_list<'a, B>(f: &mut Frame<B>, playlist: TrackList<'a>, area: Rect)
+fn track_list<'a, B>(f: &mut Frame<B>, mut playlist: TrackList<'a>, area: Rect)
 where
     B: Backend,
 {
@@ -321,11 +324,13 @@ where
         .highlight_style(Style::default().fg(Color::Cyan))
         .highlight_symbol("•");
 
-    f.render_stateful_widget(list, area, &mut playlist.state.clone());
+    f.render_stateful_widget(list, area, &mut playlist.state);
 }
 
-pub fn key_events(event: Event, mut player: Player, mut track_list: TrackList<'_>) -> bool {
+pub fn key_events(event: Event, mut player: Player, track_list: Arc<Mutex<TrackList<'_>>>) -> bool {
     let Event::Input(key) = event;
+    let mut track_list = track_list.lock();
+
     match key {
         Key::Char(c) => match c {
             'q' => {
@@ -341,20 +346,18 @@ pub fn key_events(event: Event, mut player: Player, mut track_list: TrackList<'_
             }
             'N' => {
                 if !player.is_skipping {
-                    player.skip_forward(None);
+                    player.skip_forward(None).expect("failed to skip forward");
                 }
             }
             'P' => {
                 if !player.is_skipping {
-                    player.skip_backward(None);
+                    player.skip_backward(None).expect("failed to skip backward");
                 }
             }
             '\n' => {
                 if let Some(selection) = track_list.selected() {
                     debug!("playing selected track {}", selection);
-                    if player.skip_to(selection + 1) {
-                        track_list.select(0);
-                    }
+                    player.skip_to(selection).expect("failed to skip to track");
                 }
             }
             _ => (),

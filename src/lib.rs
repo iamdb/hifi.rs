@@ -104,7 +104,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                         }
                     } else {
                         let tui = ui::terminal::new();
-                        tui.start(app_state, player).await
+                        tui.start(app_state, player, false).await
                     }
                 }
             } else {
@@ -158,7 +158,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.play_album(album, quality, client.clone()).await;
 
                     let tui = ui::terminal::new();
-                    tui.start(app_state, player).await;
+                    tui.start(app_state, player, false).await;
                 }
             }
 
@@ -258,7 +258,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.play_track(track, quality.unwrap(), client).await;
 
             let tui = ui::terminal::new();
-            tui.start(app_state, player).await;
+            tui.start(app_state, player, false).await;
 
             Ok(())
         }
@@ -305,8 +305,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 }
             } else {
                 let tui = ui::terminal::new();
-
-                tui.start(app_state, player).await;
+                tui.start(app_state, player, false).await;
             }
 
             Ok(())

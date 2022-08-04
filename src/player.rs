@@ -19,6 +19,8 @@ use tokio::{select, sync::broadcast::Receiver as BroadcastReceiver};
 pub enum Error {
     #[snafu(display("Failed to retrieve a track url."))]
     TrackURL,
+    #[snafu(display("Failed to seek."))]
+    Seek,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -120,11 +122,12 @@ impl Player {
         }
     }
     /// Seek to a specified time in the current track.
-    pub fn seek(&self, time: ClockValue, flag: SeekFlags) {
+    pub fn seek(&self, time: ClockValue, flag: SeekFlags) -> Result<()> {
         match self.playbin.seek_simple(flag, time.inner_clocktime()) {
-            Ok(_) => (),
+            Ok(_) => Ok(()),
             Err(error) => {
                 error!("{}", error.message);
+                Err(Error::Seek)
             }
         }
     }
@@ -192,8 +195,7 @@ impl Player {
         }
     }
     /// Skip forward to the next track in the playlist.
-    pub fn skip_forward(&mut self, num: Option<usize>) {
-        // Turned false upon async gstreamer message below.
+    pub fn skip_forward(&mut self, num: Option<usize>) -> Result<()> {
         self.is_skipping = true;
 
         let tree = self.state.player.clone();
@@ -201,34 +203,32 @@ impl Player {
         let mut playlist = self.playlist.write();
         let mut prev_playlist = self.playlist_previous.write();
 
+        if let Some(number) = num {
+            // Grab all of the tracks, up to the next one to play.
+            prev_playlist.vec().append(
+                &mut playlist
+                    .vec()
+                    .drain(..number - 1)
+                    .collect::<VecDeque<PlaylistTrack>>(),
+            );
+        }
+
         if let Some(next_track_to_play) = playlist.pop_front() {
+            if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+                prev_playlist.push_back(previous_track);
+            }
+
             debug!("fetching url for next track");
             let mut cloned_self = self.clone();
-            let next_track = cloned_self
-                .attach_track_url(next_track_to_play)
-                .expect("failed to get track url");
+            let next_track = cloned_self.attach_track_url(next_track_to_play)?;
 
             if let Some(track_url) = next_track.clone().track_url {
                 debug!("skipping forward to next track");
                 self.ready();
 
-                if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-                    prev_playlist.push_back(previous_track);
-                }
-
                 self.state
                     .player
                     .insert::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp), next_track);
-
-                if let Some(number) = num {
-                    // Grab all of the tracks, up to the next one to play.
-                    prev_playlist.vec().append(
-                        &mut playlist
-                            .vec()
-                            .drain(..number - 1)
-                            .collect::<VecDeque<PlaylistTrack>>(),
-                    );
-                }
 
                 self.state.player.insert::<String, PlaylistValue>(
                     AppKey::Player(PlayerKey::Playlist),
@@ -245,10 +245,10 @@ impl Player {
             }
         }
         self.is_skipping = false;
+        Ok(())
     }
     /// Skip backwards by playing the first track in previous track playlist.
-    pub fn skip_backward(&mut self, num: Option<usize>) {
-        // Turned false upon async gstreamer message below.
+    pub fn skip_backward(&mut self, num: Option<usize>) -> Result<()> {
         self.is_skipping = true;
 
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
@@ -261,7 +261,7 @@ impl Player {
                     .expect("failed to seek");
 
                 self.is_skipping = false;
-                return;
+                return Ok(());
             }
         }
 
@@ -277,9 +277,7 @@ impl Player {
             }
 
             let mut cloned_self = self.clone();
-            next_track_to_play = cloned_self
-                .attach_track_url(next_track_to_play)
-                .expect("failed to receive track url");
+            next_track_to_play = cloned_self.attach_track_url(next_track_to_play)?;
 
             if let Some(track_url) = next_track_to_play.clone().track_url {
                 debug!("skipping backward to previous track");
@@ -320,15 +318,17 @@ impl Player {
             }
         }
         self.is_skipping = false;
+
+        Ok(())
     }
     /// Skip to a specific track number in the combined playlist.
-    pub fn skip_to(&mut self, track_number: usize) -> bool {
-        if track_number <= self.playlist().read().len() {
-            self.skip_forward(Some(track_number));
-            true
+    pub fn skip_to(&mut self, track_number: usize) -> Result<()> {
+        if track_number < self.playlist().read().len() {
+            debug!("skipping forward to track number {}", track_number);
+            self.skip_forward(Some(track_number))
         } else {
-            self.skip_backward(Some(track_number));
-            true
+            debug!("skipping backward to track number {}", track_number);
+            self.skip_backward(Some(track_number))
         }
     }
     /// Plays a single track.
@@ -527,8 +527,9 @@ impl Player {
                                 let tree = state.player.clone();
 
                                 if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
-                                    self.seek(position, SeekFlags::FLUSH | SeekFlags::KEY_UNIT);
                                     resume = false;
+                                    self.seek(position, SeekFlags::FLUSH | SeekFlags::KEY_UNIT).expect("seek failure");
+
                                 }
                             }
 

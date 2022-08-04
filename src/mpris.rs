@@ -88,10 +88,14 @@ impl MprisPlayer {
         }
     }
     fn next(&mut self) {
-        self.player.skip_forward(None);
+        self.player
+            .skip_forward(None)
+            .expect("failed to skip forward");
     }
     fn previous(&mut self) {
-        self.player.skip_backward(None);
+        self.player
+            .skip_backward(None)
+            .expect("failed to to skip backward");
     }
     fn seek(&self) -> Result<()> {
         Ok(())

@@ -1,9 +1,10 @@
 pub mod player;
 
-use std::{io::Stdout, thread, time::Duration};
+use std::{io::Stdout, sync::Arc, thread, time::Duration};
 
 use crate::{player::Player, state::app::AppState, REFRESH_RESOLUTION};
 use flume::{Receiver, Sender};
+use parking_lot::Mutex;
 use termion::{
     event::Key,
     input::{MouseTerminal, TermRead},
@@ -16,10 +17,9 @@ use tui::{backend::TermionBackend, Terminal};
 
 use self::player::TrackList;
 
-pub struct Tui<'t> {
+pub struct Tui {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    track_list: TrackList<'t>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
@@ -28,18 +28,15 @@ pub enum Event {
     Input(Key),
 }
 
-pub fn new() -> Tui<'static> {
+pub fn new() -> Tui {
     let (tx, rx) = flume::bounded(1);
 
-    Tui {
-        rx,
-        tx,
-        track_list: TrackList::new(None),
-    }
+    Tui { rx, tx }
 }
 
-impl Tui<'static> {
-    pub async fn start(&self, state: AppState, player: Player) {
+impl Tui {
+    pub async fn start(&self, state: AppState, player: Player, events_only: bool) {
+        let track_list = Arc::new(Mutex::new(TrackList::new(None)));
         let stdout = std::io::stdout();
         let stdout = stdout.into_raw_mode().expect("Error getting raw mode");
         let stdout = MouseTerminal::from(stdout);
@@ -47,28 +44,23 @@ impl Tui<'static> {
         let backend = TermionBackend::new(stdout);
         let terminal = Terminal::new(backend).unwrap();
 
+        if !events_only {
+            let cloned_tracklist = track_list.clone();
+            tokio::spawn(async {
+                render_loop(state, cloned_tracklist, terminal).await;
+            });
+        }
+
         let event_sender = self.tx.clone();
         let event_receiver = self.rx.clone();
-        let track_list = self.track_list.clone();
-
-        tokio::spawn(async {
-            render_loop(state, track_list, terminal).await;
-        });
-
-        event_loop(
-            event_sender,
-            event_receiver,
-            self.track_list.clone(),
-            player,
-        )
-        .await;
+        event_loop(event_sender, event_receiver, track_list, player).await;
     }
 }
 
 async fn event_loop(
     event_sender: Sender<Event>,
     event_receiver: Receiver<Event>,
-    track_list: TrackList<'static>,
+    track_list: Arc<Mutex<TrackList<'static>>>,
     player: Player,
 ) {
     thread::spawn(move || {
@@ -99,7 +91,11 @@ async fn event_loop(
         }
     }
 }
-async fn render_loop(state: AppState, mut track_list: TrackList<'_>, mut terminal: Console) {
+async fn render_loop(
+    state: AppState,
+    track_list: Arc<Mutex<TrackList<'_>>>,
+    mut terminal: Console,
+) {
     let mut quitter = state.quitter();
 
     loop {
@@ -109,12 +105,9 @@ async fn render_loop(state: AppState, mut track_list: TrackList<'_>, mut termina
             }
         }
 
-        if let Some(items) = state.player.clone().item_list() {
+        let mut track_list = track_list.lock();
+        if let Some(items) = state.player.item_list() {
             track_list.set_items(items);
-
-            if track_list.selected().is_none() {
-                track_list.select(0);
-            }
         }
 
         terminal
