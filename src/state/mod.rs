@@ -1,6 +1,8 @@
 pub mod app;
 
 use crate::qobuz::PlaylistTrack;
+use crate::state::app::PlayerKey;
+use crate::ui::terminal::player::Item;
 
 use self::app::AppKey;
 use clap::ValueEnum;
@@ -11,6 +13,8 @@ use sled::{IVec, Tree};
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::str::FromStr;
+use tui::style::{Modifier, Style};
+use tui::widgets::ListItem;
 
 #[derive(Debug, Clone)]
 pub struct HifiDB(sled::Db);
@@ -57,6 +61,39 @@ impl StateTree {
 
                 bytes.into()
             })
+        } else {
+            None
+        }
+    }
+    pub fn item_list(self) -> Option<Vec<Item<'static>>> {
+        if let Some(playlist) = crate::get_player!(PlayerKey::Playlist, self, PlaylistValue) {
+            let mut items = playlist
+                .into_iter()
+                .map(|t| {
+                    let title = t.track.title;
+                    ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
+                        .style(Style::default())
+                        .into()
+                })
+                .collect::<Vec<Item>>();
+
+            if let Some(prev_playlist) =
+                crate::get_player!(PlayerKey::PreviousPlaylist, self, PlaylistValue)
+            {
+                let mut prev_items = prev_playlist
+                    .into_iter()
+                    .map(|t| {
+                        let title = t.track.title;
+                        ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
+                            .style(Style::default().add_modifier(Modifier::DIM))
+                            .into()
+                    })
+                    .collect::<Vec<Item>>();
+
+                items.append(&mut prev_items);
+            }
+
+            Some(items)
         } else {
             None
         }

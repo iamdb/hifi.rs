@@ -51,7 +51,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     .await
                     .expect("failed to create client");
 
-                let (mut player, broadcast) = player::new(app_state.clone(), client.clone());
+                let mut player = player::new(app_state.clone(), client.clone());
                 player.setup(true).await;
 
                 if let Some(prev_playlist) =
@@ -60,7 +60,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.set_prev_playlist(prev_playlist);
                 }
 
-                if let Ok(track) = player.attach_track_url(next_up).await {
+                if let Ok(track) = player.attach_track_url(next_up) {
                     if let Some(track_url) = track.track_url {
                         player.set_playlist(playlist);
                         player.set_uri(track_url);
@@ -86,8 +86,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                                 std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                             }
                         } else {
-                            let mut tui = ui::terminal::new();
-                            tui.event_loop(broadcast, player).await;
+                            let tui = ui::terminal::new();
+                            tui.start(app_state, player).await
                         }
                     }
                 }
@@ -98,11 +98,11 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             Ok(())
         }
         Commands::Play { query, quality } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to client");
 
-            let (player, broadcast) = player::new(app_state.clone(), client.clone());
+            let player = player::new(app_state.clone(), client.clone());
             player.setup(false).await;
 
             match client.search_albums(query, Some(100)).await {
@@ -143,8 +143,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                         if let Ok(album) = client.album(selected_album.id).await {
                             player.play_album(album, quality, client.clone()).await;
 
-                            let mut tui = ui::terminal::new();
-                            tui.event_loop(broadcast, player).await;
+                            let tui = ui::terminal::new();
+                            tui.start(app_state, player).await
                         }
                     }
 
@@ -154,7 +154,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::Search { query } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -168,7 +168,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::SearchAlbums { query } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -182,7 +182,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::GetAlbum { id } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -195,7 +195,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::SearchArtists { query } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -208,7 +208,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::GetArtist { id } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -221,7 +221,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::GetTrack { id } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -234,7 +234,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::TrackURL { id, quality } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -248,7 +248,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::MyPlaylists {} => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -262,7 +262,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::Playlist { playlist_id } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
@@ -276,11 +276,11 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
         }
         Commands::StreamTrack { track_id, quality } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
-            let (player, broadcast) = player::new(app_state.clone(), client.clone());
+            let player = player::new(app_state.clone(), client.clone());
 
             match client.track(track_id).await {
                 Ok(track) => {
@@ -288,8 +288,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.setup(false).await;
                     player.play_track(track, quality.unwrap(), client).await;
 
-                    let mut tui = ui::terminal::new();
-                    tui.event_loop(broadcast, player).await;
+                    let tui = ui::terminal::new();
+                    tui.start(app_state, player).await;
 
                     Ok(())
                 }
@@ -301,11 +301,11 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             quality,
             no_tui,
         } => {
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
-            let (player, broadcast) = player::new(app_state.clone(), client.clone());
+            let player = player::new(app_state.clone(), client.clone());
 
             match client.album(album_id).await {
                 Ok(album) => {
@@ -339,8 +339,9 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                             std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                         }
                     } else {
-                        let mut tui = ui::terminal::new();
-                        tui.event_loop(broadcast, player).await;
+                        let tui = ui::terminal::new();
+
+                        tui.start(app_state, player).await;
                     }
 
                     Ok(())
@@ -350,7 +351,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         }
         Commands::Download { id, quality } => {
             // SETUP API CLIENT
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 

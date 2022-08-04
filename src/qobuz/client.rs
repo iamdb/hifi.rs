@@ -276,7 +276,7 @@ impl Client {
     }
 
     /// Retrieve a list of the user's playlists
-    pub async fn user_playlists(&mut self) -> Result<UserPlaylists> {
+    pub async fn user_playlists(&self) -> Result<UserPlaylists> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
@@ -284,7 +284,7 @@ impl Client {
     }
 
     /// Retrieve a playlist
-    pub async fn playlist(&mut self, playlist_id: String) -> Result<Playlist> {
+    pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
         let params = vec![
             ("limit", "500"),
@@ -297,7 +297,7 @@ impl Client {
     }
 
     /// Retrieve track information
-    pub async fn track(&mut self, track_id: i32) -> Result<Track> {
+    pub async fn track(&self, track_id: i32) -> Result<Track> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Track.as_str());
         let track_id_string = track_id.to_string();
         let params = vec![("track_id", track_id_string.as_str())];
@@ -307,7 +307,7 @@ impl Client {
 
     /// Retrieve url information for a track's audio file
     pub async fn track_url(
-        &mut self,
+        &self,
         track_id: i32,
         fmt_id: Option<AudioQuality>,
         sec: Option<String>,
@@ -351,7 +351,7 @@ impl Client {
         call!(self, endpoint, Some(params))
     }
 
-    pub async fn search_all(&mut self, query: String) -> Result<String> {
+    pub async fn search_all(&self, query: String) -> Result<String> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
@@ -359,7 +359,7 @@ impl Client {
     }
 
     // Retrieve information about an album
-    pub async fn album(&mut self, album_id: String) -> Result<Album> {
+    pub async fn album(&self, album_id: String) -> Result<Album> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
         let params = vec![("album_id", album_id.as_str())];
 
@@ -368,7 +368,7 @@ impl Client {
 
     // Search the database for albums
     pub async fn search_albums(
-        &mut self,
+        &self,
         query: String,
         limit: Option<i32>,
     ) -> Result<AlbumSearchResults> {
@@ -384,7 +384,7 @@ impl Client {
     }
 
     // Retrieve information about an artist
-    pub async fn artist(&mut self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
+    pub async fn artist(&self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
         let app_id = self.app_id.clone();
         let limit = if let Some(limit) = limit {
@@ -414,7 +414,7 @@ impl Client {
 
     // Search the database for artists
     pub async fn search_artists(
-        &mut self,
+        &self,
         query: String,
         limit: Option<i32>,
     ) -> Result<ArtistSearchResults> {
@@ -482,7 +482,7 @@ impl Client {
 
     // Call the api and retrieve the JSON payload
     async fn make_call(
-        &mut self,
+        &self,
         endpoint: String,
         params: Option<Vec<(&str, &str)>>,
     ) -> Result<String> {
@@ -525,7 +525,7 @@ impl Client {
     }
 
     // Handle a response retrieved from the api
-    async fn handle_response(&mut self, response: Response) -> Result<String> {
+    async fn handle_response(&self, response: Response) -> Result<String> {
         match response.status() {
             StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND => {
                 let res = response.text().await.unwrap();
