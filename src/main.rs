@@ -2,7 +2,7 @@ use clap::Parser;
 use hifi_rs::{cli::Cli, state, Credentials};
 
 #[tokio::main]
-async fn main() -> Result<(), String> {
+async fn main() -> Result<(), hifi_rs::Error> {
     // PARSE CLI ARGS
     let cli = Cli::parse();
 
