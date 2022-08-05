@@ -144,7 +144,7 @@ impl AppState {
         self.quit_sender.subscribe()
     }
 
-    pub fn send_quit(&self) {
+    pub fn quit(&self) {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");

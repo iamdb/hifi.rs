@@ -37,6 +37,7 @@ pub async fn init(player: Player) {
 impl Mpris {
     fn quit(&self) -> Result<()> {
         self.player.stop();
+        self.player.app_state().quit();
         Ok(())
     }
     #[dbus_interface(property)]
@@ -81,24 +82,17 @@ impl MprisPlayer {
         self.player.stop();
     }
     fn play_pause(&self) {
-        if self.player.is_playing() {
-            self.player.pause();
-        } else if self.player.is_paused() {
-            self.player.play()
-        }
+        self.player.play_pause();
     }
-    fn next(&mut self) {
+    fn next(&self) {
         self.player
             .skip_forward(None)
             .expect("failed to skip forward");
     }
-    fn previous(&mut self) {
+    fn previous(&self) {
         self.player
             .skip_backward(None)
             .expect("failed to to skip backward");
-    }
-    fn seek(&self) -> Result<()> {
-        Ok(())
     }
     #[dbus_interface(property)]
     fn playback_status(&self) -> &'static str {
@@ -168,6 +162,10 @@ impl MprisPlayer {
 
         position.useconds() as i64
     }
+    // #[dbus_interface(property)]
+    // fn set_position(&self) {
+    //     self.player.seek();
+    // }
     #[dbus_interface(property)]
     fn minimum_rate(&self) -> f64 {
         1.0

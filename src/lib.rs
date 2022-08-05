@@ -84,35 +84,34 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.set_prev_playlist(prev_playlist);
                 }
 
-                let track = player.attach_track_url(next_up)?;
-                if let Some(track_url) = track.track_url {
-                    player.set_playlist(playlist);
-                    player.set_uri(track_url);
+                let track_url = player.get_track_url(next_up.track.id)?;
 
-                    player.play();
+                player.set_playlist(playlist);
+                player.set_uri(track_url);
 
-                    if no_tui {
-                        let mut quitter = app_state.quitter();
+                player.play();
 
-                        ctrlc::set_handler(move || {
-                            app_state.send_quit();
-                            std::process::exit(0);
-                        })
-                        .expect("error setting ctrlc handler");
+                if no_tui {
+                    let mut quitter = app_state.quitter();
 
-                        loop {
-                            if let Ok(quit) = quitter.try_recv() {
-                                if quit {
-                                    debug!("quitting");
-                                    break;
-                                }
+                    ctrlc::set_handler(move || {
+                        app_state.quit();
+                        std::process::exit(0);
+                    })
+                    .expect("error setting ctrlc handler");
+
+                    loop {
+                        if let Ok(quit) = quitter.try_recv() {
+                            if quit {
+                                debug!("quitting");
+                                break;
                             }
-                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                         }
-                    } else {
-                        let tui = ui::terminal::new();
-                        tui.start(app_state, player, false).await?;
+                        std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                     }
+                } else {
+                    let tui = ui::terminal::new();
+                    tui.start(app_state, player, false).await?;
                 }
             } else {
                 return Err(Error::PlayerError {
@@ -164,7 +163,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 };
 
                 if let Ok(album) = client.album(selected_album.id).await {
-                    player.play_album(album, quality, client.clone()).await;
+                    player.play_album(album, quality).await;
 
                     let tui = ui::terminal::new();
                     tui.start(app_state, player, false).await?;
@@ -264,7 +263,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             app_state.player.clear();
             player.setup(false).await;
-            player.play_track(track, quality.unwrap(), client).await;
+            player.play_track(track, quality.unwrap()).await;
 
             let tui = ui::terminal::new();
             tui.start(app_state, player, false).await?;
@@ -292,13 +291,13 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 client.quality()
             };
 
-            player.play_album(album, quality, client.clone()).await;
+            player.play_album(album, quality).await;
 
             if no_tui {
                 let mut quitter = app_state.quitter();
 
                 ctrlc::set_handler(move || {
-                    app_state.send_quit();
+                    app_state.quit();
                     std::process::exit(0);
                 })
                 .expect("error setting ctrlc handler");

@@ -84,6 +84,14 @@ impl Player {
             .set_state(gst::State::Paused)
             .expect("Unable to set the pipeline to the `Paused` state");
     }
+    /// Toggle play and pause.
+    pub fn play_pause(&self) {
+        if self.is_playing() {
+            self.pause();
+        } else if self.is_paused() {
+            self.play()
+        }
+    }
     /// Ready the player.
     pub fn ready(&self) {
         self.playbin
@@ -122,8 +130,14 @@ impl Player {
         }
     }
     /// Seek to a specified time in the current track.
-    pub fn seek(&self, time: ClockValue, flag: SeekFlags) -> Result<()> {
-        match self.playbin.seek_simple(flag, time.inner_clocktime()) {
+    pub fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
+        let flags = if let Some(flags) = flags {
+            flags
+        } else {
+            SeekFlags::FLUSH | SeekFlags::KEY_UNIT
+        };
+
+        match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => Ok(()),
             Err(error) => {
                 error!("{}", error.message);
@@ -141,26 +155,37 @@ impl Player {
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub fn jump_forward(&self) {
-        if !self.is_playing() && !self.is_paused() {
-            return;
-        }
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let next_position = current_position + ten_seconds;
 
                 if next_position < duration {
-                    match self.playbin.seek_simple(SeekFlags::FLUSH, next_position) {
-                        Ok(_) => (),
+                    match self.seek(next_position.into(), None) {
+                        Ok(_) => self.app_state().player.insert::<String, ClockValue>(
+                            AppKey::Player(PlayerKey::Position),
+                            next_position.into(),
+                        ),
                         Err(error) => {
                             error!("{:?}", error);
+                            self.app_state().player.insert::<String, ClockValue>(
+                                AppKey::Player(PlayerKey::Position),
+                                current_position.into(),
+                            )
                         }
                     }
                 } else {
-                    match self.playbin.seek_simple(SeekFlags::FLUSH, duration) {
-                        Ok(_) => (),
+                    match self.seek(duration.into(), None) {
+                        Ok(_) => self.app_state().player.insert::<String, ClockValue>(
+                            AppKey::Player(PlayerKey::Position),
+                            duration.into(),
+                        ),
                         Err(error) => {
                             error!("{:?}", error);
+                            self.app_state().player.insert::<String, ClockValue>(
+                                AppKey::Player(PlayerKey::Position),
+                                current_position.into(),
+                            )
                         }
                     }
                 }
@@ -171,24 +196,33 @@ impl Player {
     pub fn jump_backward(&self) {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
-                match self
-                    .playbin
-                    .seek_simple(SeekFlags::FLUSH, ClockTime::default())
-                {
-                    Ok(_) => (),
+                match self.seek(ClockTime::default().into(), None) {
+                    Ok(_) => self.app_state().player.insert::<String, ClockValue>(
+                        AppKey::Player(PlayerKey::Position),
+                        ClockTime::default().into(),
+                    ),
                     Err(error) => {
                         error!("{:?}", error);
+                        self.app_state().player.insert::<String, ClockValue>(
+                            AppKey::Player(PlayerKey::Position),
+                            current_position.into(),
+                        )
                     }
                 }
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
-                match self
-                    .playbin
-                    .seek_simple(SeekFlags::FLUSH, current_position - ten_seconds)
-                {
-                    Ok(_) => (),
+                let seek_position = current_position - ten_seconds;
+                match self.seek(seek_position.into(), None) {
+                    Ok(_) => self.app_state().player.insert::<String, ClockValue>(
+                        AppKey::Player(PlayerKey::Position),
+                        seek_position.into(),
+                    ),
                     Err(error) => {
                         error!("{:?}", error);
+                        self.app_state().player.insert::<String, ClockValue>(
+                            AppKey::Player(PlayerKey::Position),
+                            current_position.into(),
+                        )
                     }
                 }
             }
@@ -216,41 +250,44 @@ impl Player {
 
         if let Some(next_track_to_play) = playlist.pop_front() {
             debug!("fetching url for next track");
-            let next_track = self.attach_track_url(next_track_to_play)?;
 
-            if let Some(track_url) = next_track.clone().track_url {
-                debug!("skipping forward to next track");
-                self.ready();
+            let track_url = self.get_track_url(next_track_to_play.track.id)?;
 
-                self.state
-                    .player
-                    .insert::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp), next_track);
+            debug!("skipping forward to next track");
+            self.ready();
 
-                self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
-                );
+            self.state.player.insert::<String, PlaylistTrack>(
+                AppKey::Player(PlayerKey::NextUp),
+                next_track_to_play,
+            );
 
-                self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
-                );
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::Playlist),
+                playlist.clone(),
+            );
 
-                self.playbin.set_property("uri", Some(track_url.url));
-                self.play();
-            }
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::PreviousPlaylist),
+                prev_playlist.clone(),
+            );
+
+            self.playbin.set_property("uri", Some(track_url.url));
+            self.play();
         }
         Ok(())
     }
     /// Skip backwards by playing the first track in previous track playlist.
     pub fn skip_backward(&self, num: Option<usize>) -> Result<()> {
+        // If the track is greater than 1 second into playing,
+        // then we just want to go back to the beginning.
+        // If triggered again within a second after playing,
+        // it will skip to the previous track.
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             let one_second = ClockTime::from_seconds(1);
 
             if current_position > one_second && num.is_none() {
                 debug!("current track position >1s, seeking to start of track");
-                self.playbin
-                    .seek_simple(SeekFlags::FLUSH, ClockTime::default())
+                self.seek(ClockTime::default().into(), None)
                     .expect("failed to seek");
 
                 return Ok(());
@@ -279,35 +316,33 @@ impl Player {
             }
         }
 
-        if let Some(mut next_track_to_play) = prev_playlist.pop_back() {
-            next_track_to_play = self.attach_track_url(next_track_to_play)?;
+        if let Some(next_track_to_play) = prev_playlist.pop_back() {
+            let next_track_url = self.get_track_url(next_track_to_play.track.id)?;
 
-            if let Some(track_url) = next_track_to_play.clone().track_url {
-                debug!("skipping backward to previous track");
-                self.ready();
+            debug!("skipping backward to previous track");
+            self.ready();
 
-                self.state.player.insert::<String, PlaylistTrack>(
-                    AppKey::Player(PlayerKey::NextUp),
-                    next_track_to_play,
-                );
+            self.state.player.insert::<String, PlaylistTrack>(
+                AppKey::Player(PlayerKey::NextUp),
+                next_track_to_play,
+            );
 
-                self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
-                );
-                self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
-                );
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::Playlist),
+                playlist.clone(),
+            );
+            self.state.player.insert::<String, PlaylistValue>(
+                AppKey::Player(PlayerKey::PreviousPlaylist),
+                prev_playlist.clone(),
+            );
 
-                self.playbin.set_property("uri", Some(track_url.url));
-                self.play();
-            }
+            self.playbin.set_property("uri", Some(next_track_url.url));
+            self.play();
         }
 
         Ok(())
     }
-    /// Skip to a specific track number in the combined playlist.
+    /// Skip to a specific track number in the current playlist.
     pub fn skip_to(&self, track_number: usize) -> Result<()> {
         if track_number < self.playlist().read().len() {
             debug!("skipping forward to track number {}", track_number);
@@ -318,24 +353,24 @@ impl Player {
         }
     }
     /// Plays a single track.
-    pub async fn play_track(&self, track: Track, quality: AudioQuality, client: Client) {
+    pub async fn play_track(&self, track: Track, quality: AudioQuality) {
         let playlist_track = PlaylistTrack::new(track, Some(quality.clone()), None);
         self.playlist.write().push_back(playlist_track);
-        self.start(quality, client).await;
+        self.start(quality).await;
     }
     /// Plays a full album.
-    pub async fn play_album(&self, album: Album, quality: AudioQuality, client: Client) {
+    pub async fn play_album(&self, album: Album, quality: AudioQuality) {
         if let Some(tracklist) = album.to_playlist_tracklist(quality.clone()) {
             debug!("creating playlist");
             for playlist_track in tracklist {
                 self.playlist.write().push_back(playlist_track);
             }
 
-            self.start(quality, client).await;
+            self.start(quality).await;
         }
     }
-    /// Adds the most recent position and progress values to the state
-    /// then broadcasts the state to listeners.
+    /// Inserts the most recent position, duration and progress values into the state
+    /// at a set interval.
     fn clock_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
         loop {
             if let Ok(quit) = quit_receiver.try_recv() {
@@ -383,14 +418,15 @@ impl Player {
         }
     }
     /// Stats the player.
-    async fn start(&self, quality: AudioQuality, client: Client) {
+    async fn start(&self, quality: AudioQuality) {
         let mut next_track = match self.playlist.write().pop_front() {
             Some(it) => it,
             _ => return,
         };
         let playbin = &self.playbin;
 
-        if let Ok(track_url) = client
+        if let Ok(track_url) = self
+            .client
             .track_url(next_track.track.id, Some(quality.clone()), None)
             .await
         {
@@ -469,10 +505,9 @@ impl Player {
             });
     }
     /// Attach a `TrackURL` to the given track.
-    pub fn attach_track_url(&self, mut track: PlaylistTrack) -> Result<PlaylistTrack> {
-        if let Ok(track_url) = executor::block_on(self.client.track_url(track.track.id, None, None))
-        {
-            Ok(track.set_track_url(track_url))
+    pub fn get_track_url(&self, track_id: i32) -> Result<TrackURL> {
+        if let Ok(track_url) = executor::block_on(self.client.track_url(track_id, None, None)) {
+            Ok(track_url)
         } else {
             Err(Error::TrackURL)
         }
@@ -496,25 +531,29 @@ impl Player {
                             debug!("END OF STREAM");
 
                             self.stop();
-                            self.state.send_quit();
+                            self.state.quit();
                             break;
                         },
                         MessageView::StreamStart(_) => {
                             let state = &mut self.state;
                             let tree = state.player.clone();
 
+                            // When a stream starts, add the new track duration
+                            // from the player to the state.
                             if let Some(next_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
                                state.player.insert::<String, ClockValue>(AppKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
                             }
                         }
                         MessageView::AsyncDone(_) => {
+                            // If the player is resuming from a previous session,
+                            // seek to the last position saved to the state.
                             if resume {
                                 let state = &mut self.state;
                                 let tree = state.player.clone();
 
                                 if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
                                     resume = false;
-                                    self.seek(position, SeekFlags::FLUSH | SeekFlags::KEY_UNIT).expect("seek failure");
+                                    self.seek(position, None).expect("seek failure");
 
                                 }
                             }

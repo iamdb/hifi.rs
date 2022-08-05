@@ -334,15 +334,11 @@ pub fn key_events(event: Event, player: Player, track_list: Arc<Mutex<TrackList<
     match key {
         Key::Char(c) => match c {
             'q' => {
-                player.app_state().send_quit();
+                player.app_state().quit();
                 player.stop();
             }
             ' ' => {
-                if player.is_playing() {
-                    player.pause();
-                } else if player.is_paused() {
-                    player.play();
-                }
+                player.play_pause();
             }
             'N' => {
                 player.skip_forward(None).expect("failed to skip forward");
