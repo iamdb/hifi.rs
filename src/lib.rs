@@ -41,6 +41,7 @@ pub fn capitalize(s: &str) -> String {
 pub enum Error {
     ClientError { error: client::Error },
     PlayerError { error: player::Error },
+    TerminalError { error: ui::terminal::Error },
 }
 
 impl From<client::Error> for Error {
@@ -52,6 +53,12 @@ impl From<client::Error> for Error {
 impl From<player::Error> for Error {
     fn from(error: player::Error) -> Self {
         Error::PlayerError { error }
+    }
+}
+
+impl From<ui::terminal::Error> for Error {
+    fn from(error: ui::terminal::Error) -> Self {
+        Error::TerminalError { error }
     }
 }
 
@@ -104,11 +111,13 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                         }
                     } else {
                         let tui = ui::terminal::new();
-                        tui.start(app_state, player, false).await
+                        tui.start(app_state, player, false).await?;
                     }
                 }
             } else {
-                println!("Sorry, the previous session could not be resumed.");
+                return Err(Error::PlayerError {
+                    error: player::Error::Session,
+                });
             }
 
             Ok(())
@@ -158,7 +167,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.play_album(album, quality, client.clone()).await;
 
                     let tui = ui::terminal::new();
-                    tui.start(app_state, player, false).await;
+                    tui.start(app_state, player, false).await?;
                 }
             }
 
@@ -258,7 +267,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.play_track(track, quality.unwrap(), client).await;
 
             let tui = ui::terminal::new();
-            tui.start(app_state, player, false).await;
+            tui.start(app_state, player, false).await?;
 
             Ok(())
         }
@@ -305,7 +314,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 }
             } else {
                 let tui = ui::terminal::new();
-                tui.start(app_state, player, false).await;
+                tui.start(app_state, player, false).await?;
             }
 
             Ok(())

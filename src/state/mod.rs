@@ -10,8 +10,10 @@ use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Tree};
+use std::collections::vec_deque::Drain;
 use std::collections::VecDeque;
 use std::fmt::Display;
+use std::ops::RangeBounds;
 use std::str::FromStr;
 use tui::style::{Modifier, Style};
 use tui::widgets::ListItem;
@@ -349,6 +351,17 @@ impl PlaylistValue {
 
     pub fn vec(&self) -> VecDeque<PlaylistTrack> {
         self.0.clone()
+    }
+
+    pub fn drain<R>(&mut self, range: R) -> Drain<PlaylistTrack>
+    where
+        R: RangeBounds<usize>,
+    {
+        self.0.drain(range)
+    }
+
+    pub fn append(&mut self, mut items: VecDeque<PlaylistTrack>) {
+        self.0.append(&mut items)
     }
 
     pub fn len(&self) -> usize {

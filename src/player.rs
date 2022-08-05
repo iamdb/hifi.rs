@@ -21,6 +21,8 @@ pub enum Error {
     TrackURL,
     #[snafu(display("Failed to seek."))]
     Seek,
+    #[snafu(display("Sorry, could not resume previous session."))]
+    Session,
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -38,7 +40,6 @@ pub struct Player {
     state: AppState,
     /// Qobuz client
     client: Client,
-    pub is_skipping: bool,
 }
 
 pub fn new(state: AppState, client: Client) -> Player {
@@ -51,7 +52,6 @@ pub fn new(state: AppState, client: Client) -> Player {
         playlist_previous: Arc::new(RwLock::new(PlaylistValue::new())),
         state,
         client,
-        is_skipping: false,
     }
 }
 
@@ -195,32 +195,28 @@ impl Player {
         }
     }
     /// Skip forward to the next track in the playlist.
-    pub fn skip_forward(&mut self, num: Option<usize>) -> Result<()> {
-        self.is_skipping = true;
-
+    pub fn skip_forward(&self, num: Option<usize>) -> Result<()> {
         let tree = self.state.player.clone();
 
         let mut playlist = self.playlist.write();
         let mut prev_playlist = self.playlist_previous.write();
 
+        if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+            prev_playlist.push_back(previous_track);
+        }
+
         if let Some(number) = num {
             // Grab all of the tracks, up to the next one to play.
-            prev_playlist.vec().append(
-                &mut playlist
-                    .vec()
-                    .drain(..number - 1)
+            prev_playlist.append(
+                playlist
+                    .drain(..number)
                     .collect::<VecDeque<PlaylistTrack>>(),
             );
         }
 
         if let Some(next_track_to_play) = playlist.pop_front() {
-            if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-                prev_playlist.push_back(previous_track);
-            }
-
             debug!("fetching url for next track");
-            let mut cloned_self = self.clone();
-            let next_track = cloned_self.attach_track_url(next_track_to_play)?;
+            let next_track = self.attach_track_url(next_track_to_play)?;
 
             if let Some(track_url) = next_track.clone().track_url {
                 debug!("skipping forward to next track");
@@ -244,13 +240,10 @@ impl Player {
                 self.play();
             }
         }
-        self.is_skipping = false;
         Ok(())
     }
     /// Skip backwards by playing the first track in previous track playlist.
-    pub fn skip_backward(&mut self, num: Option<usize>) -> Result<()> {
-        self.is_skipping = true;
-
+    pub fn skip_backward(&self, num: Option<usize>) -> Result<()> {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             let one_second = ClockTime::from_seconds(1);
 
@@ -260,24 +253,34 @@ impl Player {
                     .seek_simple(SeekFlags::FLUSH, ClockTime::default())
                     .expect("failed to seek");
 
-                self.is_skipping = false;
                 return Ok(());
             }
         }
 
         let mut prev_playlist = self.playlist_previous.write();
         let mut playlist = self.playlist.write();
+        let tree = self.state.player.clone();
+
+        if let Some(previously_played_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+            playlist.push_front(previously_played_track);
+        }
+
+        if let Some(number) = num {
+            // Grab all of the tracks, up to the next one to play,
+            // inlcuding the currently playing track from above.
+            let diff = number + 1 - playlist.len();
+            let skipped_tracks = prev_playlist
+                .drain(diff + 1..)
+                .rev()
+                .collect::<VecDeque<PlaylistTrack>>();
+
+            for track in skipped_tracks {
+                playlist.push_front(track);
+            }
+        }
 
         if let Some(mut next_track_to_play) = prev_playlist.pop_back() {
-            let tree = self.state.player.clone();
-            if let Some(previously_played_track) =
-                get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
-            {
-                playlist.push_front(previously_played_track);
-            }
-
-            let mut cloned_self = self.clone();
-            next_track_to_play = cloned_self.attach_track_url(next_track_to_play)?;
+            next_track_to_play = self.attach_track_url(next_track_to_play)?;
 
             if let Some(track_url) = next_track_to_play.clone().track_url {
                 debug!("skipping backward to previous track");
@@ -287,22 +290,6 @@ impl Player {
                     AppKey::Player(PlayerKey::NextUp),
                     next_track_to_play,
                 );
-
-                if let Some(number) = num {
-                    // Grab all of the tracks, up to the next one to play.
-                    let diff = number - playlist.len();
-
-                    let prev_playlist = self.playlist_previous.write();
-                    let skipped_tracks = prev_playlist
-                        .vec()
-                        .drain(diff + 1..)
-                        .rev()
-                        .collect::<VecDeque<PlaylistTrack>>();
-
-                    for track in skipped_tracks {
-                        playlist.push_front(track);
-                    }
-                }
 
                 self.state.player.insert::<String, PlaylistValue>(
                     AppKey::Player(PlayerKey::Playlist),
@@ -317,12 +304,11 @@ impl Player {
                 self.play();
             }
         }
-        self.is_skipping = false;
 
         Ok(())
     }
     /// Skip to a specific track number in the combined playlist.
-    pub fn skip_to(&mut self, track_number: usize) -> Result<()> {
+    pub fn skip_to(&self, track_number: usize) -> Result<()> {
         if track_number < self.playlist().read().len() {
             debug!("skipping forward to track number {}", track_number);
             self.skip_forward(Some(track_number))
@@ -483,7 +469,7 @@ impl Player {
             });
     }
     /// Attach a `TrackURL` to the given track.
-    pub fn attach_track_url(&mut self, mut track: PlaylistTrack) -> Result<PlaylistTrack> {
+    pub fn attach_track_url(&self, mut track: PlaylistTrack) -> Result<PlaylistTrack> {
         if let Ok(track_url) = executor::block_on(self.client.track_url(track.track.id, None, None))
         {
             Ok(track.set_track_url(track_url))

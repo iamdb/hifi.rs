@@ -327,7 +327,7 @@ where
     f.render_stateful_widget(list, area, &mut playlist.state);
 }
 
-pub fn key_events(event: Event, mut player: Player, track_list: Arc<Mutex<TrackList<'_>>>) -> bool {
+pub fn key_events(event: Event, player: Player, track_list: Arc<Mutex<TrackList<'_>>>) -> bool {
     let Event::Input(key) = event;
     let mut track_list = track_list.lock();
 
@@ -345,14 +345,10 @@ pub fn key_events(event: Event, mut player: Player, track_list: Arc<Mutex<TrackL
                 }
             }
             'N' => {
-                if !player.is_skipping {
-                    player.skip_forward(None).expect("failed to skip forward");
-                }
+                player.skip_forward(None).expect("failed to skip forward");
             }
             'P' => {
-                if !player.is_skipping {
-                    player.skip_backward(None).expect("failed to skip backward");
-                }
+                player.skip_backward(None).expect("failed to skip backward");
             }
             '\n' => {
                 if let Some(selection) = track_list.selected() {

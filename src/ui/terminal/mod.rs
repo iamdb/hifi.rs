@@ -1,10 +1,11 @@
 pub mod player;
 
-use std::{io::Stdout, sync::Arc, thread, time::Duration};
-
+use self::player::TrackList;
 use crate::{player::Player, state::app::AppState, REFRESH_RESOLUTION};
 use flume::{Receiver, Sender};
 use parking_lot::Mutex;
+use snafu::prelude::*;
+use std::{io::Stdout, sync::Arc, thread, time::Duration};
 use termion::{
     event::Key,
     input::{MouseTerminal, TermRead},
@@ -14,8 +15,6 @@ use termion::{
 use tokio::select;
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
-
-use self::player::TrackList;
 
 pub struct Tui {
     rx: Receiver<Event>,
@@ -28,6 +27,20 @@ pub enum Event {
     Input(Key),
 }
 
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Error getting stdout raw mode."))]
+    RawMode,
+}
+
+impl From<std::io::Error> for Error {
+    fn from(_: std::io::Error) -> Self {
+        Error::RawMode
+    }
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
 pub fn new() -> Tui {
     let (tx, rx) = flume::bounded(1);
 
@@ -35,10 +48,10 @@ pub fn new() -> Tui {
 }
 
 impl Tui {
-    pub async fn start(&self, state: AppState, player: Player, events_only: bool) {
+    pub async fn start(&self, state: AppState, player: Player, events_only: bool) -> Result<()> {
         let track_list = Arc::new(Mutex::new(TrackList::new(None)));
         let stdout = std::io::stdout();
-        let stdout = stdout.into_raw_mode().expect("Error getting raw mode");
+        let stdout = stdout.into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
         let backend = TermionBackend::new(stdout);
@@ -54,6 +67,8 @@ impl Tui {
         let event_sender = self.tx.clone();
         let event_receiver = self.rx.clone();
         event_loop(event_sender, event_receiver, track_list, player).await;
+
+        Ok(())
     }
 }
 
