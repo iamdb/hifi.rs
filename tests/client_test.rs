@@ -5,7 +5,7 @@ mod common;
 
 #[tokio::test]
 async fn can_use_methods() {
-    let (_, mut client, path) = common::setup().await;
+    let (_, client, path) = common::setup().await;
 
     assert_ok!(client.user_playlists().await);
     let album_response = assert_ok!(

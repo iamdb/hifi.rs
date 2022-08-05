@@ -1,25 +1,44 @@
 use std::collections::HashMap;
 
 use crate::{
+    get_player,
     player::Player,
     qobuz::PlaylistTrack,
     state::app::{AppKey, PlayerKey},
 };
 use gst::State as GstState;
 use gstreamer as gst;
-use zbus::{dbus_interface, fdo::Result, zvariant};
+use zbus::{dbus_interface, fdo::Result, zvariant, ConnectionBuilder};
 
+#[derive(Debug)]
 pub struct Mpris {
     player: Player,
 }
-pub fn new_mpris(player: Player) -> Mpris {
-    Mpris { player }
+
+pub async fn init(player: Player) {
+    let mpris = Mpris {
+        player: player.clone(),
+    };
+    let mpris_player = MprisPlayer { player };
+
+    ConnectionBuilder::session()
+        .unwrap()
+        .name("org.mpris.MediaPlayer2.hifirs")
+        .unwrap()
+        .serve_at("/org/mpris/MediaPlayer2", mpris)
+        .unwrap()
+        .serve_at("/org/mpris/MediaPlayer2", mpris_player)
+        .unwrap()
+        .build()
+        .await
+        .expect("failed to attach to dbus");
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
 impl Mpris {
     fn quit(&self) -> Result<()> {
         self.player.stop();
+        self.player.app_state().quit();
         Ok(())
     }
     #[dbus_interface(property)]
@@ -48,47 +67,36 @@ impl Mpris {
     }
 }
 
+#[derive(Debug)]
 pub struct MprisPlayer {
     player: Player,
 }
 
-pub fn new_mpris_player(player: Player) -> MprisPlayer {
-    MprisPlayer { player }
-}
-
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
-    fn play(&self) -> Result<()> {
+    fn play(&self) {
         self.player.play();
-        Ok(())
     }
-    fn pause(&self) -> Result<()> {
+    fn pause(&self) {
         self.player.pause();
-        Ok(())
     }
-    fn stop(&self) -> Result<()> {
+    fn stop(&self) {
         self.player.stop();
-        Ok(())
     }
-    fn play_pause(&self) -> Result<()> {
-        if self.player.is_playing() {
-            self.player.pause();
-        } else if self.player.is_paused() {
-            self.player.play()
-        }
-
-        Ok(())
+    fn play_pause(&self) {
+        self.player.play_pause();
     }
-    fn next(&self) -> Result<()> {
-        self.player.skip_forward(None);
-        Ok(())
+    async fn next(&self) {
+        self.player
+            .skip_forward(None)
+            .await
+            .expect("failed to skip forward");
     }
-    fn previous(&self) -> Result<()> {
-        self.player.skip_backward(None);
-        Ok(())
-    }
-    fn seek(&self) -> Result<()> {
-        Ok(())
+    async fn previous(&self) {
+        self.player
+            .skip_backward(None)
+            .await
+            .expect("failed to to skip backward");
     }
     #[dbus_interface(property)]
     fn playback_status(&self) -> &'static str {
@@ -116,13 +124,9 @@ impl MprisPlayer {
     #[dbus_interface(property)]
     fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         let mut meta = HashMap::new();
+        let tree = self.player.app_state().player;
 
-        if let Some(next_up) = self
-            .player
-            .app_state()
-            .player
-            .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp))
-        {
+        if let Some(next_up) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
             meta.insert(
                 "mpris:trackid",
                 zvariant::Value::new(format!("/org/hifirs/Player/TrackList/{}", next_up.track.id)),
@@ -162,6 +166,10 @@ impl MprisPlayer {
 
         position.useconds() as i64
     }
+    // #[dbus_interface(property)]
+    // fn set_position(&self) {
+    //     self.player.seek();
+    // }
     #[dbus_interface(property)]
     fn minimum_rate(&self) -> f64 {
         1.0

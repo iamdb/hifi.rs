@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
 use crate::{
+    get_player,
     player::Player,
     qobuz::PlaylistTrack,
     state::{
         app::{AppKey, AppState, PlayerKey},
-        ClockValue, FloatValue, PlaylistValue, StatusValue,
+        ClockValue, FloatValue, StatusValue,
     },
 };
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
-use parking_lot::RwLock;
 use termion::event::Key;
+use tokio::sync::Mutex;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -23,45 +24,11 @@ use tui::{
 
 use super::Event;
 
-pub fn draw<B>(f: &mut Frame<B>, state: AppState, mut tracks: TrackList)
+pub fn draw<'a, B>(f: &mut Frame<B>, state: AppState, tracks: TrackList<'a>)
 where
     B: Backend,
 {
-    if let Some(playlist) = state
-        .player
-        .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::Playlist))
-    {
-        let mut items = playlist
-            .into_iter()
-            .map(|t| {
-                let title = t.track.title;
-                ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
-                    .style(Style::default())
-            })
-            .collect::<Vec<ListItem>>();
-
-        if let Some(prev_playlist) = state
-            .player
-            .get::<String, PlaylistValue>(AppKey::Player(PlayerKey::PreviousPlaylist))
-        {
-            let mut prev_items = prev_playlist
-                .into_iter()
-                .map(|t| {
-                    let title = t.track.title;
-                    ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
-                        .style(Style::default().add_modifier(Modifier::DIM))
-                })
-                .collect::<Vec<ListItem>>();
-
-            items.append(&mut prev_items);
-        }
-
-        tracks.set_items(items);
-
-        if tracks.selected().is_none() {
-            tracks.select(0);
-        }
-    }
+    let tree = state.player;
 
     let screen = Layout::default()
         .direction(Direction::Vertical)
@@ -73,14 +40,8 @@ where
         .margin(0)
         .split(f.size());
 
-    if let Some(track) = state
-        .player
-        .get::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp))
-    {
-        if let Some(status) = state
-            .player
-            .get::<String, StatusValue>(AppKey::Player(PlayerKey::Status))
-        {
+    if let Some(track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+        if let Some(status) = get_player!(PlayerKey::Status, tree, StatusValue) {
             current_track(track, status, f, screen[0]);
         }
     }
@@ -88,15 +49,9 @@ where
     track_list(f, tracks, screen[2]);
 
     if let (Some(position), Some(duration), Some(prog)) = (
-        state
-            .player
-            .get::<String, ClockValue>(AppKey::Player(PlayerKey::Position)),
-        state
-            .player
-            .get::<String, ClockValue>(AppKey::Player(PlayerKey::Duration)),
-        state
-            .player
-            .get::<String, FloatValue>(AppKey::Player(PlayerKey::Progress)),
+        get_player!(PlayerKey::Position, tree, ClockValue),
+        get_player!(PlayerKey::Duration, tree, ClockValue),
+        get_player!(PlayerKey::Progress, tree, FloatValue),
     ) {
         if duration.inner_clocktime() > ClockTime::default() {
             progress(position, duration, prog, f, screen[1]);
@@ -265,37 +220,63 @@ fn current_track<B>(
 }
 
 #[derive(Clone, Debug)]
-pub struct TrackList<'a> {
-    pub items: Vec<ListItem<'a>>,
-    state: Arc<RwLock<ListState>>,
+pub struct Item<'i>(ListItem<'i>);
+
+impl<'i> From<ListItem<'i>> for Item<'i> {
+    fn from(item: ListItem<'i>) -> Self {
+        Item(item)
+    }
 }
 
-impl<'a> TrackList<'a> {
-    pub fn new(items: Option<Vec<ListItem<'a>>>) -> TrackList<'a> {
+impl<'i> From<Item<'i>> for ListItem<'i> {
+    fn from(item: Item<'i>) -> Self {
+        item.0
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TrackList<'t> {
+    pub items: Vec<Item<'t>>,
+    state: ListState,
+}
+
+impl<'t> TrackList<'t> {
+    pub fn new(items: Option<Vec<Item<'t>>>) -> TrackList<'t> {
         if let Some(i) = items {
             TrackList {
                 items: i,
-                state: Arc::new(RwLock::new(ListState::default())),
+                state: ListState::default(),
             }
         } else {
             TrackList {
                 items: Vec::new(),
-                state: Arc::new(RwLock::new(ListState::default())),
+                state: ListState::default(),
             }
         }
     }
 
-    pub fn set_items(&mut self, items: Vec<ListItem<'a>>) {
-        if let Some(selected) = self.state.read().selected() {
+    pub fn list_items(&self) -> Vec<ListItem<'t>> {
+        self.items
+            .iter()
+            .map(|item| item.clone().into())
+            .collect::<Vec<ListItem<'_>>>()
+    }
+
+    pub fn set_items(&mut self, items: Vec<Item<'t>>) {
+        if let Some(selected) = self.state.selected() {
             if selected > items.len() {
-                self.state.write().select(Some(items.len()));
+                self.state.select(Some(items.len()));
+            } else {
+                self.state.select(Some(selected))
             }
+        } else {
+            self.state.select(Some(0));
         }
         self.items = items;
     }
 
-    pub fn next(&self) {
-        let i = match self.state.read().selected() {
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() {
                     0
@@ -307,11 +288,11 @@ impl<'a> TrackList<'a> {
             }
             None => 0,
         };
-        self.state.write().select(Some(i));
+        self.state.select(Some(i));
     }
 
-    pub fn previous(&self) {
-        let i = match self.state.read().selected() {
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() || i == 0 {
                     0
@@ -321,23 +302,19 @@ impl<'a> TrackList<'a> {
             }
             None => 0,
         };
-        self.state.write().select(Some(i));
+        self.state.select(Some(i));
     }
 
     pub fn selected(&self) -> Option<usize> {
-        self.state.read().selected()
-    }
-
-    pub fn select(&self, num: usize) {
-        self.state.write().select(Some(num));
+        self.state.selected()
     }
 }
 
-fn track_list<B>(f: &mut Frame<B>, playlist: TrackList, area: Rect)
+fn track_list<'a, B>(f: &mut Frame<B>, mut playlist: TrackList<'a>, area: Rect)
 where
     B: Backend,
 {
-    let list = List::new(playlist.items)
+    let list = List::new(playlist.list_items())
         .block(
             Block::default()
                 .style(Style::default().bg(Color::Indexed(0)))
@@ -347,44 +324,58 @@ where
         .highlight_style(Style::default().fg(Color::Cyan))
         .highlight_symbol("•");
 
-    f.render_stateful_widget(list, area, &mut playlist.state.read().clone());
+    f.render_stateful_widget(list, area, &mut playlist.state);
 }
 
-pub fn key_events(event: Event, player: Player, track_list: TrackList) -> bool {
+pub async fn key_events(
+    event: Event,
+    player: Player,
+    track_list: Arc<Mutex<TrackList<'_>>>,
+) -> bool {
     let Event::Input(key) = event;
+
     match key {
         Key::Char(c) => match c {
             'q' => {
-                player.app_state().send_quit();
+                player.app_state().quit();
                 player.stop();
-                return false;
             }
             ' ' => {
-                if player.is_playing() {
-                    player.pause();
-                } else if player.is_paused() {
-                    player.play();
-                }
+                player.play_pause();
             }
             'N' => {
-                player.skip_forward(None);
+                player
+                    .skip_forward(None)
+                    .await
+                    .expect("failed to skip forward");
             }
             'P' => {
-                player.skip_backward(None);
+                player
+                    .skip_backward(None)
+                    .await
+                    .expect("failed to skip backward");
             }
             '\n' => {
+                let track_list = track_list.lock().await;
+
                 if let Some(selection) = track_list.selected() {
-                    if player.skip_to(selection + 1) {
-                        track_list.select(0);
-                    }
+                    debug!("playing selected track {}", selection);
+                    player
+                        .skip_to(selection)
+                        .await
+                        .expect("failed to skip to track");
                 }
             }
             _ => (),
         },
         Key::Down => {
+            let mut track_list = track_list.lock().await;
+
             track_list.next();
         }
         Key::Up => {
+            let mut track_list = track_list.lock().await;
+
             track_list.previous();
         }
         Key::Right => {

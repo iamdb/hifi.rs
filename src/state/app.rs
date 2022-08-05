@@ -1,7 +1,23 @@
+use super::{HifiDB, StateTree};
+use snafu::prelude::*;
+use std::path::PathBuf;
 use tokio::sync::broadcast::{Receiver, Sender};
 
-use super::{HifiDB, StateTree};
-use std::path::PathBuf;
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("Collection not found."))]
+    CollectionNotFound,
+    #[snafu(display("Unsupported."))]
+    Unsupported,
+    #[snafu(display("Reportable bug."))]
+    ReportableBug,
+    #[snafu(display("Database in use."))]
+    Io,
+    #[snafu(display("Database corrupted."))]
+    Corruption,
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub enum AppKey {
     Client(ClientKey),
@@ -74,7 +90,7 @@ pub struct AppState {
     quit_sender: Sender<bool>,
 }
 
-pub fn new(base_dir: PathBuf) -> AppState {
+pub fn new(base_dir: PathBuf) -> Result<AppState> {
     let mut db_dir = base_dir;
     db_dir.push("database");
 
@@ -116,20 +132,19 @@ pub fn new(base_dir: PathBuf) -> AppState {
 
     warn!("db was recovered: {}", db.0.was_recovered());
 
-    AppState {
+    Ok(AppState {
         config: db.open_tree("config"),
         player: db.open_tree("player"),
         quit_sender,
-    }
+    })
 }
 
-#[allow(dead_code)]
 impl AppState {
     pub fn quitter(&self) -> Receiver<bool> {
         self.quit_sender.subscribe()
     }
 
-    pub fn send_quit(&self) {
+    pub fn quit(&self) {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");

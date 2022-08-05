@@ -11,6 +11,7 @@ use crate::{
     },
 };
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
+use snafu::prelude::*;
 use std::time::Duration;
 
 pub mod cli;
@@ -36,7 +37,32 @@ pub fn capitalize(s: &str) -> String {
     }
 }
 
-pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> Result<(), String> {
+#[derive(Debug, Snafu)]
+pub enum Error {
+    ClientError { error: client::Error },
+    PlayerError { error: player::Error },
+    TerminalError { error: ui::terminal::Error },
+}
+
+impl From<client::Error> for Error {
+    fn from(error: client::Error) -> Self {
+        Error::ClientError { error }
+    }
+}
+
+impl From<player::Error> for Error {
+    fn from(error: player::Error) -> Self {
+        Error::PlayerError { error }
+    }
+}
+
+impl From<ui::terminal::Error> for Error {
+    fn from(error: ui::terminal::Error) -> Self {
+        Error::TerminalError { error }
+    }
+}
+
+pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> Result<(), Error> {
     pretty_env_logger::init();
 
     // CLI COMMANDS
@@ -47,13 +73,10 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 get_player!(PlayerKey::Playlist, tree, PlaylistValue),
                 get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
             ) {
-                let (mut player, broadcast) = player::new(app_state.clone());
+                let client = client::new(app_state.clone(), creds).await?;
 
-                let client = client::new(app_state.clone(), creds)
-                    .await
-                    .expect("failed to create client");
-
-                player.setup(client, true).await;
+                let mut player = player::new(app_state.clone(), client.clone());
+                player.setup(true).await;
 
                 if let Some(prev_playlist) =
                     get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
@@ -61,7 +84,9 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.set_prev_playlist(prev_playlist);
                 }
 
-                if let Some(track_url) = player.fetch_track_url(next_up).track_url {
+                let next_track = player.attach_track_url(next_up).await?;
+
+                if let Some(track_url) = next_track.track_url {
                     player.set_playlist(playlist);
                     player.set_uri(track_url);
 
@@ -71,7 +96,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                         let mut quitter = app_state.quitter();
 
                         ctrlc::set_handler(move || {
-                            app_state.send_quit();
+                            app_state.quit();
                             std::process::exit(0);
                         })
                         .expect("error setting ctrlc handler");
@@ -86,75 +111,71 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                             std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                         }
                     } else {
-                        let mut tui = ui::terminal::new();
-                        tui.event_loop(broadcast, player).await;
+                        let tui = ui::terminal::new();
+                        tui.start(app_state, player, false).await?;
                     }
                 }
             } else {
-                println!("Sorry, the previous session could not be resumed.");
+                return Err(Error::PlayerError {
+                    error: player::Error::Session,
+                });
             }
 
             Ok(())
         }
         Commands::Play { query, quality } => {
-            let (player, broadcast) = player::new(app_state.clone());
+            let client = client::new(app_state.clone(), creds).await?;
 
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to client");
+            let player = player::new(app_state.clone(), client.clone());
+            player.setup(false).await;
 
-            match client.search_albums(query, Some(100)).await {
-                Ok(mut results) => {
-                    let album_list = results
-                        .albums
-                        .items
-                        .iter()
-                        .map(|i| {
-                            format!(
-                                "{} - {} ({})",
-                                i.title,
-                                i.artist.name,
-                                i.release_date_original.get(0..4).unwrap()
-                            )
-                        })
-                        .collect::<Vec<String>>();
+            let mut results = client.search_albums(query, Some(100)).await?;
 
-                    let selected = Select::with_theme(&ColorfulTheme::default())
-                        .items(&album_list)
-                        .default(0)
-                        .max_length(10)
-                        .interact_on_opt(&Term::stderr())
-                        .expect("problem getting selection");
+            let album_list = results
+                .albums
+                .items
+                .iter()
+                .map(|i| {
+                    format!(
+                        "{} - {} ({})",
+                        i.title,
+                        i.artist.name,
+                        i.release_date_original.get(0..4).unwrap()
+                    )
+                })
+                .collect::<Vec<String>>();
 
-                    if let Some(index) = selected {
-                        let selected_album = results.albums.items.remove(index);
+            let selected = Select::with_theme(&ColorfulTheme::default())
+                .items(&album_list)
+                .default(0)
+                .max_length(10)
+                .interact_on_opt(&Term::stderr())
+                .expect("There was a problem saving your selection.");
 
-                        app_state.player.clear();
-                        player.setup(client.clone(), false).await;
+            if let Some(index) = selected {
+                let selected_album = results.albums.items.remove(index);
 
-                        let quality = if let Some(q) = quality {
-                            q
-                        } else {
-                            client.quality()
-                        };
+                app_state.player.clear();
+                player.setup(false).await;
 
-                        if let Ok(album) = client.album(selected_album.id).await {
-                            player.play_album(album, quality, client.clone()).await;
+                let quality = if let Some(q) = quality {
+                    q
+                } else {
+                    client.quality()
+                };
 
-                            let mut tui = ui::terminal::new();
-                            tui.event_loop(broadcast, player).await;
-                        }
-                    }
+                if let Ok(album) = client.album(selected_album.id).await {
+                    player.play_album(album, quality).await;
 
-                    Ok(())
+                    let tui = ui::terminal::new();
+                    tui.start(app_state, player, false).await?;
                 }
-                Err(error) => Err(error.to_string()),
             }
+
+            Ok(())
         }
         Commands::Search { query } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
 
             match client.search_all(query).await {
                 Ok(results) => {
@@ -162,201 +183,151 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     print!("{}", results);
                     Ok(())
                 }
-                Err(error) => Err(error.to_string()),
+                Err(error) => Err(Error::ClientError { error }),
             }
         }
         Commands::SearchAlbums { query } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.search_albums(query, Some(10)).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            match client.search_albums(query, Some(10)).await {
-                Ok(results) => {
-                    let json = serde_json::to_string(&results);
-                    print!("{}", json.expect("failed to convert results to string"));
-                    Ok(())
-                }
-                Err(error) => Err(error.to_string()),
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::GetAlbum { id } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.album(id).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            if let Ok(results) = client.album(id).await {
-                let json = serde_json::to_string(&results);
-                print!("{}", json.expect("failed to convert results to string"));
-                Ok(())
-            } else {
-                Err("".to_string())
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::SearchArtists { query } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.search_artists(query, None).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            if let Ok(results) = client.search_artists(query, None).await {
-                let json = serde_json::to_string(&results);
-                print!("{}", json.expect("failed to convert results to string"));
-                Ok(())
-            } else {
-                Err("".to_string())
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::GetArtist { id } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.artist(id, None).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            if let Ok(results) = client.artist(id, None).await {
-                let json = serde_json::to_string(&results);
-                print!("{}", json.expect("failed to convert results to string"));
-                Ok(())
-            } else {
-                Err("".to_string())
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::GetTrack { id } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.track(id).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            if let Ok(results) = client.track(id).await {
-                let json = serde_json::to_string(&results);
-                print!("{}", json.expect("failed to convert results to string"));
-                Ok(())
-            } else {
-                Err("".to_string())
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::TrackURL { id, quality } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.track_url(id, quality.clone(), None).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            match client.track_url(id, quality.clone(), None).await {
-                Ok(result) => {
-                    let json = serde_json::to_string(&result);
-                    print!("{}", json.expect("failed to convert results to string"));
-                    Ok(())
-                }
-                Err(error) => Err(error.to_string()),
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::MyPlaylists {} => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.user_playlists().await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            match client.user_playlists().await {
-                Ok(results) => {
-                    let json = serde_json::to_string(&results);
-                    print!("{}", json.expect("failed to convert results to string"));
-                    Ok(())
-                }
-                Err(error) => Err(error.to_string()),
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::Playlist { playlist_id } => {
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            let client = client::new(app_state.clone(), creds).await?;
+            let results = client.playlist(playlist_id).await?;
+            let json =
+                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            match client.playlist(playlist_id).await {
-                Ok(results) => {
-                    let json = serde_json::to_string(&results);
-                    print!("{}", json.expect("failed to convert results to string"));
-                    Ok(())
-                }
-                Err(error) => Err(error.to_string()),
-            }
+            print!("{}", json);
+            Ok(())
         }
         Commands::StreamTrack { track_id, quality } => {
-            let (player, broadcast) = player::new(app_state.clone());
+            let client = client::new(app_state.clone(), creds).await?;
+            let player = player::new(app_state.clone(), client.clone());
+            let track = client.track(track_id).await?;
 
-            let mut client = client::new(app_state.clone(), creds)
-                .await
-                .expect("failed to create client");
+            app_state.player.clear();
+            player.setup(false).await;
+            player.play_track(track, quality.unwrap()).await;
 
-            match client.track(track_id).await {
-                Ok(track) => {
-                    app_state.player.clear();
-                    player.setup(client.clone(), false).await;
-                    player.play_track(track, quality.unwrap(), client).await;
+            let tui = ui::terminal::new();
+            tui.start(app_state, player, false).await?;
 
-                    let mut tui = ui::terminal::new();
-                    tui.event_loop(broadcast, player).await;
-
-                    Ok(())
-                }
-                Err(error) => Err(error.to_string()),
-            }
+            Ok(())
         }
         Commands::StreamAlbum {
             album_id,
             quality,
             no_tui,
         } => {
-            let (player, broadcast) = player::new(app_state.clone());
-
-            match client::new(app_state.clone(), creds).await {
-                Ok(mut client) => match client.album(album_id).await {
-                    Ok(album) => {
-                        app_state.player.clear();
-                        player.setup(client.clone(), false).await;
-
-                        let quality = if let Some(q) = quality {
-                            q
-                        } else {
-                            client.quality()
-                        };
-
-                        player.play_album(album, quality, client.clone()).await;
-
-                        if no_tui {
-                            let mut quitter = app_state.quitter();
-
-                            ctrlc::set_handler(move || {
-                                app_state.send_quit();
-                                std::process::exit(0);
-                            })
-                            .expect("error setting ctrlc handler");
-
-                            loop {
-                                if let Ok(quit) = quitter.try_recv() {
-                                    if quit {
-                                        debug!("quitting");
-                                        break;
-                                    }
-                                }
-                                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
-                            }
-                        } else {
-                            let mut tui = ui::terminal::new();
-                            tui.event_loop(broadcast, player).await;
-                        }
-
-                        Ok(())
-                    }
-                    Err(error) => Err(error.to_string()),
-                },
-                Err(error) => Err(error.to_string()),
-            }
-        }
-        Commands::Download { id, quality } => {
-            // SETUP API CLIENT
-            let mut client = client::new(app_state.clone(), creds)
+            let client = client::new(app_state.clone(), creds)
                 .await
                 .expect("failed to create client");
 
-            if let Ok(result) = client.track_url(id, quality.clone(), None).await {
-                client.download(result).await;
-                Ok(())
+            let player = player::new(app_state.clone(), client.clone());
+            let album = client.album(album_id).await?;
+
+            app_state.player.clear();
+            player.setup(false).await;
+
+            let quality = if let Some(q) = quality {
+                q
             } else {
-                Err("".to_string())
+                client.quality()
+            };
+
+            player.play_album(album, quality).await;
+
+            if no_tui {
+                let mut quitter = app_state.quitter();
+
+                ctrlc::set_handler(move || {
+                    app_state.quit();
+                    std::process::exit(0);
+                })
+                .expect("error setting ctrlc handler");
+
+                loop {
+                    if let Ok(quit) = quitter.try_recv() {
+                        if quit {
+                            debug!("quitting");
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+                }
+            } else {
+                let tui = ui::terminal::new();
+                tui.start(app_state, player, false).await?;
             }
+
+            Ok(())
+        }
+        Commands::Download { id, quality } => {
+            // SETUP API CLIENT
+            let client = client::new(app_state.clone(), creds).await?;
+            let result = client.track_url(id, quality.clone(), None).await?;
+
+            client.download(result).await;
+
+            Ok(())
         }
         Commands::Config { command } => match command {
             ConfigCommands::Username {} => {
