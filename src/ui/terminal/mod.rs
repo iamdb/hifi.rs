@@ -3,7 +3,6 @@ pub mod player;
 use self::player::TrackList;
 use crate::{player::Player, state::app::AppState, REFRESH_RESOLUTION};
 use flume::{Receiver, Sender};
-use parking_lot::Mutex;
 use snafu::prelude::*;
 use std::{io::Stdout, sync::Arc, thread, time::Duration};
 use termion::{
@@ -12,7 +11,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::select;
+use tokio::{select, sync::Mutex};
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
 
@@ -101,7 +100,7 @@ async fn event_loop(
                 }
             }
             Some(event) = event_stream.next() => {
-                player::key_events(event, player.clone(), track_list.clone());
+                player::key_events(event, player.clone(), track_list.clone()).await;
             }
         }
     }
@@ -120,7 +119,7 @@ async fn render_loop(
             }
         }
 
-        let mut track_list = track_list.lock();
+        let mut track_list = track_list.lock().await;
         if let Some(items) = state.player.item_list() {
             track_list.set_items(items);
         }

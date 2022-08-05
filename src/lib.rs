@@ -84,34 +84,36 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.set_prev_playlist(prev_playlist);
                 }
 
-                let track_url = player.get_track_url(next_up.track.id)?;
+                let next_track = player.attach_track_url(next_up).await?;
 
-                player.set_playlist(playlist);
-                player.set_uri(track_url);
+                if let Some(track_url) = next_track.track_url {
+                    player.set_playlist(playlist);
+                    player.set_uri(track_url);
 
-                player.play();
+                    player.play();
 
-                if no_tui {
-                    let mut quitter = app_state.quitter();
+                    if no_tui {
+                        let mut quitter = app_state.quitter();
 
-                    ctrlc::set_handler(move || {
-                        app_state.quit();
-                        std::process::exit(0);
-                    })
-                    .expect("error setting ctrlc handler");
+                        ctrlc::set_handler(move || {
+                            app_state.quit();
+                            std::process::exit(0);
+                        })
+                        .expect("error setting ctrlc handler");
 
-                    loop {
-                        if let Ok(quit) = quitter.try_recv() {
-                            if quit {
-                                debug!("quitting");
-                                break;
+                        loop {
+                            if let Ok(quit) = quitter.try_recv() {
+                                if quit {
+                                    debug!("quitting");
+                                    break;
+                                }
                             }
+                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
                         }
-                        std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+                    } else {
+                        let tui = ui::terminal::new();
+                        tui.start(app_state, player, false).await?;
                     }
-                } else {
-                    let tui = ui::terminal::new();
-                    tui.start(app_state, player, false).await?;
                 }
             } else {
                 return Err(Error::PlayerError {

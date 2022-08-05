@@ -10,6 +10,7 @@ use gst::State as GstState;
 use gstreamer as gst;
 use zbus::{dbus_interface, fdo::Result, zvariant, ConnectionBuilder};
 
+#[derive(Debug)]
 pub struct Mpris {
     player: Player,
 }
@@ -66,6 +67,7 @@ impl Mpris {
     }
 }
 
+#[derive(Debug)]
 pub struct MprisPlayer {
     player: Player,
 }
@@ -84,14 +86,16 @@ impl MprisPlayer {
     fn play_pause(&self) {
         self.player.play_pause();
     }
-    fn next(&self) {
+    async fn next(&self) {
         self.player
             .skip_forward(None)
+            .await
             .expect("failed to skip forward");
     }
-    fn previous(&self) {
+    async fn previous(&self) {
         self.player
             .skip_backward(None)
+            .await
             .expect("failed to to skip backward");
     }
     #[dbus_interface(property)]

@@ -11,8 +11,8 @@ use crate::{
 };
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
-use parking_lot::Mutex;
 use termion::event::Key;
+use tokio::sync::Mutex;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -327,9 +327,12 @@ where
     f.render_stateful_widget(list, area, &mut playlist.state);
 }
 
-pub fn key_events(event: Event, player: Player, track_list: Arc<Mutex<TrackList<'_>>>) -> bool {
+pub async fn key_events(
+    event: Event,
+    player: Player,
+    track_list: Arc<Mutex<TrackList<'_>>>,
+) -> bool {
     let Event::Input(key) = event;
-    let mut track_list = track_list.lock();
 
     match key {
         Key::Char(c) => match c {
@@ -341,23 +344,38 @@ pub fn key_events(event: Event, player: Player, track_list: Arc<Mutex<TrackList<
                 player.play_pause();
             }
             'N' => {
-                player.skip_forward(None).expect("failed to skip forward");
+                player
+                    .skip_forward(None)
+                    .await
+                    .expect("failed to skip forward");
             }
             'P' => {
-                player.skip_backward(None).expect("failed to skip backward");
+                player
+                    .skip_backward(None)
+                    .await
+                    .expect("failed to skip backward");
             }
             '\n' => {
+                let track_list = track_list.lock().await;
+
                 if let Some(selection) = track_list.selected() {
                     debug!("playing selected track {}", selection);
-                    player.skip_to(selection).expect("failed to skip to track");
+                    player
+                        .skip_to(selection)
+                        .await
+                        .expect("failed to skip to track");
                 }
             }
             _ => (),
         },
         Key::Down => {
+            let mut track_list = track_list.lock().await;
+
             track_list.next();
         }
         Key::Up => {
+            let mut track_list = track_list.lock().await;
+
             track_list.previous();
         }
         Key::Right => {
