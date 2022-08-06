@@ -1,7 +1,7 @@
 pub mod player;
 
 use self::player::TrackList;
-use crate::{player::Player, state::app::AppState, REFRESH_RESOLUTION};
+use crate::{player::Controls, state::app::AppState, REFRESH_RESOLUTION};
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
 use std::{io::Stdout, sync::Arc, thread, time::Duration};
@@ -11,7 +11,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{select, sync::Mutex};
+use tokio::{select, sync::broadcast::Receiver as BroadcastReceiver, sync::Mutex};
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
 
@@ -47,7 +47,12 @@ pub fn new() -> Tui {
 }
 
 impl Tui {
-    pub async fn start(&self, state: AppState, player: Player, events_only: bool) -> Result<()> {
+    pub async fn start(
+        &self,
+        state: AppState,
+        controls: Controls,
+        events_only: bool,
+    ) -> Result<()> {
         let track_list = Arc::new(Mutex::new(TrackList::new(None)));
         let stdout = std::io::stdout();
         let stdout = stdout.into_raw_mode()?;
@@ -58,14 +63,22 @@ impl Tui {
 
         if !events_only {
             let cloned_tracklist = track_list.clone();
-            tokio::spawn(async {
-                render_loop(state, cloned_tracklist, terminal).await;
+            let cloned_state = state.clone();
+            tokio::spawn(async move {
+                render_loop(cloned_state, cloned_tracklist, terminal).await;
             });
         }
 
         let event_sender = self.tx.clone();
         let event_receiver = self.rx.clone();
-        event_loop(event_sender, event_receiver, track_list, player).await;
+        event_loop(
+            event_sender,
+            event_receiver,
+            track_list,
+            controls.clone(),
+            state.quitter(),
+        )
+        .await;
 
         Ok(())
     }
@@ -75,7 +88,8 @@ async fn event_loop(
     event_sender: Sender<Event>,
     event_receiver: Receiver<Event>,
     track_list: Arc<Mutex<TrackList<'static>>>,
-    player: Player,
+    controls: Controls,
+    mut quitter: BroadcastReceiver<bool>,
 ) {
     thread::spawn(move || {
         let stdin = std::io::stdin();
@@ -89,7 +103,6 @@ async fn event_loop(
     });
 
     let mut event_stream = event_receiver.stream();
-    let mut quitter = player.app_state().quitter();
 
     loop {
         select! {
@@ -100,7 +113,7 @@ async fn event_loop(
                 }
             }
             Some(event) = event_stream.next() => {
-                player::key_events(event, player.clone(), track_list.clone()).await;
+                player::key_events(event, controls.clone(), track_list.clone()).await;
             }
         }
     }

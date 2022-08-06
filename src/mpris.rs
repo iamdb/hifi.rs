@@ -1,25 +1,18 @@
 use std::collections::HashMap;
 
-use crate::{
-    get_player,
-    player::Player,
-    qobuz::PlaylistTrack,
-    state::app::{AppKey, PlayerKey},
-};
-use gst::State as GstState;
-use gstreamer as gst;
+use crate::player::Controls;
 use zbus::{dbus_interface, fdo::Result, zvariant, ConnectionBuilder};
 
 #[derive(Debug)]
 pub struct Mpris {
-    player: Player,
+    controls: Controls,
 }
 
-pub async fn init(player: Player) {
+pub async fn init(controls: Controls) {
     let mpris = Mpris {
-        player: player.clone(),
+        controls: controls.clone(),
     };
-    let mpris_player = MprisPlayer { player };
+    let mpris_player = MprisPlayer { controls };
 
     ConnectionBuilder::session()
         .unwrap()
@@ -36,9 +29,8 @@ pub async fn init(player: Player) {
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
 impl Mpris {
-    fn quit(&self) -> Result<()> {
-        self.player.stop();
-        self.player.app_state().quit();
+    async fn quit(&self) -> Result<()> {
+        self.controls.stop().await;
         Ok(())
     }
     #[dbus_interface(property)]
@@ -69,44 +61,35 @@ impl Mpris {
 
 #[derive(Debug)]
 pub struct MprisPlayer {
-    player: Player,
+    controls: Controls,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
-    fn play(&self) {
-        self.player.play();
+    async fn play(&self) {
+        self.controls.play().await;
     }
-    fn pause(&self) {
-        self.player.pause();
+    async fn pause(&self) {
+        self.controls.pause().await;
     }
-    fn stop(&self) {
-        self.player.stop();
+    async fn stop(&self) {
+        self.controls.stop().await;
     }
-    fn play_pause(&self) {
-        self.player.play_pause();
+    async fn play_pause(&self) {
+        self.controls.play_pause().await;
     }
     async fn next(&self) {
-        self.player
-            .skip_forward(None)
-            .await
-            .expect("failed to skip forward");
+        self.controls.next().await;
     }
     async fn previous(&self) {
-        self.player
-            .skip_backward(None)
-            .await
-            .expect("failed to to skip backward");
+        self.controls.previous().await;
     }
     #[dbus_interface(property)]
-    fn playback_status(&self) -> &'static str {
-        match self.player.current_state() {
-            GstState::Playing => "Playing",
-            GstState::Paused => "Paused",
-            GstState::Null => "Stopped",
-            GstState::VoidPending => "Stopped",
-            GstState::Ready => "Stopped",
-            _ => "",
+    async fn playback_status(&self) -> &'static str {
+        if let Some(status) = self.controls.status().await {
+            status.as_str()
+        } else {
+            ""
         }
     }
     #[dbus_interface(property)]
@@ -122,24 +105,21 @@ impl MprisPlayer {
         false
     }
     #[dbus_interface(property)]
-    fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
+    async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         let mut meta = HashMap::new();
-        let tree = self.player.app_state().player;
 
-        if let Some(next_up) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+        if let Some(next_up) = self.controls.currently_playing_track().await {
             meta.insert(
                 "mpris:trackid",
                 zvariant::Value::new(format!("/org/hifirs/Player/TrackList/{}", next_up.track.id)),
-            );
-            meta.insert(
-                "mpris:length",
-                zvariant::Value::new(self.player.duration().useconds() as i64),
             );
             meta.insert("xesam:title", zvariant::Value::new(next_up.track.title));
             meta.insert(
                 "xesam:trackNumber",
                 zvariant::Value::new(next_up.track.track_number),
             );
+
+            meta.insert("mpris:length", zvariant::Value::new(next_up.track.duration));
 
             if let Some(album) = next_up.album {
                 if let Some(thumb) = album.image.thumbnail {
@@ -161,10 +141,12 @@ impl MprisPlayer {
         1.0
     }
     #[dbus_interface(property)]
-    fn position(&self) -> i64 {
-        let position = self.player.position();
-
-        position.useconds() as i64
+    async fn position(&self) -> i64 {
+        if let Some(position) = self.controls.position().await {
+            position.inner_clocktime().useconds() as i64
+        } else {
+            0
+        }
     }
     // #[dbus_interface(property)]
     // fn set_position(&self) {

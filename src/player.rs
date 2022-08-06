@@ -7,6 +7,7 @@ use crate::{
     },
     REFRESH_RESOLUTION,
 };
+use flume::{Receiver, Sender};
 use futures::{executor, prelude::*};
 use gst::{glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
@@ -26,6 +27,19 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+#[derive(Debug)]
+pub enum Action {
+    Play,
+    Pause,
+    PlayPause,
+    Next,
+    Previous,
+    Stop,
+    SkipTo { num: usize },
+    JumpForward,
+    JumpBackward,
+}
+
 /// A player handles playing media to a device.
 #[derive(Debug, Clone)]
 pub struct Player {
@@ -39,18 +53,21 @@ pub struct Player {
     state: AppState,
     /// Qobuz client
     client: Client,
+    controls: Controls,
 }
 
 pub fn new(state: AppState, client: Client) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).unwrap();
+    let controls = Controls::new(state.clone());
 
     Player {
+        client,
         playbin,
         playlist: Arc::new(RwLock::new(PlaylistValue::new())),
         playlist_previous: Arc::new(RwLock::new(PlaylistValue::new())),
         state,
-        client,
+        controls,
     }
 }
 
@@ -116,18 +133,6 @@ impl Player {
     pub fn is_playing(&self) -> bool {
         self.playbin.current_state() == gst::State::Playing
     }
-    /// Retreive the current Gstreamer state of the player.
-    pub fn current_state(&self) -> GstState {
-        self.playbin.current_state()
-    }
-    /// Retreive the current position from the player.
-    pub fn position(&self) -> ClockTime {
-        if let Some(position) = self.playbin.query_position::<ClockTime>() {
-            position
-        } else {
-            ClockTime::default()
-        }
-    }
     /// Seek to a specified time in the current track.
     pub fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
         let flags = if let Some(flags) = flags {
@@ -150,13 +155,8 @@ impl Player {
             }
         }
     }
-    /// Retreive the current track's duration from the player.
-    pub fn duration(&self) -> ClockTime {
-        if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
-            duration
-        } else {
-            ClockTime::default()
-        }
+    pub fn controls(&self) -> Controls {
+        self.controls.clone()
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub fn jump_forward(&self) {
@@ -448,7 +448,7 @@ impl Player {
     }
     /// Sets up basic functionality for the player.
     pub async fn setup(&self, resume: bool) {
-        mpris::init(self.clone()).await;
+        mpris::init(self.controls.clone()).await;
 
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
@@ -509,8 +509,11 @@ impl Player {
     }
     /// Handles messages from the player and takes necessary action.
     async fn player_loop(&mut self, mut resume: bool) {
+        let action_rx = self.controls.action_receiver();
+
         let mut messages = self.playbin.bus().unwrap().stream();
         let mut quitter = self.state.quitter();
+        let mut actions = action_rx.stream();
 
         loop {
             select! {
@@ -518,6 +521,19 @@ impl Player {
                     if quit {
                         debug!("quitting");
                         break;
+                    }
+                }
+                Some(action) = actions.next() => {
+                    match action {
+                        Action::Play => self.play(),
+                        Action::Pause => self.pause(),
+                        Action::PlayPause => self.play_pause(),
+                        Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
+                        Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
+                        Action::Stop => self.stop(),
+                        Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
+                        Action::JumpForward => self.jump_forward(),
+                        Action::JumpBackward => self.jump_backward()
                     }
                 }
                 Some(msg) = messages.next() => {
@@ -598,5 +614,98 @@ impl Player {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Controls {
+    action_tx: Sender<Action>,
+    action_rx: Receiver<Action>,
+    state: AppState,
+}
+
+impl Controls {
+    fn new(state: AppState) -> Controls {
+        let (action_tx, action_rx) = flume::bounded::<Action>(100);
+
+        Controls {
+            action_rx,
+            action_tx,
+            state,
+        }
+    }
+    pub fn action_receiver(&self) -> Receiver<Action> {
+        self.action_rx.clone()
+    }
+    pub async fn play(&self) {
+        self.action_tx
+            .send_async(Action::Play)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn pause(&self) {
+        self.action_tx
+            .send_async(Action::Pause)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn play_pause(&self) {
+        self.action_tx
+            .send_async(Action::PlayPause)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn stop(&self) {
+        self.action_tx
+            .send_async(Action::Stop)
+            .await
+            .expect("failed to send action");
+
+        self.state.quit();
+    }
+    pub async fn next(&self) {
+        self.action_tx
+            .send_async(Action::Next)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn previous(&self) {
+        self.action_tx
+            .send_async(Action::Previous)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn skip_to(&self, num: usize) {
+        self.action_tx
+            .send_async(Action::SkipTo { num })
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn jump_forward(&self) {
+        self.action_tx
+            .send_async(Action::JumpForward)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn jump_backward(&self) {
+        self.action_tx
+            .send_async(Action::JumpBackward)
+            .await
+            .expect("failed to send action");
+    }
+    pub async fn position(&self) -> Option<ClockValue> {
+        let tree = self.state.player.clone();
+
+        get_player!(PlayerKey::Position, tree, ClockValue)
+    }
+    pub async fn status(&self) -> Option<StatusValue> {
+        let tree = self.state.player.clone();
+
+        get_player!(PlayerKey::Status, tree, StatusValue)
+    }
+    pub async fn currently_playing_track(&self) -> Option<PlaylistTrack> {
+        let tree = self.state.player.clone();
+
+        get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
     }
 }
