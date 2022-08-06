@@ -11,9 +11,6 @@ pub struct Cli {
     #[clap(short, long)]
     /// Provide a password. (overrides any database value)
     pub password: Option<String>,
-    #[clap(long, short)]
-    /// Output search results in json
-    pub json: bool,
     #[clap(subcommand)]
     pub command: Commands,
 }

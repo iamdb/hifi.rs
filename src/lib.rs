@@ -72,12 +72,7 @@ impl From<ui::terminal::Error> for Error {
     }
 }
 
-pub async fn cli(
-    command: Commands,
-    app_state: AppState,
-    creds: Credentials,
-    json: bool,
-) -> Result<(), Error> {
+pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> Result<(), Error> {
     pretty_env_logger::init();
 
     // CLI COMMANDS
@@ -186,6 +181,11 @@ pub async fn cli(
                 Err(error) => Err(Error::ClientError { error }),
             }
         }
+        Commands::SearchAlbums {
+            query,
+            limit,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.search_albums(query, limit).await?;
 
