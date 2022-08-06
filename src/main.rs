@@ -20,6 +20,7 @@ async fn main() -> Result<(), hifi_rs::Error> {
             username: cli.username,
             password: cli.password,
         },
+        cli.json,
     )
     .await
 }

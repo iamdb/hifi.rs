@@ -11,6 +11,9 @@ pub struct Cli {
     #[clap(short, long)]
     /// Provide a password. (overrides any database value)
     pub password: Option<String>,
+    #[clap(long, short)]
+    /// Output search results in json
+    pub json: bool,
     #[clap(subcommand)]
     pub command: Commands,
 }
@@ -59,13 +62,6 @@ pub enum Commands {
         #[clap(value_parser)]
         id: i32,
     },
-    /// Get the url needed to play a track.
-    TrackURL {
-        #[clap(value_parser)]
-        id: i32,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
-    },
     /// Stream an individual track by its ID.
     StreamTrack {
         #[clap(value_parser)]
@@ -86,13 +82,6 @@ pub enum Commands {
     MyPlaylists {},
     /// Retreive information about a specific playlist.
     Playlist { playlist_id: String },
-    /// Download a track to disk.
-    Download {
-        #[clap(value_parser)]
-        id: i32,
-        #[clap(value_enum)]
-        quality: Option<AudioQuality>,
-    },
     /// Set configuration options
     Config {
         #[clap(subcommand)]

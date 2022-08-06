@@ -4,12 +4,16 @@ extern crate log;
 
 use crate::{
     cli::{Commands, ConfigCommands},
-    qobuz::{client, PlaylistTrack},
+    qobuz::{
+        client::{self, output},
+        PlaylistTrack,
+    },
     state::{
         app::{AppKey, AppState, ClientKey, PlayerKey},
         AudioQuality, PlaylistValue, StringValue,
     },
 };
+use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
 use snafu::prelude::*;
 
@@ -38,9 +42,16 @@ pub fn capitalize(s: &str) -> String {
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    ClientError { error: client::Error },
-    PlayerError { error: player::Error },
-    TerminalError { error: ui::terminal::Error },
+    #[snafu(display("Client Error: {error}"))]
+    ClientError {
+        error: client::Error,
+    },
+    PlayerError {
+        error: player::Error,
+    },
+    TerminalError {
+        error: ui::terminal::Error,
+    },
 }
 
 impl From<client::Error> for Error {
@@ -61,7 +72,12 @@ impl From<ui::terminal::Error> for Error {
     }
 }
 
-pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> Result<(), Error> {
+pub async fn cli(
+    command: Commands,
+    app_state: AppState,
+    creds: Credentials,
+    json: bool,
+) -> Result<(), Error> {
     pretty_env_logger::init();
 
     // CLI COMMANDS
@@ -167,29 +183,23 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         }
         Commands::SearchAlbums { query } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_albums(query, Some(10)).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
+            let results = client.search_albums(query, Some(100)).await?;
 
-            print!("{}", json);
+            output!(results, json);
             Ok(())
         }
         Commands::GetAlbum { id } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.album(id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            output!(results, json);
             Ok(())
         }
         Commands::SearchArtists { query } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.search_artists(query, None).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            output!(results, json);
             Ok(())
         }
         Commands::GetArtist { id } => {
@@ -204,15 +214,6 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         Commands::GetTrack { id } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.track(id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
-
-            print!("{}", json);
-            Ok(())
-        }
-        Commands::TrackURL { id, quality } => {
-            let client = client::new(app_state.clone(), creds).await?;
-            let results = client.track_url(id, quality.clone(), None).await?;
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
@@ -276,15 +277,6 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             let tui = ui::terminal::new();
             tui.start(app_state, player.controls(), no_tui).await?;
-
-            Ok(())
-        }
-        Commands::Download { id, quality } => {
-            // SETUP API CLIENT
-            let client = client::new(app_state.clone(), creds).await?;
-            let result = client.track_url(id, quality.clone(), None).await?;
-
-            client.download(result).await;
 
             Ok(())
         }
