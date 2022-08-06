@@ -186,6 +186,32 @@ macro_rules! call {
     };
 }
 
+macro_rules! output {
+    ($results:ident, $json:expr) => {
+        if $json {
+            let json =
+                serde_json::to_string(&$results).expect("failed to convert results to string");
+
+            print!("{}", json);
+        } else {
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL);
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table.set_header($results.table_headers());
+
+            let table_rows: Vec<Vec<String>> = $results.into();
+
+            for row in table_rows {
+                table.add_row(row);
+            }
+
+            print!("{}", table);
+        }
+    };
+}
+
+pub(crate) use output;
+
 impl Client {
     pub fn quality(&self) -> AudioQuality {
         self.default_quality.clone()
