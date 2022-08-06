@@ -10,10 +10,12 @@ use crate::{
     },
     Credentials,
 };
+use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method, Response, StatusCode,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::prelude::*;
 use std::collections::HashMap;
@@ -183,32 +185,6 @@ macro_rules! call {
         }
     };
 }
-
-macro_rules! output {
-    ($results:ident, $json:expr) => {
-        if $json {
-            let json =
-                serde_json::to_string(&$results).expect("failed to convert results to string");
-
-            print!("{}", json);
-        } else {
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL);
-            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            table.set_header($results.table_headers());
-
-            let table_rows: Vec<Vec<String>> = $results.into();
-
-            for row in table_rows {
-                table.add_row(row);
-            }
-
-            print!("{}", table);
-        }
-    };
-}
-
-pub(crate) use output;
 
 impl Client {
     pub fn quality(&self) -> AudioQuality {
@@ -656,4 +632,54 @@ impl Client {
             Err(Error::ActiveSecret)
         }
     }
+}
+
+macro_rules! output {
+    ($results:ident, $output_format:expr) => {
+        match $output_format {
+            Some(OutputFormat::JSON) => {
+                let json =
+                    serde_json::to_string(&$results).expect("failed to convert results to string");
+
+                print!("{}", json);
+            }
+            Some(OutputFormat::TSV) => {
+                let formatted_results: Vec<Vec<String>> = $results.into();
+
+                let rows = formatted_results
+                    .iter()
+                    .map(|row| {
+                        let tabbed = row.join("\t");
+
+                        tabbed
+                    })
+                    .collect::<Vec<String>>();
+
+                print!("{}", rows.join("\n"));
+            }
+            None => {
+                let mut table = Table::new();
+                table.load_preset(UTF8_FULL);
+                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                table.set_header($results.table_headers());
+
+                let table_rows: Vec<Vec<String>> = $results.into();
+
+                for row in table_rows {
+                    table.add_row(row);
+                }
+
+                print!("{}", table);
+            }
+        }
+    };
+}
+
+pub(crate) use output;
+
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+pub enum OutputFormat {
+    JSON,
+    #[clap(name = "tabs")]
+    TSV,
 }

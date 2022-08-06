@@ -79,24 +79,7 @@ impl From<Albums> for Vec<Vec<String>> {
         albums
             .items
             .into_iter()
-            .map(|i| {
-                let mut fields = vec![i.title, i.artist.name, i.release_date_original];
-
-                if let Some(duration) = i.duration {
-                    fields.push(
-                        ClockTime::from_seconds(duration as u64)
-                            .to_string()
-                            .as_str()[2..7]
-                            .to_string(),
-                    );
-                } else {
-                    fields.push("".to_string());
-                }
-
-                fields.push(i.id);
-
-                fields
-            })
+            .map(|album| album.into())
             .collect::<Vec<Vec<String>>>()
     }
 }
@@ -264,7 +247,7 @@ impl Album {
     }
 }
 
-impl From<Album> for Vec<Vec<String>> {
+impl From<Album> for Vec<String> {
     fn from(album: Album) -> Self {
         let mut fields = vec![album.title, album.artist.name, album.release_date_original];
 
@@ -277,7 +260,15 @@ impl From<Album> for Vec<Vec<String>> {
             );
         }
 
-        vec![fields]
+        fields.push(album.id);
+
+        fields
+    }
+}
+
+impl From<Album> for Vec<Vec<String>> {
+    fn from(album: Album) -> Self {
+        vec![album.into()]
     }
 }
 
@@ -305,6 +296,24 @@ pub struct Artist {
     pub id: i64,
     pub albums_count: i64,
     pub slug: String,
+}
+
+impl Artist {
+    pub fn table_headers(&self) -> Vec<String> {
+        vec!["Name".to_string(), "ID".to_string()]
+    }
+}
+
+impl From<Artist> for Vec<String> {
+    fn from(artist: Artist) -> Self {
+        vec![artist.name, artist.id.to_string()]
+    }
+}
+
+impl From<Artist> for Vec<Vec<String>> {
+    fn from(artist: Artist) -> Self {
+        vec![artist.into()]
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
