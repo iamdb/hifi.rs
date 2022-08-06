@@ -8,7 +8,7 @@ use crate::{
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
-use futures::{executor, prelude::*};
+use futures::prelude::*;
 use gst::{glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
 use snafu::prelude::*;
@@ -183,7 +183,7 @@ impl Player {
             }
         }
     }
-    /// Jump forward in the currently playing track +10 seconds.
+    /// Jump forward in the currently playing track -10 seconds.
     pub fn jump_backward(&self) {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
@@ -456,48 +456,61 @@ impl Player {
             cloned_self.clock_loop(quitter);
         });
 
+        let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
+        let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
+
         let mut cloned_self = self.clone();
         tokio::spawn(async move {
-            cloned_self.player_loop(resume).await;
+            cloned_self
+                .player_loop(resume, about_to_finish_rx, next_track_tx)
+                .await;
         });
-
-        let playlist = self.playlist.clone();
-        let prev_playlist = self.playlist_previous.clone();
-        let state = self.state.clone();
 
         // Connects to the `about-to-finish` signal so the player
         // can setup the next track to play. Enables gapless playback.
-        let outer_client = self.client.clone();
-        let player_tree = self.state.player.clone();
         self.playbin
             .connect("about-to-finish", false, move |values| {
                 debug!("about to finish");
-                let client = outer_client.clone();
-                let cloned_state = state.clone();
+                about_to_finish_tx
+                    .send(true)
+                    .expect("failed to send about to finish message");
+
+                let next_track_url = next_track_rx
+                    .recv()
+                    .expect("failed to receive next track url");
+
                 let playbin = values[0]
                     .get::<glib::Object>()
                     .expect("playbin \"about-to-finish\" signal values[0]");
 
-                if let Some(next_track) = executor::block_on(playlist.write()).pop_front() {
-                    debug!("received new track, adding to player");
-                    if let Ok(next_playlist_track_url) =
-                        executor::block_on(client.track_url(next_track.track.id, None, None))
-                    {
-                        if let Some(previous_track) =
-                            get_player!(PlayerKey::NextUp, player_tree, PlaylistTrack)
-                        {
-                            executor::block_on(prev_playlist.write()).push_back(previous_track);
-                        }
-                        cloned_state.player.insert::<String, PlaylistTrack>(
-                            AppKey::Player(PlayerKey::NextUp),
-                            next_track,
-                        );
-                        playbin.set_property("uri", Some(next_playlist_track_url.url));
-                    }
-                }
+                playbin.set_property("uri", Some(next_track_url));
 
                 None
             });
+    }
+    async fn prep_next_track(&self) -> Option<String> {
+        if let Some(next_track) = self.playlist.write().await.pop_front() {
+            debug!("received new track, adding to player");
+            if let Ok(next_playlist_track_url) =
+                self.client.track_url(next_track.track.id, None, None).await
+            {
+                let player_tree = self.state.player.clone();
+                if let Some(previous_track) =
+                    get_player!(PlayerKey::NextUp, player_tree, PlaylistTrack)
+                {
+                    self.playlist_previous
+                        .write()
+                        .await
+                        .push_back(previous_track);
+                }
+
+                Some(next_playlist_track_url.url)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&self, mut track: PlaylistTrack) -> Result<PlaylistTrack> {
@@ -508,12 +521,18 @@ impl Player {
         }
     }
     /// Handles messages from the player and takes necessary action.
-    async fn player_loop(&mut self, mut resume: bool) {
+    async fn player_loop(
+        &mut self,
+        mut resume: bool,
+        about_to_finish_rx: Receiver<bool>,
+        next_track_tx: Sender<String>,
+    ) {
         let action_rx = self.controls.action_receiver();
 
         let mut messages = self.playbin.bus().unwrap().stream();
         let mut quitter = self.state.quitter();
         let mut actions = action_rx.stream();
+        let mut about_to_finish = about_to_finish_rx.stream();
 
         loop {
             select! {
@@ -521,6 +540,13 @@ impl Player {
                     if quit {
                         debug!("quitting");
                         break;
+                    }
+                }
+                Some(almost_done) = about_to_finish.next() => {
+                    if almost_done {
+                        if let Some(url) = self.prep_next_track().await {
+                            next_track_tx.send(url).expect("failed to send next track url");
+                        }
                     }
                 }
                 Some(action) = actions.next() => {
@@ -626,7 +652,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(100);
+        let (action_tx, action_rx) = flume::bounded::<Action>(1);
 
         Controls {
             action_rx,
