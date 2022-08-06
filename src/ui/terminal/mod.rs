@@ -49,36 +49,56 @@ pub fn new() -> Tui {
 impl Tui {
     pub async fn start(
         &self,
-        state: AppState,
+        app_state: AppState,
         controls: Controls,
         events_only: bool,
     ) -> Result<()> {
         let track_list = Arc::new(Mutex::new(TrackList::new(None)));
-        let stdout = std::io::stdout();
-        let stdout = stdout.into_raw_mode()?;
-        let stdout = MouseTerminal::from(stdout);
-        let stdout = AlternateScreen::from(stdout);
-        let backend = TermionBackend::new(stdout);
-        let terminal = Terminal::new(backend).unwrap();
 
         if !events_only {
+            let stdout = std::io::stdout();
+            let stdout = stdout.into_raw_mode()?;
+            let stdout = MouseTerminal::from(stdout);
+            let stdout = AlternateScreen::from(stdout);
+            let backend = TermionBackend::new(stdout);
+            let terminal = Terminal::new(backend).unwrap();
+
             let cloned_tracklist = track_list.clone();
-            let cloned_state = state.clone();
+            let cloned_state = app_state.clone();
             tokio::spawn(async move {
                 render_loop(cloned_state, cloned_tracklist, terminal).await;
             });
-        }
 
-        let event_sender = self.tx.clone();
-        let event_receiver = self.rx.clone();
-        event_loop(
-            event_sender,
-            event_receiver,
-            track_list,
-            controls.clone(),
-            state.quitter(),
-        )
-        .await;
+            let event_sender = self.tx.clone();
+            let event_receiver = self.rx.clone();
+            event_loop(
+                event_sender,
+                event_receiver,
+                track_list,
+                controls.clone(),
+                app_state.quitter(),
+            )
+            .await;
+        } else {
+            let mut quitter = app_state.quitter();
+
+            let state = app_state.clone();
+            ctrlc::set_handler(move || {
+                state.quit();
+                std::process::exit(0);
+            })
+            .expect("error setting ctrlc handler");
+
+            loop {
+                if let Ok(quit) = quitter.try_recv() {
+                    if quit {
+                        debug!("quitting");
+                        break;
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+            }
+        }
 
         Ok(())
     }

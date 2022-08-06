@@ -12,7 +12,6 @@ use crate::{
 };
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
 use snafu::prelude::*;
-use std::time::Duration;
 
 pub mod cli;
 mod mpris;
@@ -78,42 +77,23 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 let mut player = player::new(app_state.clone(), client.clone());
                 player.setup(true).await;
 
-                if let Some(prev_playlist) =
-                    get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
-                {
-                    player.set_prev_playlist(prev_playlist);
-                }
-
                 let next_track = player.attach_track_url(next_up).await?;
 
                 if let Some(track_url) = next_track.track_url {
                     player.set_playlist(playlist);
                     player.set_uri(track_url);
 
-                    player.play();
-
-                    if no_tui {
-                        let mut quitter = app_state.quitter();
-
-                        ctrlc::set_handler(move || {
-                            app_state.quit();
-                            std::process::exit(0);
-                        })
-                        .expect("error setting ctrlc handler");
-
-                        loop {
-                            if let Ok(quit) = quitter.try_recv() {
-                                if quit {
-                                    debug!("quitting");
-                                    break;
-                                }
-                            }
-                            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
-                        }
-                    } else {
-                        let tui = ui::terminal::new();
-                        tui.start(app_state, player.controls(), false).await?;
+                    if let Some(prev_playlist) =
+                        get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+                    {
+                        player.set_prev_playlist(prev_playlist);
                     }
+
+                    let controls = player.controls();
+                    controls.play().await;
+
+                    let tui = ui::terminal::new();
+                    tui.start(app_state, controls, no_tui).await?;
                 }
             } else {
                 return Err(Error::PlayerError {
@@ -125,9 +105,6 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         }
         Commands::Play { query, quality } => {
             let client = client::new(app_state.clone(), creds).await?;
-
-            let player = player::new(app_state.clone(), client.clone());
-            player.setup(false).await;
 
             let mut results = client.search_albums(query, Some(100)).await?;
 
@@ -156,13 +133,15 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 let selected_album = results.albums.items.remove(index);
 
                 app_state.player.clear();
-                player.setup(false).await;
 
                 let quality = if let Some(q) = quality {
                     q
                 } else {
                     client.quality()
                 };
+
+                let player = player::new(app_state.clone(), client.clone());
+                player.setup(false).await;
 
                 if let Ok(album) = client.album(selected_album.id).await {
                     player.play_album(album, quality).await;
@@ -295,28 +274,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             player.play_album(album, quality).await;
 
-            if no_tui {
-                let mut quitter = app_state.quitter();
-
-                ctrlc::set_handler(move || {
-                    app_state.quit();
-                    std::process::exit(0);
-                })
-                .expect("error setting ctrlc handler");
-
-                loop {
-                    if let Ok(quit) = quitter.try_recv() {
-                        if quit {
-                            debug!("quitting");
-                            break;
-                        }
-                    }
-                    std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
-                }
-            } else {
-                let tui = ui::terminal::new();
-                tui.start(app_state, player.controls(), false).await?;
-            }
+            let tui = ui::terminal::new();
+            tui.start(app_state, player.controls(), no_tui).await?;
 
             Ok(())
         }
