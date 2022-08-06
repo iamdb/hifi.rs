@@ -489,7 +489,10 @@ impl Player {
             });
     }
     async fn prep_next_track(&self) -> Option<String> {
-        if let Some(next_track) = self.playlist.write().await.pop_front() {
+        let mut playlist = self.playlist.write().await;
+        let mut prev_playlist = self.playlist_previous.write().await;
+
+        if let Some(mut next_track) = playlist.pop_front() {
             debug!("received new track, adding to player");
             if let Ok(next_playlist_track_url) =
                 self.client.track_url(next_track.track.id, None, None).await
@@ -498,11 +501,24 @@ impl Player {
                 if let Some(previous_track) =
                     get_player!(PlayerKey::NextUp, player_tree, PlaylistTrack)
                 {
-                    self.playlist_previous
-                        .write()
-                        .await
-                        .push_back(previous_track);
+                    prev_playlist.push_back(previous_track);
                 }
+
+                next_track.set_track_url(next_playlist_track_url.clone());
+
+                self.state
+                    .player
+                    .insert::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp), next_track);
+
+                self.state.player.insert::<String, PlaylistValue>(
+                    AppKey::Player(PlayerKey::Playlist),
+                    playlist.clone(),
+                );
+
+                self.state.player.insert::<String, PlaylistValue>(
+                    AppKey::Player(PlayerKey::PreviousPlaylist),
+                    prev_playlist.clone(),
+                );
 
                 Some(next_playlist_track_url.url)
             } else {
