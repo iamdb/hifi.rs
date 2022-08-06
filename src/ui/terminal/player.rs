@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     get_player,
-    player::Player,
+    player::Controls,
     qobuz::PlaylistTrack,
     state::{
         app::{AppKey, AppState, PlayerKey},
@@ -329,41 +329,23 @@ where
 
 pub async fn key_events(
     event: Event,
-    player: Player,
+    controls: Controls,
     track_list: Arc<Mutex<TrackList<'_>>>,
 ) -> bool {
     let Event::Input(key) = event;
 
     match key {
         Key::Char(c) => match c {
-            'q' => {
-                player.app_state().quit();
-                player.stop();
-            }
-            ' ' => {
-                player.play_pause();
-            }
-            'N' => {
-                player
-                    .skip_forward(None)
-                    .await
-                    .expect("failed to skip forward");
-            }
-            'P' => {
-                player
-                    .skip_backward(None)
-                    .await
-                    .expect("failed to skip backward");
-            }
+            'q' => controls.stop().await,
+            ' ' => controls.play_pause().await,
+            'N' => controls.next().await,
+            'P' => controls.previous().await,
             '\n' => {
                 let track_list = track_list.lock().await;
 
                 if let Some(selection) = track_list.selected() {
                     debug!("playing selected track {}", selection);
-                    player
-                        .skip_to(selection)
-                        .await
-                        .expect("failed to skip to track");
+                    controls.skip_to(selection).await;
                 }
             }
             _ => (),
@@ -379,10 +361,10 @@ pub async fn key_events(
             track_list.previous();
         }
         Key::Right => {
-            player.jump_forward();
+            controls.jump_forward().await;
         }
         Key::Left => {
-            player.jump_backward();
+            controls.jump_backward().await;
         }
         _ => (),
     }

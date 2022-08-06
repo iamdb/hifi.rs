@@ -180,6 +180,19 @@ impl From<StatusValue> for GstState {
     }
 }
 
+impl StatusValue {
+    pub fn as_str(&self) -> &'static str {
+        match self.0 {
+            GstState::Playing => "Playing",
+            GstState::Paused => "Paused",
+            GstState::Null => "Stopped",
+            GstState::VoidPending => "Stopped",
+            GstState::Ready => "Stopped",
+            _ => "",
+        }
+    }
+}
+
 /// A wrapper for ClockTime values
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
 pub struct ClockValue(ClockTime);
@@ -230,7 +243,7 @@ pub struct FloatValue(f64);
 impl From<Bytes> for FloatValue {
     fn from(bytes: Bytes) -> Self {
         let deserialized: FloatValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize float value");
 
         deserialized
     }
