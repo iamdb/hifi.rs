@@ -10,14 +10,15 @@ use crate::{
     },
     Credentials,
 };
+use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method, Response, StatusCode,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use snafu::prelude::*;
-use std::{collections::HashMap, fs::File};
-use tokio_stream::StreamExt;
+use std::collections::HashMap;
 
 const BUNDLE_REGEX: &str =
     r#"<script src="(/resources/\d+\.\d+\.\d+-[a-z]\d{3}/bundle\.js)"></script>"#;
@@ -49,10 +50,31 @@ pub enum Error {
     Authorization,
     #[snafu(display("Failed to create client"))]
     Create,
-    #[snafu(display("Call to API failed."))]
-    API,
-    #[snafu(display("Failed to deserialize json: {}", message))]
+    #[snafu(display("{message}"))]
+    API { message: String },
+    #[snafu(display("Failed to deserialize json: {message}"))]
     DeserializeJSON { message: String },
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        let status = error.status();
+
+        match status {
+            Some(StatusCode::BAD_REQUEST) => Error::API {
+                message: "Bad request".to_string(),
+            },
+            Some(StatusCode::UNAUTHORIZED) => Error::API {
+                message: "Unauthorized request".to_string(),
+            },
+            Some(StatusCode::NOT_FOUND) => Error::API {
+                message: "Item not found".to_string(),
+            },
+            Some(_) | None => Error::API {
+                message: "Error calling the API.".to_string(),
+            },
+        }
+    }
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -152,12 +174,14 @@ macro_rules! call {
     ($self:ident, $endpoint:expr, $params:expr) => {
         match $self.make_call($endpoint, $params).await {
             Ok(response) => match serde_json::from_str(response.as_str()) {
-                Ok(track_url) => Ok(track_url),
+                Ok(item) => Ok(item),
                 Err(error) => Err(Error::DeserializeJSON {
                     message: error.to_string(),
                 }),
             },
-            Err(_) => Err(Error::API),
+            Err(error) => Err(Error::API {
+                message: error.to_string(),
+            }),
         }
     };
 }
@@ -429,32 +453,6 @@ impl Client {
         call!(self, endpoint, Some(params))
     }
 
-    // Download a track to disk
-    pub async fn download(&self, track: TrackURL) {
-        let response = self.client.get(track.url).send().await.unwrap();
-        let mut output_file = File::create(format!("{}.flac", track.track_id)).unwrap();
-        let total_size = response
-            .headers()
-            .get("Content-Length")
-            .expect("failed to get content-length header")
-            .to_str()
-            .unwrap()
-            .parse::<f64>()
-            .unwrap();
-        let mut size_left = total_size;
-
-        let mut stream = response.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            if let Ok(c) = chunk {
-                size_left -= c.len() as f64;
-                let percentage_left = 1. - size_left / total_size;
-                debug!("progress: {}%", (percentage_left * 100.) as i32);
-                std::io::copy(&mut c.to_vec().as_slice(), &mut output_file).unwrap();
-            }
-        }
-    }
-
     // Set a user access token for authentication
     fn set_token(&mut self, token: StringValue) {
         self.user_token = Some(token);
@@ -504,34 +502,26 @@ impl Client {
         let request = self.client.request(Method::GET, endpoint).headers(headers);
 
         if let Some(p) = params {
-            let response = request.query(&p).send().await;
-            match response {
-                Ok(r) => self.handle_response(r).await,
-                Err(err) => {
-                    error!("call to api failed: {}", err.to_string());
-                    Err(Error::API)
-                }
-            }
+            let response = request.query(&p).send().await?;
+            self.handle_response(response).await
         } else {
-            let response = request.send().await;
-            match response {
-                Ok(r) => self.handle_response(r).await,
-                Err(err) => {
-                    error!("call to api failed: {}", err.to_string());
-                    Err(Error::API)
-                }
-            }
+            let response = request.send().await?;
+            self.handle_response(response).await
         }
     }
 
     // Handle a response retrieved from the api
     async fn handle_response(&self, response: Response) -> Result<String> {
         match response.status() {
-            StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED | StatusCode::NOT_FOUND => {
-                let res = response.text().await.unwrap();
-                debug!("{}", res);
-                Err(Error::API)
-            }
+            StatusCode::BAD_REQUEST => Err(Error::API {
+                message: "Bad request".to_string(),
+            }),
+            StatusCode::UNAUTHORIZED => Err(Error::API {
+                message: "Unauthorized request".to_string(),
+            }),
+            StatusCode::NOT_FOUND => Err(Error::API {
+                message: "Item not found".to_string(),
+            }),
             StatusCode::OK => {
                 let res = response.text().await.unwrap();
                 Ok(res)
@@ -642,4 +632,54 @@ impl Client {
             Err(Error::ActiveSecret)
         }
     }
+}
+
+macro_rules! output {
+    ($results:ident, $output_format:expr) => {
+        match $output_format {
+            Some(OutputFormat::JSON) => {
+                let json =
+                    serde_json::to_string(&$results).expect("failed to convert results to string");
+
+                print!("{}", json);
+            }
+            Some(OutputFormat::TSV) => {
+                let formatted_results: Vec<Vec<String>> = $results.into();
+
+                let rows = formatted_results
+                    .iter()
+                    .map(|row| {
+                        let tabbed = row.join("\t");
+
+                        tabbed
+                    })
+                    .collect::<Vec<String>>();
+
+                print!("{}", rows.join("\n"));
+            }
+            None => {
+                let mut table = Table::new();
+                table.load_preset(UTF8_FULL);
+                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                table.set_header($results.table_headers());
+
+                let table_rows: Vec<Vec<String>> = $results.into();
+
+                for row in table_rows {
+                    table.add_row(row);
+                }
+
+                print!("{}", table);
+            }
+        }
+    };
+}
+
+pub(crate) use output;
+
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+pub enum OutputFormat {
+    JSON,
+    #[clap(name = "tabs")]
+    TSV,
 }

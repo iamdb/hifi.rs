@@ -1,5 +1,6 @@
 pub mod client;
 
+use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 use sled::IVec;
 
@@ -11,6 +12,18 @@ pub struct ArtistSearchResults {
     pub artists: Artists,
 }
 
+impl ArtistSearchResults {
+    pub fn table_headers(&self) -> Vec<&str> {
+        vec!["Arist Name", "ID"]
+    }
+}
+
+impl From<ArtistSearchResults> for Vec<Vec<String>> {
+    fn from(results: ArtistSearchResults) -> Self {
+        results.artists.into()
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Artists {
     pub limit: i64,
@@ -19,10 +32,38 @@ pub struct Artists {
     pub items: Vec<Artist>,
 }
 
+impl From<Artists> for Vec<Vec<String>> {
+    fn from(artists: Artists) -> Self {
+        artists
+            .items
+            .into_iter()
+            .map(|i| vec![i.name, i.id.to_string()])
+            .collect::<Vec<Vec<String>>>()
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AlbumSearchResults {
     pub query: String,
     pub albums: Albums,
+}
+
+impl AlbumSearchResults {
+    pub fn table_headers(&self) -> Vec<&str> {
+        vec![
+            "Album title",
+            "Arist Name",
+            "Release Year",
+            "Duration",
+            "ID",
+        ]
+    }
+}
+
+impl From<AlbumSearchResults> for Vec<Vec<String>> {
+    fn from(results: AlbumSearchResults) -> Self {
+        results.albums.into()
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +72,16 @@ pub struct Albums {
     pub offset: i64,
     pub total: i64,
     pub items: Vec<Album>,
+}
+
+impl From<Albums> for Vec<Vec<String>> {
+    fn from(albums: Albums) -> Self {
+        albums
+            .items
+            .into_iter()
+            .map(|album| album.into())
+            .collect::<Vec<Vec<String>>>()
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -183,6 +234,9 @@ pub struct Album {
 }
 
 impl Album {
+    pub fn table_headers(&self) -> Vec<&str> {
+        vec!["Title", "Artist", "Release Date", "Duration"]
+    }
     pub fn to_playlist_tracklist(&self, quality: AudioQuality) -> Option<Vec<PlaylistTrack>> {
         self.tracks.as_ref().map(|t| {
             t.items
@@ -190,6 +244,31 @@ impl Album {
                 .map(|i| PlaylistTrack::new(i.clone(), Some(quality.clone()), Some(self.clone())))
                 .collect::<Vec<PlaylistTrack>>()
         })
+    }
+}
+
+impl From<Album> for Vec<String> {
+    fn from(album: Album) -> Self {
+        let mut fields = vec![album.title, album.artist.name, album.release_date_original];
+
+        if let Some(duration) = album.duration {
+            fields.push(
+                ClockTime::from_seconds(duration as u64)
+                    .to_string()
+                    .as_str()[2..7]
+                    .to_string(),
+            );
+        }
+
+        fields.push(album.id);
+
+        fields
+    }
+}
+
+impl From<Album> for Vec<Vec<String>> {
+    fn from(album: Album) -> Self {
+        vec![album.into()]
     }
 }
 
@@ -217,6 +296,24 @@ pub struct Artist {
     pub id: i64,
     pub albums_count: i64,
     pub slug: String,
+}
+
+impl Artist {
+    pub fn table_headers(&self) -> Vec<String> {
+        vec!["Name".to_string(), "ID".to_string()]
+    }
+}
+
+impl From<Artist> for Vec<String> {
+    fn from(artist: Artist) -> Self {
+        vec![artist.name, artist.id.to_string()]
+    }
+}
+
+impl From<Artist> for Vec<Vec<String>> {
+    fn from(artist: Artist) -> Self {
+        vec![artist.into()]
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

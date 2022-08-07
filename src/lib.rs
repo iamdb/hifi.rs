@@ -4,12 +4,16 @@ extern crate log;
 
 use crate::{
     cli::{Commands, ConfigCommands},
-    qobuz::{client, PlaylistTrack},
+    qobuz::{
+        client::{self, output, OutputFormat},
+        PlaylistTrack,
+    },
     state::{
         app::{AppKey, AppState, ClientKey, PlayerKey},
         AudioQuality, PlaylistValue, StringValue,
     },
 };
+use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
 use snafu::prelude::*;
 
@@ -38,9 +42,16 @@ pub fn capitalize(s: &str) -> String {
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    ClientError { error: client::Error },
-    PlayerError { error: player::Error },
-    TerminalError { error: ui::terminal::Error },
+    #[snafu(display("Client Error: {error}"))]
+    ClientError {
+        error: client::Error,
+    },
+    PlayerError {
+        error: player::Error,
+    },
+    TerminalError {
+        error: ui::terminal::Error,
+    },
 }
 
 impl From<client::Error> for Error {
@@ -65,6 +76,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
     pretty_env_logger::init();
 
     // CLI COMMANDS
+    #[allow(unused)]
     match command {
         Commands::Resume { no_tui } => {
             let tree = app_state.player.clone();
@@ -153,7 +165,11 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             Ok(())
         }
-        Commands::Search { query } => {
+        Commands::Search {
+            query,
+            limit,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
 
             match client.search_all(query).await {
@@ -165,54 +181,45 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 Err(error) => Err(Error::ClientError { error }),
             }
         }
-        Commands::SearchAlbums { query } => {
+        Commands::SearchAlbums {
+            query,
+            limit,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_albums(query, Some(10)).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
+            let results = client.search_albums(query, limit).await?;
 
-            print!("{}", json);
+            output!(results, output_format);
             Ok(())
         }
-        Commands::GetAlbum { id } => {
+        Commands::GetAlbum { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.album(id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            output!(results, output_format);
             Ok(())
         }
-        Commands::SearchArtists { query } => {
+        Commands::SearchArtists {
+            query,
+            limit,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_artists(query, None).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
+            let results = client.search_artists(query, limit).await?;
 
-            print!("{}", json);
+            output!(results, output_format);
             Ok(())
         }
-        Commands::GetArtist { id } => {
+        Commands::GetArtist { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.artist(id, None).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            output!(results, output_format);
             Ok(())
         }
-        Commands::GetTrack { id } => {
+        Commands::GetTrack { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.track(id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
-
-            print!("{}", json);
-            Ok(())
-        }
-        Commands::TrackURL { id, quality } => {
-            let client = client::new(app_state.clone(), creds).await?;
-            let results = client.track_url(id, quality.clone(), None).await?;
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
@@ -276,15 +283,6 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             let tui = ui::terminal::new();
             tui.start(app_state, player.controls(), no_tui).await?;
-
-            Ok(())
-        }
-        Commands::Download { id, quality } => {
-            // SETUP API CLIENT
-            let client = client::new(app_state.clone(), creds).await?;
-            let result = client.track_url(id, quality.clone(), None).await?;
-
-            client.download(result).await;
 
             Ok(())
         }
