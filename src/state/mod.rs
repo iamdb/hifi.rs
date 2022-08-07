@@ -1,10 +1,9 @@
 pub mod app;
 
 use crate::qobuz::PlaylistTrack;
-use crate::state::app::PlayerKey;
+use crate::state::app::{PlayerKey, StateKey};
 use crate::ui::terminal::player::Item;
 
-use self::app::AppKey;
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
@@ -43,7 +42,7 @@ impl StateTree {
     pub fn clear(&self) {
         self.db.clear().expect("failed to clear tree");
     }
-    pub fn insert<K, T>(&self, key: AppKey, value: T)
+    pub fn insert<K, T>(&self, key: StateKey, value: T)
     where
         K: FromStr,
         T: Serialize,
@@ -52,7 +51,7 @@ impl StateTree {
             self.db.insert(key.as_str(), serialized).unwrap();
         }
     }
-    pub fn get<'a, K, T>(&self, key: AppKey) -> Option<T>
+    pub fn get<'a, K, T>(&self, key: StateKey) -> Option<T>
     where
         K: FromStr,
         T: Into<T> + From<Bytes> + Deserialize<'a>,
@@ -105,15 +104,55 @@ impl StateTree {
 #[macro_export]
 macro_rules! get_client {
     ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(AppKey::Client($tree_key))
+        $tree.get::<String, $value_type>(StateKey::Client($tree_key))
     };
 }
 
 #[macro_export]
 macro_rules! get_player {
     ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(AppKey::Player($tree_key))
+        $tree.get::<String, $value_type>(StateKey::Player($tree_key))
     };
+}
+
+#[macro_export]
+macro_rules! get_app {
+    ($tree_key:path, $tree:ident, $value_type:ty) => {
+        $tree.get::<String, $value_type>(StateKey::App($tree_key))
+    };
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum Screen {
+    NowPlaying,
+    Search,
+}
+
+impl Screen {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Screen::NowPlaying => "now_playing",
+            Screen::Search => "search",
+        }
+    }
+}
+
+impl From<Bytes> for Screen {
+    fn from(bytes: Bytes) -> Self {
+        let deserialized: Screen =
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
+
+        deserialized
+    }
+}
+
+impl From<Screen> for Bytes {
+    fn from(screen: Screen) -> Self {
+        bincode::serialize(&screen)
+            .expect("failed to serialize string value")
+            .into()
+    }
 }
 
 /// A wrapper for string values

@@ -5,7 +5,7 @@ use super::{
 use crate::{
     get_client,
     state::{
-        app::{AppKey, AppState, ClientKey},
+        app::{AppState, ClientKey, StateKey},
         AudioQuality, StringValue,
     },
     Credentials,
@@ -290,9 +290,10 @@ impl Client {
                 token = token[1..token.len() - 1].to_string();
 
                 self.user_token = Some(token.clone().into());
-                self.state
-                    .config
-                    .insert::<String, StringValue>(AppKey::Client(ClientKey::Token), token.into());
+                self.state.config.insert::<String, StringValue>(
+                    StateKey::Client(ClientKey::Token),
+                    token.into(),
+                );
                 Ok(())
             }
             Err(_) => Err(Error::Login),
@@ -564,7 +565,7 @@ impl Client {
             self.app_id = Some(app_id.clone());
             self.state
                 .config
-                .insert::<String, StringValue>(AppKey::Client(ClientKey::AppID), app_id.clone());
+                .insert::<String, StringValue>(StateKey::Client(ClientKey::AppID), app_id.clone());
 
             let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 
@@ -616,7 +617,7 @@ impl Client {
                 debug!("found good secret: {}\t{}", timezone, secret);
                 let secret_string = secret.to_string();
                 self.state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::ActiveSecret),
+                    StateKey::Client(ClientKey::ActiveSecret),
                     secret_string.clone().into(),
                 );
                 active_secret = Some(secret_string);

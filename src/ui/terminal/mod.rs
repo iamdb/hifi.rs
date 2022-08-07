@@ -1,7 +1,16 @@
 pub mod player;
 
 use self::player::TrackList;
-use crate::{player::Controls, state::app::AppState, REFRESH_RESOLUTION};
+use crate::{
+    get_app,
+    player::Controls,
+    state::{
+        app::{AppKey, AppState, StateKey},
+        Screen,
+    },
+    ui::terminal::player::player,
+    REFRESH_RESOLUTION,
+};
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
 use std::{io::Stdout, sync::Arc, thread, time::Duration};
@@ -11,9 +20,17 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{select, sync::broadcast::Receiver as BroadcastReceiver, sync::Mutex};
+use tokio::{select, sync::Mutex};
 use tokio_stream::StreamExt;
-use tui::{backend::TermionBackend, Terminal};
+use tui::{
+    backend::TermionBackend,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    symbols::DOT,
+    text::Spans,
+    widgets::{Block, Borders, Tabs},
+    Terminal,
+};
 
 pub struct Tui {
     rx: Receiver<Event>,
@@ -47,15 +64,10 @@ pub fn new() -> Tui {
 }
 
 impl Tui {
-    pub async fn start(
-        &self,
-        app_state: AppState,
-        controls: Controls,
-        events_only: bool,
-    ) -> Result<()> {
+    pub async fn start(&self, app_state: AppState, controls: Controls, no_tui: bool) -> Result<()> {
         let track_list = Arc::new(Mutex::new(TrackList::new(None)));
 
-        if !events_only {
+        if !no_tui {
             let stdout = std::io::stdout();
             let stdout = stdout.into_raw_mode()?;
             let stdout = MouseTerminal::from(stdout);
@@ -65,6 +77,7 @@ impl Tui {
 
             let cloned_tracklist = track_list.clone();
             let cloned_state = app_state.clone();
+
             tokio::spawn(async move {
                 render_loop(cloned_state, cloned_tracklist, terminal).await;
             });
@@ -76,7 +89,7 @@ impl Tui {
                 event_receiver,
                 track_list,
                 controls.clone(),
-                app_state.quitter(),
+                app_state,
             )
             .await;
         } else {
@@ -109,7 +122,7 @@ async fn event_loop(
     event_receiver: Receiver<Event>,
     track_list: Arc<Mutex<TrackList<'static>>>,
     controls: Controls,
-    mut quitter: BroadcastReceiver<bool>,
+    app_state: AppState,
 ) {
     thread::spawn(move || {
         let stdin = std::io::stdin();
@@ -123,6 +136,7 @@ async fn event_loop(
     });
 
     let mut event_stream = event_receiver.stream();
+    let mut quitter = app_state.quitter();
 
     loop {
         select! {
@@ -133,6 +147,14 @@ async fn event_loop(
                 }
             }
             Some(event) = event_stream.next() => {
+                let Event::Input(key) = event;
+
+                if key == Key::Char('1') {
+                    app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::NowPlaying);
+                } else if key == Key::Char('2') {
+                    app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+                }
+
                 player::key_events(event, controls.clone(), track_list.clone()).await;
             }
         }
@@ -152,15 +174,70 @@ async fn render_loop(
             }
         }
 
-        let mut track_list = track_list.lock().await;
-        if let Some(items) = state.player.item_list() {
-            track_list.set_items(items);
+        let app_tree = state.app.clone();
+        let screen = if let Some(saved_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
+            saved_screen
+        } else {
+            Screen::NowPlaying
+        };
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),
+                Constraint::Min(4),
+                Constraint::Length(4),
+            ])
+            .margin(0);
+
+        match screen {
+            Screen::NowPlaying => {
+                let mut list = track_list.lock().await;
+                if let Some(items) = state.player.item_list() {
+                    list.set_items(items);
+                }
+
+                terminal
+                    .draw(|f| {
+                        let split_layout = layout.split(f.size());
+
+                        player(f, split_layout[0], state.clone());
+
+                        crate::ui::terminal::player::track_list(f, list.clone(), split_layout[1]);
+
+                        let tabs = tabs(0);
+                        f.render_widget(tabs, split_layout[2]);
+                    })
+                    .expect("failed to draw terminal screen");
+            }
+            Screen::Search => {
+                terminal
+                    .draw(|f| {
+                        let split_layout = layout.split(f.size());
+
+                        player(f, split_layout[0], state.clone());
+
+                        let tabs = tabs(1);
+                        f.render_widget(tabs, split_layout[2]);
+                    })
+                    .expect("failed to draw terminal screen");
+            }
         }
-
-        terminal
-            .draw(|f| player::draw(f, state.clone(), track_list.clone()))
-            .expect("failed to draw terminal screen");
-
         std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
     }
+}
+
+fn tabs<'a>(num: usize) -> Tabs<'a> {
+    let titles = ["[1] Now Playing", "[2] Search"]
+        .iter()
+        .cloned()
+        .map(Spans::from)
+        .collect();
+
+    Tabs::new(titles)
+        .block(Block::default().borders(Borders::ALL))
+        .style(Style::default().fg(Color::White))
+        .highlight_style(Style::default().fg(Color::Yellow))
+        .divider(DOT)
+        .select(num)
 }

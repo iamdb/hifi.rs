@@ -19,20 +19,37 @@ pub enum Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub enum AppKey {
+#[derive(Debug, Clone)]
+pub enum StateKey {
+    App(AppKey),
     Client(ClientKey),
     Player(PlayerKey),
+}
+
+impl StateKey {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            StateKey::App(key) => key.as_str(),
+            StateKey::Client(key) => key.as_str(),
+            StateKey::Player(key) => key.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AppKey {
+    ActiveScreen,
 }
 
 impl AppKey {
     pub fn as_str(&self) -> &'static str {
         match self {
-            AppKey::Client(key) => key.as_str(),
-            AppKey::Player(key) => key.as_str(),
+            AppKey::ActiveScreen => "active_screen",
         }
     }
 }
 
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum ClientKey {
     ActiveSecret,
@@ -56,6 +73,7 @@ impl ClientKey {
     }
 }
 
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum PlayerKey {
     Duration,
@@ -85,6 +103,7 @@ impl PlayerKey {
 
 #[derive(Debug, Clone)]
 pub struct AppState {
+    pub app: StateTree,
     pub player: StateTree,
     pub config: StateTree,
     quit_sender: Sender<bool>,
@@ -100,6 +119,7 @@ pub fn new(base_dir: PathBuf) -> Result<AppState> {
         .compression_factor(10)
         .mode(sled::Mode::LowSpace)
         .print_profile_on_drop(false)
+        .flush_every_ms(Some(2500))
         .open()
     {
         Ok(db) => HifiDB(db),
@@ -133,6 +153,7 @@ pub fn new(base_dir: PathBuf) -> Result<AppState> {
     warn!("db was recovered: {}", db.0.was_recovered());
 
     Ok(AppState {
+        app: db.open_tree("app"),
         config: db.open_tree("config"),
         player: db.open_tree("player"),
         quit_sender,

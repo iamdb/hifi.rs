@@ -9,7 +9,7 @@ use crate::{
         PlaylistTrack,
     },
     state::{
-        app::{AppKey, AppState, ClientKey, PlayerKey},
+        app::{AppState, ClientKey, PlayerKey, StateKey},
         AudioQuality, PlaylistValue, StringValue,
     },
 };
@@ -294,7 +294,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     .expect("failed to get username");
 
                 app_state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::Username),
+                    StateKey::Client(ClientKey::Username),
                     username.into(),
                 );
 
@@ -313,7 +313,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 debug!("saving password to database: {}", md5_pw);
 
                 app_state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::Password),
+                    StateKey::Client(ClientKey::Password),
                     md5_pw.into(),
                 );
 
@@ -323,7 +323,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
             ConfigCommands::DefaultQuality { quality } => {
                 app_state.config.insert::<String, AudioQuality>(
-                    AppKey::Client(ClientKey::DefaultQuality),
+                    StateKey::Client(ClientKey::DefaultQuality),
                     quality,
                 );
 
