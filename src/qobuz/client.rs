@@ -88,7 +88,7 @@ pub struct Client {
     password: Option<StringValue>,
     base_url: String,
     client: reqwest::Client,
-    default_quality: AudioQuality,
+    pub default_quality: AudioQuality,
     user_token: Option<StringValue>,
     bundle_regex: regex::Regex,
     app_id_regex: regex::Regex,
@@ -112,7 +112,7 @@ pub async fn new(state: AppState, creds: Credentials) -> Result<Client> {
         .build()
         .unwrap();
 
-    let tree = state.player.clone();
+    let tree = state.config.clone();
     let default_quality =
         if let Some(quality) = get_client!(ClientKey::DefaultQuality, tree, AudioQuality) {
             quality

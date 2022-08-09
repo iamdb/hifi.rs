@@ -9,7 +9,7 @@ use tui::{
     widgets::ListItem,
 };
 
-use crate::{state::AudioQuality, state::Bytes, ui::terminal::player::Item};
+use crate::{qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::player::Item};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {
@@ -84,7 +84,11 @@ impl Albums {
         self.items
             .into_iter()
             .map(|t| {
-                let title = textwrap::wrap(t.title.as_str(), max_width).join("\n  ");
+                let title = textwrap::wrap(
+                    format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
+                    max_width,
+                )
+                .join("\n  ");
 
                 let mut style = Style::default().fg(Color::White);
 
@@ -268,6 +272,11 @@ impl Album {
                 .map(|i| PlaylistTrack::new(i.clone(), Some(quality.clone()), Some(self.clone())))
                 .collect::<Vec<PlaylistTrack>>()
         })
+    }
+    pub async fn attach_tracks(&mut self, client: Client) {
+        if let Ok(album) = client.album(self.id.clone()).await {
+            self.tracks = album.tracks;
+        }
     }
 }
 

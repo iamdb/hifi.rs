@@ -4,7 +4,7 @@ use self::player::TrackList;
 use crate::{
     get_app,
     player::Controls,
-    qobuz::client::Client,
+    qobuz::{client::Client, AlbumSearchResults},
     state::{
         app::{AppKey, AppState, StateKey},
         Screen,
@@ -50,6 +50,7 @@ pub struct Tui<'t> {
     show_search: bool,
     search_query: Vec<char>,
     search_results: Arc<Mutex<TrackList<'t>>>,
+    album_results: Option<AlbumSearchResults>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
@@ -84,16 +85,17 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
     let (tx, rx) = flume::bounded(1);
 
     Ok(Tui {
-        rx,
-        tx,
-        track_list: Arc::new(Mutex::new(TrackList::new(None))),
+        album_results: None,
         app_state,
         controls,
         no_tui,
-        terminal,
-        show_search: false,
+        rx,
         search_query: Vec::new(),
         search_results: Arc::new(Mutex::new(TrackList::new(None))),
+        show_search: false,
+        terminal,
+        track_list: Arc::new(Mutex::new(TrackList::new(None))),
+        tx,
     })
 }
 
@@ -176,6 +178,8 @@ impl<'t> Tui<'t> {
                                         let query = self.search_query.drain(..).map(|q| q.to_string()).collect::<Vec<String>>().join("");
 
                                         if let Ok(results) = client.search_albums(query, Some(100)).await {
+                                            self.album_results = Some(results.clone());
+
                                             let size = self.terminal.size().unwrap().width as usize;
                                             let items: Vec<Item> = results.albums.item_list(size, false);
 
@@ -232,8 +236,12 @@ impl<'t> Tui<'t> {
                                                                 }
                                                                 Key::Char('\n') => {
                                                                     if let Some(selected) = search_results.selected() {
-                                                                        if let Some(_album) = search_results.items.get(selected) {
-
+                                                                        let album_results = self.album_results.clone();
+                                                                        if let Some(results) = album_results {
+                                                                            if let Some(album) = results.albums.items.get(selected) {
+                                                                                self.controls.clear().await;
+                                                                                self.controls.play_album(album.clone()).await;
+                                                                            };
                                                                         }
                                                                     }
                                                                 }

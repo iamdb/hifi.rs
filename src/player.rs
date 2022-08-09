@@ -1,5 +1,5 @@
 use crate::{
-    get_player, mpris,
+    action, get_player, mpris,
     qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
     state::{
         app::{AppState, PlayerKey, StateKey},
@@ -38,6 +38,8 @@ pub enum Action {
     SkipTo { num: usize },
     JumpForward,
     JumpBackward,
+    PlayAlbum { album: Box<Album> },
+    Clear,
 }
 
 /// A player handles playing media to a device.
@@ -580,7 +582,26 @@ impl Player {
                         },
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::JumpForward => self.jump_forward(),
-                        Action::JumpBackward => self.jump_backward()
+                        Action::JumpBackward => self.jump_backward(),
+                        Action::Clear => {
+                            if self.is_playing() {
+                                self.stop();
+                            }
+
+                            self.playlist.write().await.clear();
+                            self.playlist_previous.write().await.clear();
+                            self.state.player.clear();
+                        }
+                        Action::PlayAlbum { album } => {
+                            let default_quality = self.client.default_quality.clone();
+
+                            let client = self.client.clone();
+
+                            let mut album = *album;
+                            album.attach_tracks(client).await;
+
+                            self.play_album(album, default_quality).await;
+                        }
                     }
                 }
                 Some(msg) = messages.next() => {
@@ -685,58 +706,42 @@ impl Controls {
         self.action_rx.clone()
     }
     pub async fn play(&self) {
-        self.action_tx
-            .send_async(Action::Play)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Play);
     }
     pub async fn pause(&self) {
-        self.action_tx
-            .send_async(Action::Pause)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Pause);
     }
     pub async fn play_pause(&self) {
-        self.action_tx
-            .send_async(Action::PlayPause)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::PlayPause);
     }
     pub async fn stop(&self) {
-        self.action_tx
-            .send_async(Action::Stop)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Stop);
     }
     pub async fn next(&self) {
-        self.action_tx
-            .send_async(Action::Next)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Next);
     }
     pub async fn previous(&self) {
-        self.action_tx
-            .send_async(Action::Previous)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Previous);
     }
     pub async fn skip_to(&self, num: usize) {
-        self.action_tx
-            .send_async(Action::SkipTo { num })
-            .await
-            .expect("failed to send action");
+        action!(self, Action::SkipTo { num });
     }
     pub async fn jump_forward(&self) {
-        self.action_tx
-            .send_async(Action::JumpForward)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::JumpForward);
     }
     pub async fn jump_backward(&self) {
-        self.action_tx
-            .send_async(Action::JumpBackward)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::JumpBackward);
+    }
+    pub async fn play_album(&self, album: Album) {
+        action!(
+            self,
+            Action::PlayAlbum {
+                album: Box::new(album)
+            }
+        );
+    }
+    pub async fn clear(&self) {
+        action!(self, Action::Clear);
     }
     pub async fn position(&self) -> Option<ClockValue> {
         let tree = self.state.player.clone();
@@ -753,4 +758,15 @@ impl Controls {
 
         get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
     }
+}
+
+#[macro_export]
+macro_rules! action {
+    ($self:ident, $action:expr) => {
+        $self
+            .action_tx
+            .send_async($action)
+            .await
+            .expect("failed to send action");
+    };
 }

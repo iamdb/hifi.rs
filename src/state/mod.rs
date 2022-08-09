@@ -371,7 +371,25 @@ impl From<PlaylistValue> for Bytes {
     }
 }
 
+impl IntoIterator for PlaylistValue {
+    type Item = PlaylistTrack;
+
+    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 impl PlaylistValue {
+    pub fn new() -> PlaylistValue {
+        PlaylistValue(VecDeque::new())
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
     pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
         self.into_iter()
             .map(|t| {
@@ -390,22 +408,6 @@ impl PlaylistValue {
                 ListItem::new(Text::raw(title)).style(style).into()
             })
             .collect::<Vec<Item>>()
-    }
-}
-
-impl IntoIterator for PlaylistValue {
-    type Item = PlaylistTrack;
-
-    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-impl PlaylistValue {
-    pub fn new() -> PlaylistValue {
-        PlaylistValue(VecDeque::new())
     }
 
     pub fn vec(&self) -> VecDeque<PlaylistTrack> {
