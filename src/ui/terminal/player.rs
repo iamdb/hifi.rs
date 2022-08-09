@@ -24,18 +24,10 @@ use tui::{
 
 use super::Event;
 
-pub fn player<B>(f: &mut Frame<B>, rect: Rect, state: AppState, empty_list: bool)
+pub fn player<B>(f: &mut Frame<B>, rect: Rect, state: AppState)
 where
     B: Backend,
 {
-    if empty_list {
-        let block = Block::default();
-        let p = Paragraph::new("Select something to play").block(block);
-        f.render_widget(p, rect);
-
-        return;
-    }
-
     let tree = state.player;
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -168,49 +160,53 @@ where
         .split(area);
 
     let list = List::new(playlist.list_items())
-        .highlight_style(Style::default().fg(Color::Cyan))
+        .highlight_style(
+            Style::default()
+                .fg(Color::Indexed(81))
+                .bg(Color::Indexed(235)),
+        )
         .highlight_symbol("");
 
     f.render_stateful_widget(list, layout[0], &mut playlist.state);
 }
 
 pub async fn key_events(event: Event, controls: Controls, track_list: Arc<Mutex<TrackList<'_>>>) {
-    let Event::Input(key) = event;
+    match event {
+        Event::Input(key) => match key {
+            Key::Char(c) => match c {
+                ' ' => controls.play_pause().await,
+                'N' => controls.next().await,
+                'P' => controls.previous().await,
+                '\n' => {
+                    let mut track_list = track_list.lock().await;
 
-    match key {
-        Key::Char(c) => match c {
-            'q' => controls.stop().await,
-            ' ' => controls.play_pause().await,
-            'N' => controls.next().await,
-            'P' => controls.previous().await,
-            '\n' => {
+                    if let Some(selection) = track_list.selected() {
+                        debug!("playing selected track {}", selection);
+                        controls.skip_to(selection).await;
+                        track_list.select(0);
+                    }
+                }
+                _ => (),
+            },
+            Key::Down => {
                 let mut track_list = track_list.lock().await;
 
-                if let Some(selection) = track_list.selected() {
-                    debug!("playing selected track {}", selection);
-                    controls.skip_to(selection).await;
-                    track_list.select(0);
-                }
+                track_list.next();
+            }
+            Key::Up => {
+                let mut track_list = track_list.lock().await;
+
+                track_list.previous();
+            }
+            Key::Right => {
+                controls.jump_forward().await;
+            }
+            Key::Left => {
+                controls.jump_backward().await;
             }
             _ => (),
         },
-        Key::Down => {
-            let mut track_list = track_list.lock().await;
-
-            track_list.next();
-        }
-        Key::Up => {
-            let mut track_list = track_list.lock().await;
-
-            track_list.previous();
-        }
-        Key::Right => {
-            controls.jump_forward().await;
-        }
-        Key::Left => {
-            controls.jump_backward().await;
-        }
-        _ => (),
+        Event::Tick => unimplemented!(),
     }
 }
 fn progress<B>(
@@ -232,8 +228,8 @@ fn progress<B>(
             .block(Block::default().style(Style::default().bg(Color::Indexed(236))))
             .gauge_style(
                 Style::default()
-                    .bg(Color::Indexed(236))
-                    .fg(Color::Cyan)
+                    .bg(Color::Indexed(235))
+                    .fg(Color::Indexed(38))
                     .add_modifier(Modifier::BOLD),
             )
             .ratio(progress.into());
@@ -272,8 +268,8 @@ fn current_track<B>(
     f.render_widget(spacer, chunks[3]);
 
     let title_style = Style::default()
-        .bg(Color::Cyan)
-        .fg(Color::Indexed(236))
+        .bg(Color::Indexed(24))
+        .fg(Color::Indexed(81))
         .add_modifier(Modifier::BOLD);
 
     let mut current_track_text = vec![
@@ -313,8 +309,8 @@ fn current_track<B>(
         .block(
             Block::default().style(
                 Style::default()
-                    .bg(Color::Indexed(236))
-                    .fg(Color::Indexed(252)),
+                    .bg(Color::Indexed(235))
+                    .fg(Color::Indexed(31)),
             ),
         )
         .alignment(tui::layout::Alignment::Center);
@@ -345,8 +341,8 @@ fn current_track<B>(
             .block(
                 Block::default().style(
                     Style::default()
-                        .bg(Color::Indexed(236))
-                        .fg(Color::Indexed(252)),
+                        .bg(Color::Indexed(235))
+                        .fg(Color::Indexed(31)),
                 ),
             );
 

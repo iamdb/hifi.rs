@@ -367,7 +367,7 @@ impl Player {
     }
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
-    fn clock_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
+    async fn clock_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
         loop {
             if let Ok(quit) = quit_receiver.try_recv() {
                 if quit {
@@ -453,8 +453,8 @@ impl Player {
 
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
-        std::thread::spawn(move || {
-            cloned_self.clock_loop(quitter);
+        tokio::spawn(async move {
+            cloned_self.clock_loop(quitter).await;
         });
 
         let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
@@ -574,7 +574,10 @@ impl Player {
                         Action::PlayPause => self.play_pause(),
                         Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
                         Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
-                        Action::Stop => self.stop(),
+                        Action::Stop => {
+                            self.stop();
+                            self.state.quit();
+                        },
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward()
@@ -704,8 +707,6 @@ impl Controls {
             .send_async(Action::Stop)
             .await
             .expect("failed to send action");
-
-        self.state.quit();
     }
     pub async fn next(&self) {
         self.action_tx

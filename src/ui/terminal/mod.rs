@@ -4,43 +4,59 @@ use self::player::TrackList;
 use crate::{
     get_app,
     player::Controls,
+    qobuz::client::Client,
     state::{
         app::{AppKey, AppState, StateKey},
         Screen,
     },
-    ui::terminal::player::player,
+    ui::terminal::{
+        self,
+        player::{player, Item},
+    },
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
-use std::{io::Stdout, sync::Arc, thread, time::Duration};
+use std::{char, io::Stdout, sync::Arc, thread, time::Duration};
 use termion::{
     event::Key,
     input::{MouseTerminal, TermRead},
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{select, sync::Mutex};
+use tokio::{
+    select,
+    sync::{broadcast::Receiver as BroadcastReceiver, Mutex},
+};
 use tokio_stream::StreamExt;
 use tui::{
     backend::{Backend, TermionBackend},
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    symbols::DOT,
-    text::Spans,
-    widgets::{Block, Tabs},
+    symbols::bar,
+    text::{Span, Spans, Text},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs},
     Frame, Terminal,
 };
 
-pub struct Tui {
+pub struct Tui<'t> {
     rx: Receiver<Event>,
     tx: Sender<Event>,
+    track_list: Arc<Mutex<TrackList<'t>>>,
+    app_state: AppState,
+    controls: Controls,
+    no_tui: bool,
+    terminal: Console,
+    show_search: bool,
+    search_query: Vec<char>,
+    search_results: Arc<Mutex<TrackList<'t>>>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 
 pub enum Event {
     Input(Key),
+    Tick,
 }
 
 #[derive(Debug, Snafu)]
@@ -57,45 +73,46 @@ impl From<std::io::Error> for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn new() -> Tui {
+pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<Tui<'t>> {
+    let stdout = std::io::stdout();
+    let stdout = stdout.into_raw_mode()?;
+    let stdout = MouseTerminal::from(stdout);
+    let stdout = AlternateScreen::from(stdout);
+    let backend = TermionBackend::new(stdout);
+    let terminal = Terminal::new(backend).unwrap();
+
     let (tx, rx) = flume::bounded(1);
 
-    Tui { rx, tx }
+    Ok(Tui {
+        rx,
+        tx,
+        track_list: Arc::new(Mutex::new(TrackList::new(None))),
+        app_state,
+        controls,
+        no_tui,
+        terminal,
+        show_search: false,
+        search_query: Vec::new(),
+        search_results: Arc::new(Mutex::new(TrackList::new(None))),
+    })
 }
 
-impl Tui {
-    pub async fn start(&self, app_state: AppState, controls: Controls, no_tui: bool) -> Result<()> {
-        let track_list = Arc::new(Mutex::new(TrackList::new(None)));
-
-        if !no_tui {
-            let stdout = std::io::stdout();
-            let stdout = stdout.into_raw_mode()?;
-            let stdout = MouseTerminal::from(stdout);
-            let stdout = AlternateScreen::from(stdout);
-            let backend = TermionBackend::new(stdout);
-            let terminal = Terminal::new(backend).unwrap();
-
-            let cloned_tracklist = track_list.clone();
-            let cloned_state = app_state.clone();
-
-            tokio::spawn(async move {
-                render_loop(cloned_state, cloned_tracklist, terminal).await;
-            });
-
+impl<'t> Tui<'t> {
+    pub async fn start(&mut self, client: Client) -> Result<()> {
+        if !self.no_tui {
             let event_sender = self.tx.clone();
             let event_receiver = self.rx.clone();
-            event_loop(
+            self.event_loop(
+                client,
                 event_sender,
                 event_receiver,
-                track_list,
-                controls.clone(),
-                app_state,
+                self.app_state.quitter(),
             )
             .await;
         } else {
-            let mut quitter = app_state.quitter();
+            let mut quitter = self.app_state.quitter();
 
-            let state = app_state.clone();
+            let state = self.app_state.clone();
             ctrlc::set_handler(move || {
                 state.quit();
                 std::process::exit(0);
@@ -111,70 +128,139 @@ impl Tui {
                 }
                 std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
-        }
+        };
 
         Ok(())
     }
-}
-
-async fn event_loop(
-    event_sender: Sender<Event>,
-    event_receiver: Receiver<Event>,
-    track_list: Arc<Mutex<TrackList<'static>>>,
-    controls: Controls,
-    app_state: AppState,
-) {
-    thread::spawn(move || {
-        let stdin = std::io::stdin();
-        for key in stdin.keys().flatten() {
-            debug!("key pressed {:?}", key);
-            if let Err(err) = event_sender.send(Event::Input(key)) {
-                eprintln!("{}", err);
-                return;
+    async fn event_loop(
+        &mut self,
+        client: Client,
+        event_sender: Sender<Event>,
+        event_receiver: Receiver<Event>,
+        mut quitter: BroadcastReceiver<bool>,
+    ) {
+        let tx = event_sender.clone();
+        thread::spawn(move || {
+            let stdin = std::io::stdin();
+            for key in stdin.keys().flatten() {
+                debug!("key pressed {:?}", key);
+                if let Err(err) = event_sender.send(Event::Input(key)) {
+                    eprintln!("{}", err);
+                    return;
+                }
             }
-        }
-    });
+        });
 
-    let mut event_stream = event_receiver.stream();
-    let mut quitter = app_state.quitter();
-
-    loop {
-        select! {
-            Ok(quit) = quitter.recv() => {
+        thread::spawn(move || loop {
+            if let Ok(quit) = quitter.try_recv() {
                 if quit {
-                    debug!("quitting");
                     break;
                 }
             }
-            Some(event) = event_stream.next() => {
-                let Event::Input(key) = event;
+            tx.send(Event::Tick).expect("failed to send tick");
+            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+        });
 
-                if key == Key::Char('1') {
-                    app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::NowPlaying);
-                } else if key == Key::Char('2') {
-                    app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+        let mut event_stream = event_receiver.stream();
+
+        loop {
+            select! {
+                Some(event) = event_stream.next() => {
+                    match event {
+                       Event::Input(key) => {
+                            if self.show_search {
+                                let mut search_results = self.search_results.lock().await;
+
+                                match key {
+                                    Key::Char('\n') => {
+                                        let query = self.search_query.drain(..).map(|q| q.to_string()).collect::<Vec<String>>().join("");
+
+                                        if let Ok(results) = client.search_albums(query, Some(100)).await {
+                                            let size = self.terminal.size().unwrap().width as usize;
+                                            let items: Vec<Item> = results.albums.item_list(size, false);
+
+                                            search_results.set_items(items);
+                                            self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+                                        }
+
+                                        self.show_search = false;
+                                    }
+                                    Key::Char(c) => {
+                                        self.search_query.push(c)
+                                    }
+                                    Key::Backspace => {
+                                        self.search_query.pop();
+                                    }
+                                    Key::Esc => {
+                                        self.show_search = false;
+                                    }
+                                    _ => ()
+                                }
+                            } else {
+                                match key {
+                                    Key::Char('1') => {
+                                        self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::NowPlaying);
+                                    }
+                                    Key::Char('2') =>  {
+                                        self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+                                    }
+                                    Key::Char('q') => {
+                                        self.controls.stop().await;
+                                        return;
+                                    },
+                                    Key::Char('/') => {
+                                        self.show_search = true;
+                                    }
+                                    _ => {
+                                        let app_tree = self.app_state.app.clone();
+                                        if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
+                                            match active_screen {
+                                                Screen::NowPlaying => {
+                                                    player::key_events(event, self.controls.clone(), self.track_list.clone()).await;
+                                                },
+                                                Screen::Search => {
+                                                    let mut search_results = self.search_results.lock().await;
+
+                                                    match event {
+                                                       Event::Input(key) => {
+                                                            match key {
+                                                                Key::Up => {
+                                                                    search_results.previous();
+                                                                }
+                                                                Key::Down => {
+                                                                    search_results.next();
+                                                                }
+                                                                Key::Char('\n') => {
+                                                                    if let Some(selected) = search_results.selected() {
+                                                                        if let Some(_album) = search_results.items.get(selected) {
+
+                                                                        }
+                                                                    }
+                                                                }
+                                                                _ => ()
+                                                            }
+                                                        }
+                                                        Event::Tick => ()
+                                                    }
+                                                    debug!("search key events");
+                                                },
+                                            }
+                                        };
+                                    }
+                                }
+                            }
+
+                        }
+                        Event::Tick => {
+                            self.render().await;
+                        }
+                    }
                 }
-
-                player::key_events(event, controls.clone(), track_list.clone()).await;
             }
         }
     }
-}
-async fn render_loop(
-    state: AppState,
-    track_list: Arc<Mutex<TrackList<'_>>>,
-    mut terminal: Console,
-) {
-    let mut quitter = state.quitter();
-
-    loop {
-        if let Ok(quit) = quitter.try_recv() {
-            if quit {
-                break;
-            }
-        }
-
-        let app_tree = state.app.clone();
+    async fn render(&mut self) {
+        let app_tree = self.app_state.app.clone();
         let screen = if let Some(saved_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
             saved_screen
         } else {
@@ -192,46 +278,51 @@ async fn render_loop(
 
         match screen {
             Screen::NowPlaying => {
-                let mut list = track_list.lock().await;
-                if let Some(items) = state
+                let mut list = self.track_list.lock().await;
+                if let Some(items) = self
+                    .app_state
                     .player
-                    .item_list(terminal.size().unwrap().width as usize - 2)
+                    .item_list(self.terminal.size().unwrap().width as usize - 2)
                 {
                     list.set_items(items);
                 }
 
-                terminal
+                self.terminal
                     .draw(|f| {
                         let split_layout = layout.split(f.size());
-                        player(f, split_layout[0], state.clone(), list.items.is_empty());
 
-                        crate::ui::terminal::player::track_list(f, list.clone(), split_layout[1]);
+                        player(f, split_layout[0], self.app_state.clone());
+
+                        if self.show_search {
+                            search_popup(f, self.search_query.clone());
+                        } else {
+                            terminal::player::track_list(f, list.clone(), split_layout[1]);
+                        }
 
                         tabs(0, f, split_layout[2]);
                     })
                     .expect("failed to draw terminal screen");
             }
             Screen::Search => {
-                let mut list = track_list.lock().await;
-                if let Some(items) = state
-                    .player
-                    .item_list(terminal.size().unwrap().width as usize - 2)
-                {
-                    list.set_items(items);
-                }
+                let list = self.search_results.lock().await;
 
-                terminal
+                self.terminal
                     .draw(|f| {
                         let split_layout = layout.split(f.size());
 
-                        player(f, split_layout[0], state.clone(), list.items.is_empty());
+                        player(f, split_layout[0], self.app_state.clone());
+
+                        if self.show_search {
+                            search_popup(f, self.search_query.clone());
+                        } else {
+                            terminal::player::track_list(f, list.clone(), split_layout[1]);
+                        }
 
                         tabs(1, f, split_layout[2]);
                     })
                     .expect("failed to draw terminal screen");
             }
         }
-        std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
     }
 }
 
@@ -250,17 +341,73 @@ where
         })
         .collect();
 
+    let mut bar = Span::from(bar::FULL);
+    bar.style = Style::default().fg(Color::Indexed(236));
+
     let tabs = Tabs::new(titles)
         .block(Block::default().style(Style::default().bg(Color::Indexed(235))))
         .style(Style::default().fg(Color::White))
         .highlight_style(
             Style::default()
-                .bg(Color::Cyan)
+                .bg(Color::Indexed(81))
                 .fg(Color::Indexed(235))
                 .add_modifier(Modifier::BOLD),
         )
-        .divider(DOT)
+        .divider(bar)
         .select(num);
 
     f.render_widget(tabs, rect);
+}
+
+fn search_popup<B>(f: &mut Frame<B>, search_query: Vec<char>)
+where
+    B: Backend,
+{
+    let block = Block::default()
+        .title("Search")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Indexed(250)));
+
+    let p = Paragraph::new(Text::from(Spans::from(
+        search_query
+            .iter()
+            .map(|c| Span::from(c.to_string()))
+            .collect::<Vec<Span>>(),
+    )))
+    .block(block);
+
+    let area = centered_rect(60, 10, f.size());
+
+    f.render_widget(Clear, area);
+    f.render_widget(p, area);
+    f.set_cursor(area.x + 1 + search_query.len() as u16, area.y + 1);
+}
+
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+/// https://github.com/fdehau/tui-rs/blob/master/examples/popup.rs
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(percent_y),
+                Constraint::Percentage((100 - percent_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage(percent_x),
+                Constraint::Percentage((100 - percent_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }

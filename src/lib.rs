@@ -104,8 +104,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     let controls = player.controls();
                     controls.play().await;
 
-                    let tui = ui::terminal::new();
-                    tui.start(app_state, controls, no_tui).await?;
+                    let mut tui = ui::terminal::new(app_state, controls, no_tui)?;
+                    tui.start(client).await?;
                 }
             } else {
                 return Err(Error::PlayerError {
@@ -158,8 +158,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 if let Ok(album) = client.album(selected_album.id).await {
                     player.play_album(album, quality).await;
 
-                    let tui = ui::terminal::new();
-                    tui.start(app_state, player.controls(), false).await?;
+                    let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
+                    tui.start(client).await?;
                 }
             }
 
@@ -253,8 +253,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.setup(false).await;
             player.play_track(track, quality.unwrap()).await;
 
-            let tui = ui::terminal::new();
-            tui.start(app_state, player.controls(), false).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
+            tui.start(client).await?;
 
             Ok(())
         }
@@ -281,8 +281,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             player.play_album(album, quality).await;
 
-            let tui = ui::terminal::new();
-            tui.start(app_state, player.controls(), no_tui).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
+            tui.start(client).await?;
 
             Ok(())
         }
