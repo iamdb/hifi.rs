@@ -23,13 +23,13 @@ use termion::{
 use tokio::{select, sync::Mutex};
 use tokio_stream::StreamExt;
 use tui::{
-    backend::TermionBackend,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
+    backend::{Backend, TermionBackend},
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
     symbols::DOT,
     text::Spans,
-    widgets::{Block, Borders, Tabs},
-    Terminal,
+    widgets::{Block, Tabs},
+    Frame, Terminal,
 };
 
 pub struct Tui {
@@ -186,14 +186,37 @@ async fn render_loop(
             .constraints([
                 Constraint::Length(6),
                 Constraint::Min(4),
-                Constraint::Length(4),
+                Constraint::Length(1),
             ])
             .margin(0);
 
         match screen {
             Screen::NowPlaying => {
                 let mut list = track_list.lock().await;
-                if let Some(items) = state.player.item_list() {
+                if let Some(items) = state
+                    .player
+                    .item_list(terminal.size().unwrap().width as usize - 2)
+                {
+                    list.set_items(items);
+                }
+
+                terminal
+                    .draw(|f| {
+                        let split_layout = layout.split(f.size());
+                        player(f, split_layout[0], state.clone(), list.items.is_empty());
+
+                        crate::ui::terminal::player::track_list(f, list.clone(), split_layout[1]);
+
+                        tabs(0, f, split_layout[2]);
+                    })
+                    .expect("failed to draw terminal screen");
+            }
+            Screen::Search => {
+                let mut list = track_list.lock().await;
+                if let Some(items) = state
+                    .player
+                    .item_list(terminal.size().unwrap().width as usize - 2)
+                {
                     list.set_items(items);
                 }
 
@@ -201,24 +224,9 @@ async fn render_loop(
                     .draw(|f| {
                         let split_layout = layout.split(f.size());
 
-                        player(f, split_layout[0], state.clone());
+                        player(f, split_layout[0], state.clone(), list.items.is_empty());
 
-                        crate::ui::terminal::player::track_list(f, list.clone(), split_layout[1]);
-
-                        let tabs = tabs(0);
-                        f.render_widget(tabs, split_layout[2]);
-                    })
-                    .expect("failed to draw terminal screen");
-            }
-            Screen::Search => {
-                terminal
-                    .draw(|f| {
-                        let split_layout = layout.split(f.size());
-
-                        player(f, split_layout[0], state.clone());
-
-                        let tabs = tabs(1);
-                        f.render_widget(tabs, split_layout[2]);
+                        tabs(1, f, split_layout[2]);
                     })
                     .expect("failed to draw terminal screen");
             }
@@ -227,17 +235,32 @@ async fn render_loop(
     }
 }
 
-fn tabs<'a>(num: usize) -> Tabs<'a> {
-    let titles = ["[1] Now Playing", "[2] Search"]
+fn tabs<B>(num: usize, f: &mut Frame<B>, rect: Rect)
+where
+    B: Backend,
+{
+    let padding = (rect.width as usize / 2) - 4;
+
+    let titles = ["Now Playing", "Search"]
         .iter()
         .cloned()
-        .map(Spans::from)
+        .map(|t| {
+            let text = format!("{:^padding$}", t);
+            Spans::from(text)
+        })
         .collect();
 
-    Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL))
+    let tabs = Tabs::new(titles)
+        .block(Block::default().style(Style::default().bg(Color::Indexed(235))))
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::Yellow))
+        .highlight_style(
+            Style::default()
+                .bg(Color::Cyan)
+                .fg(Color::Indexed(235))
+                .add_modifier(Modifier::BOLD),
+        )
         .divider(DOT)
-        .select(num)
+        .select(num);
+
+    f.render_widget(tabs, rect);
 }
