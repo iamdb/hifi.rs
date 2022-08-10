@@ -450,8 +450,21 @@ impl Player {
         }
     }
     /// Sets up basic functionality for the player.
-    pub async fn setup(&self, resume: bool) {
+    pub async fn setup(&mut self, resume: bool) {
         mpris::init(self.controls.clone()).await;
+
+        if resume {
+            let tree = self.state.player.clone();
+            if let Some(playlist) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
+                self.playlist = Arc::new(RwLock::new(playlist));
+            }
+
+            if let Some(prev_playlist) =
+                get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+            {
+                self.playlist_previous = Arc::new(RwLock::new(prev_playlist));
+            }
+        }
 
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
