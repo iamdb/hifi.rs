@@ -1,8 +1,8 @@
 use crate::{
-    get_player, mpris,
+    action, get_player, mpris,
     qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
     state::{
-        app::{AppKey, AppState, PlayerKey},
+        app::{AppState, PlayerKey, StateKey},
         AudioQuality, ClockValue, FloatValue, PlaylistValue, StatusValue,
     },
     REFRESH_RESOLUTION,
@@ -38,6 +38,8 @@ pub enum Action {
     SkipTo { num: usize },
     JumpForward,
     JumpBackward,
+    PlayAlbum { album: Box<Album> },
+    Clear,
 }
 
 /// A player handles playing media to a device.
@@ -145,7 +147,7 @@ impl Player {
             Ok(_) => {
                 self.state
                     .player
-                    .insert::<String, ClockValue>(AppKey::Player(PlayerKey::Position), time);
+                    .insert::<String, ClockValue>(StateKey::Player(PlayerKey::Position), time);
 
                 Ok(())
             }
@@ -155,6 +157,7 @@ impl Player {
             }
         }
     }
+    /// Retreive controls for the player.
     pub fn controls(&self) -> Controls {
         self.controls.clone()
     }
@@ -189,13 +192,13 @@ impl Player {
             if current_position.seconds() < 10 {
                 match self.seek(ClockTime::default().into(), None) {
                     Ok(_) => self.app_state().player.insert::<String, ClockValue>(
-                        AppKey::Player(PlayerKey::Position),
+                        StateKey::Player(PlayerKey::Position),
                         ClockTime::default().into(),
                     ),
                     Err(error) => {
                         error!("{:?}", error);
                         self.app_state().player.insert::<String, ClockValue>(
-                            AppKey::Player(PlayerKey::Position),
+                            StateKey::Player(PlayerKey::Position),
                             current_position.into(),
                         )
                     }
@@ -205,13 +208,13 @@ impl Player {
                 let seek_position = current_position - ten_seconds;
                 match self.seek(seek_position.into(), None) {
                     Ok(_) => self.app_state().player.insert::<String, ClockValue>(
-                        AppKey::Player(PlayerKey::Position),
+                        StateKey::Player(PlayerKey::Position),
                         seek_position.into(),
                     ),
                     Err(error) => {
                         error!("{:?}", error);
                         self.app_state().player.insert::<String, ClockValue>(
-                            AppKey::Player(PlayerKey::Position),
+                            StateKey::Player(PlayerKey::Position),
                             current_position.into(),
                         )
                     }
@@ -249,17 +252,17 @@ impl Player {
                 self.ready();
 
                 self.state.player.insert::<String, PlaylistTrack>(
-                    AppKey::Player(PlayerKey::NextUp),
+                    StateKey::Player(PlayerKey::NextUp),
                     next_track_to_play,
                 );
 
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::Playlist),
+                    StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
 
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::PreviousPlaylist),
+                    StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
 
@@ -317,16 +320,16 @@ impl Player {
                 self.ready();
 
                 self.state.player.insert::<String, PlaylistTrack>(
-                    AppKey::Player(PlayerKey::NextUp),
+                    StateKey::Player(PlayerKey::NextUp),
                     next_track_to_play,
                 );
 
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::Playlist),
+                    StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::PreviousPlaylist),
+                    StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
 
@@ -366,7 +369,7 @@ impl Player {
     }
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
-    fn clock_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
+    async fn clock_loop(&self, mut quit_receiver: BroadcastReceiver<bool>) {
         loop {
             if let Ok(quit) = quit_receiver.try_recv() {
                 if quit {
@@ -383,13 +386,13 @@ impl Player {
 
                 if let Some(position) = pos {
                     state.player.insert::<String, ClockValue>(
-                        AppKey::Player(PlayerKey::Position),
+                        StateKey::Player(PlayerKey::Position),
                         position.into(),
                     );
 
                     if let Some(duration) = dur {
                         state.player.insert::<String, ClockValue>(
-                            AppKey::Player(PlayerKey::Duration),
+                            StateKey::Player(PlayerKey::Duration),
                             duration.into(),
                         );
 
@@ -397,11 +400,11 @@ impl Player {
                             let remaining = duration - position;
                             let progress = position.seconds() as f64 / duration.seconds() as f64;
                             state.player.insert::<String, FloatValue>(
-                                AppKey::Player(PlayerKey::Progress),
+                                StateKey::Player(PlayerKey::Progress),
                                 progress.into(),
                             );
                             state.player.insert::<String, ClockValue>(
-                                AppKey::Player(PlayerKey::DurationRemaining),
+                                StateKey::Player(PlayerKey::DurationRemaining),
                                 remaining.into(),
                             );
                         }
@@ -429,19 +432,19 @@ impl Player {
             next_track.set_track_url(track_url);
 
             self.state.player.insert::<String, PlaylistTrack>(
-                AppKey::Player(PlayerKey::NextUp),
+                StateKey::Player(PlayerKey::NextUp),
                 next_track.clone(),
             );
 
             self.state.player.insert::<String, PlaylistValue>(
-                AppKey::Player(PlayerKey::Playlist),
+                StateKey::Player(PlayerKey::Playlist),
                 self.playlist.read().await.clone(),
             );
 
             self.play();
 
             self.state.player.insert::<String, StatusValue>(
-                AppKey::Player(PlayerKey::Status),
+                StateKey::Player(PlayerKey::Status),
                 gst::State::Playing.into(),
             );
         }
@@ -452,8 +455,8 @@ impl Player {
 
         let cloned_self = self.clone();
         let quitter = self.app_state().quitter();
-        std::thread::spawn(move || {
-            cloned_self.clock_loop(quitter);
+        tokio::spawn(async move {
+            cloned_self.clock_loop(quitter).await;
         });
 
         let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
@@ -506,17 +509,18 @@ impl Player {
 
                 next_track.set_track_url(next_playlist_track_url.clone());
 
-                self.state
-                    .player
-                    .insert::<String, PlaylistTrack>(AppKey::Player(PlayerKey::NextUp), next_track);
+                self.state.player.insert::<String, PlaylistTrack>(
+                    StateKey::Player(PlayerKey::NextUp),
+                    next_track,
+                );
 
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::Playlist),
+                    StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
 
                 self.state.player.insert::<String, PlaylistValue>(
-                    AppKey::Player(PlayerKey::PreviousPlaylist),
+                    StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
 
@@ -572,10 +576,32 @@ impl Player {
                         Action::PlayPause => self.play_pause(),
                         Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
                         Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
-                        Action::Stop => self.stop(),
+                        Action::Stop => {
+                            self.stop();
+                            self.state.quit();
+                        },
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::JumpForward => self.jump_forward(),
-                        Action::JumpBackward => self.jump_backward()
+                        Action::JumpBackward => self.jump_backward(),
+                        Action::Clear => {
+                            if self.is_playing() {
+                                self.stop();
+                            }
+
+                            self.playlist.write().await.clear();
+                            self.playlist_previous.write().await.clear();
+                            self.state.player.clear();
+                        }
+                        Action::PlayAlbum { album } => {
+                            let default_quality = self.client.default_quality.clone();
+
+                            let client = self.client.clone();
+
+                            let mut album = *album;
+                            album.attach_tracks(client).await;
+
+                            self.play_album(album, default_quality).await;
+                        }
                     }
                 }
                 Some(msg) = messages.next() => {
@@ -594,7 +620,7 @@ impl Player {
                             // When a stream starts, add the new track duration
                             // from the player to the state.
                             if let Some(next_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-                               state.player.insert::<String, ClockValue>(AppKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
+                               state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
                             }
                         }
                         MessageView::AsyncDone(_) => {
@@ -627,15 +653,15 @@ impl Player {
                                 match current_state {
                                     GstState::Playing => {
                                         debug!("player state changed to Playing");
-                                        self.state.player.insert::<String, StatusValue>(AppKey::Player(PlayerKey::Status),GstState::Playing.into());
+                                        self.state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
                                     }
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
-                                        self.state.player.insert::<String, StatusValue>(AppKey::Player(PlayerKey::Status),GstState::Paused.into());
+                                        self.state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
                                     }
                                     GstState::Ready => {
                                         debug!("player state changed to Ready");
-                                        self.state.player.insert::<String, StatusValue>(AppKey::Player(PlayerKey::Status),GstState::Ready.into());
+                                        self.state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
                                     }
                                     _ => (),
                                 }
@@ -680,60 +706,42 @@ impl Controls {
         self.action_rx.clone()
     }
     pub async fn play(&self) {
-        self.action_tx
-            .send_async(Action::Play)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Play);
     }
     pub async fn pause(&self) {
-        self.action_tx
-            .send_async(Action::Pause)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Pause);
     }
     pub async fn play_pause(&self) {
-        self.action_tx
-            .send_async(Action::PlayPause)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::PlayPause);
     }
     pub async fn stop(&self) {
-        self.action_tx
-            .send_async(Action::Stop)
-            .await
-            .expect("failed to send action");
-
-        self.state.quit();
+        action!(self, Action::Stop);
     }
     pub async fn next(&self) {
-        self.action_tx
-            .send_async(Action::Next)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Next);
     }
     pub async fn previous(&self) {
-        self.action_tx
-            .send_async(Action::Previous)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::Previous);
     }
     pub async fn skip_to(&self, num: usize) {
-        self.action_tx
-            .send_async(Action::SkipTo { num })
-            .await
-            .expect("failed to send action");
+        action!(self, Action::SkipTo { num });
     }
     pub async fn jump_forward(&self) {
-        self.action_tx
-            .send_async(Action::JumpForward)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::JumpForward);
     }
     pub async fn jump_backward(&self) {
-        self.action_tx
-            .send_async(Action::JumpBackward)
-            .await
-            .expect("failed to send action");
+        action!(self, Action::JumpBackward);
+    }
+    pub async fn play_album(&self, album: Album) {
+        action!(
+            self,
+            Action::PlayAlbum {
+                album: Box::new(album)
+            }
+        );
+    }
+    pub async fn clear(&self) {
+        action!(self, Action::Clear);
     }
     pub async fn position(&self) -> Option<ClockValue> {
         let tree = self.state.player.clone();
@@ -750,4 +758,15 @@ impl Controls {
 
         get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
     }
+}
+
+#[macro_export]
+macro_rules! action {
+    ($self:ident, $action:expr) => {
+        $self
+            .action_tx
+            .send_async($action)
+            .await
+            .expect("failed to send action");
+    };
 }

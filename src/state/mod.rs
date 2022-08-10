@@ -1,10 +1,9 @@
 pub mod app;
 
 use crate::qobuz::PlaylistTrack;
-use crate::state::app::PlayerKey;
+use crate::state::app::{PlayerKey, StateKey};
 use crate::ui::terminal::player::Item;
 
-use self::app::AppKey;
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
@@ -15,7 +14,8 @@ use std::collections::VecDeque;
 use std::fmt::Display;
 use std::ops::RangeBounds;
 use std::str::FromStr;
-use tui::style::{Modifier, Style};
+use tui::style::{Color, Modifier, Style};
+use tui::text::Text;
 use tui::widgets::ListItem;
 
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ impl StateTree {
     pub fn clear(&self) {
         self.db.clear().expect("failed to clear tree");
     }
-    pub fn insert<K, T>(&self, key: AppKey, value: T)
+    pub fn insert<K, T>(&self, key: StateKey, value: T)
     where
         K: FromStr,
         T: Serialize,
@@ -52,7 +52,7 @@ impl StateTree {
             self.db.insert(key.as_str(), serialized).unwrap();
         }
     }
-    pub fn get<'a, K, T>(&self, key: AppKey) -> Option<T>
+    pub fn get<'a, K, T>(&self, key: StateKey) -> Option<T>
     where
         K: FromStr,
         T: Into<T> + From<Bytes> + Deserialize<'a>,
@@ -67,30 +67,14 @@ impl StateTree {
             None
         }
     }
-    pub fn item_list(&self) -> Option<Vec<Item<'static>>> {
+    pub fn item_list(&self, max_width: usize) -> Option<Vec<Item<'static>>> {
         if let Some(playlist) = crate::get_player!(PlayerKey::Playlist, self, PlaylistValue) {
-            let mut items = playlist
-                .into_iter()
-                .map(|t| {
-                    let title = t.track.title;
-                    ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
-                        .style(Style::default())
-                        .into()
-                })
-                .collect::<Vec<Item>>();
+            let mut items = playlist.item_list(max_width, false);
 
             if let Some(prev_playlist) =
                 crate::get_player!(PlayerKey::PreviousPlaylist, self, PlaylistValue)
             {
-                let mut prev_items = prev_playlist
-                    .into_iter()
-                    .map(|t| {
-                        let title = t.track.title;
-                        ListItem::new(format!(" {:02}  {}", t.track.track_number, title))
-                            .style(Style::default().add_modifier(Modifier::DIM))
-                            .into()
-                    })
-                    .collect::<Vec<Item>>();
+                let mut prev_items = prev_playlist.item_list(max_width, true);
 
                 items.append(&mut prev_items);
             }
@@ -105,15 +89,55 @@ impl StateTree {
 #[macro_export]
 macro_rules! get_client {
     ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(AppKey::Client($tree_key))
+        $tree.get::<String, $value_type>(StateKey::Client($tree_key))
     };
 }
 
 #[macro_export]
 macro_rules! get_player {
     ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(AppKey::Player($tree_key))
+        $tree.get::<String, $value_type>(StateKey::Player($tree_key))
     };
+}
+
+#[macro_export]
+macro_rules! get_app {
+    ($tree_key:path, $tree:ident, $value_type:ty) => {
+        $tree.get::<String, $value_type>(StateKey::App($tree_key))
+    };
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum Screen {
+    NowPlaying,
+    Search,
+}
+
+impl Screen {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Screen::NowPlaying => "now_playing",
+            Screen::Search => "search",
+        }
+    }
+}
+
+impl From<Bytes> for Screen {
+    fn from(bytes: Bytes) -> Self {
+        let deserialized: Screen =
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
+
+        deserialized
+    }
+}
+
+impl From<Screen> for Bytes {
+    fn from(screen: Screen) -> Self {
+        bincode::serialize(&screen)
+            .expect("failed to serialize string value")
+            .into()
+    }
 }
 
 /// A wrapper for string values
@@ -360,6 +384,30 @@ impl IntoIterator for PlaylistValue {
 impl PlaylistValue {
     pub fn new() -> PlaylistValue {
         PlaylistValue(VecDeque::new())
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
+        self.into_iter()
+            .map(|t| {
+                let title = textwrap::wrap(
+                    format!("{:02} {}", t.track.track_number, t.track.title).as_str(),
+                    max_width,
+                )
+                .join("\n   ");
+
+                let mut style = Style::default().fg(Color::White);
+
+                if dim {
+                    style = style.add_modifier(Modifier::DIM);
+                }
+
+                ListItem::new(Text::raw(title)).style(style).into()
+            })
+            .collect::<Vec<Item>>()
     }
 
     pub fn vec(&self) -> VecDeque<PlaylistTrack> {

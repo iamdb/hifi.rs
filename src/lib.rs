@@ -9,7 +9,7 @@ use crate::{
         PlaylistTrack,
     },
     state::{
-        app::{AppKey, AppState, ClientKey, PlayerKey},
+        app::{AppState, ClientKey, PlayerKey, StateKey},
         AudioQuality, PlaylistValue, StringValue,
     },
 };
@@ -104,8 +104,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     let controls = player.controls();
                     controls.play().await;
 
-                    let tui = ui::terminal::new();
-                    tui.start(app_state, controls, no_tui).await?;
+                    let mut tui = ui::terminal::new(app_state, controls, no_tui)?;
+                    tui.start(client, None).await?;
                 }
             } else {
                 return Err(Error::PlayerError {
@@ -158,8 +158,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 if let Ok(album) = client.album(selected_album.id).await {
                     player.play_album(album, quality).await;
 
-                    let tui = ui::terminal::new();
-                    tui.start(app_state, player.controls(), false).await?;
+                    let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
+                    tui.start(client, None).await?;
                 }
             }
 
@@ -185,11 +185,22 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             query,
             limit,
             output_format,
+            no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.search_albums(query, limit).await?;
 
-            output!(results, output_format);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let player = player::new(app_state.clone(), client.clone());
+
+                player.setup(false).await;
+
+                let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
+                tui.start(client, Some(results)).await?;
+            }
+
             Ok(())
         }
         Commands::GetAlbum { id, output_format } => {
@@ -253,8 +264,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.setup(false).await;
             player.play_track(track, quality.unwrap()).await;
 
-            let tui = ui::terminal::new();
-            tui.start(app_state, player.controls(), false).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
+            tui.start(client, None).await?;
 
             Ok(())
         }
@@ -281,8 +292,8 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
 
             player.play_album(album, quality).await;
 
-            let tui = ui::terminal::new();
-            tui.start(app_state, player.controls(), no_tui).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
+            tui.start(client, None).await?;
 
             Ok(())
         }
@@ -294,7 +305,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     .expect("failed to get username");
 
                 app_state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::Username),
+                    StateKey::Client(ClientKey::Username),
                     username.into(),
                 );
 
@@ -313,7 +324,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 debug!("saving password to database: {}", md5_pw);
 
                 app_state.config.insert::<String, StringValue>(
-                    AppKey::Client(ClientKey::Password),
+                    StateKey::Client(ClientKey::Password),
                     md5_pw.into(),
                 );
 
@@ -323,7 +334,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             }
             ConfigCommands::DefaultQuality { quality } => {
                 app_state.config.insert::<String, AudioQuality>(
-                    AppKey::Client(ClientKey::DefaultQuality),
+                    StateKey::Client(ClientKey::DefaultQuality),
                     quality,
                 );
 

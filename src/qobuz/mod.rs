@@ -3,8 +3,13 @@ pub mod client;
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 use sled::IVec;
+use tui::{
+    style::{Color, Modifier, Style},
+    text::Text,
+    widgets::ListItem,
+};
 
-use crate::{state::AudioQuality, state::Bytes};
+use crate::{qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::player::Item};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {
@@ -72,6 +77,29 @@ pub struct Albums {
     pub offset: i64,
     pub total: i64,
     pub items: Vec<Album>,
+}
+
+impl Albums {
+    pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
+        self.items
+            .into_iter()
+            .map(|t| {
+                let title = textwrap::wrap(
+                    format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
+                    max_width,
+                )
+                .join("\n  ");
+
+                let mut style = Style::default().fg(Color::White);
+
+                if dim {
+                    style = style.add_modifier(Modifier::DIM);
+                }
+
+                ListItem::new(Text::raw(title)).style(style).into()
+            })
+            .collect::<Vec<Item>>()
+    }
 }
 
 impl From<Albums> for Vec<Vec<String>> {
@@ -244,6 +272,11 @@ impl Album {
                 .map(|i| PlaylistTrack::new(i.clone(), Some(quality.clone()), Some(self.clone())))
                 .collect::<Vec<PlaylistTrack>>()
         })
+    }
+    pub async fn attach_tracks(&mut self, client: Client) {
+        if let Ok(album) = client.album(self.id.clone()).await {
+            self.tracks = album.tracks;
+        }
     }
 }
 
