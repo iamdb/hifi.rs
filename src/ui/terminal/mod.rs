@@ -9,6 +9,7 @@ use crate::{
         app::{AppKey, AppState, StateKey},
         Screen,
     },
+    switch_screen,
     ui::terminal::{
         self,
         player::{player, Item},
@@ -84,6 +85,15 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
 
     let (tx, rx) = flume::bounded(1);
 
+    #[macro_export]
+    macro_rules! switch_screen {
+        ($app_state:expr, $screen:path) => {
+            $app_state
+                .app
+                .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), $screen);
+        };
+    }
+
     Ok(Tui {
         album_results: None,
         app_state,
@@ -100,10 +110,32 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
 }
 
 impl<'t> Tui<'t> {
-    pub async fn start(&mut self, client: Client) -> Result<()> {
+    pub async fn start(
+        &mut self,
+        client: Client,
+        results: Option<AlbumSearchResults>,
+    ) -> Result<()> {
         if !self.no_tui {
             let event_sender = self.tx.clone();
             let event_receiver = self.rx.clone();
+
+            if let Some(results) = results {
+                let items = results
+                    .albums
+                    .clone()
+                    .item_list(self.terminal.size().unwrap().width as usize, false);
+
+                let mut track_list = TrackList::new(Some(items));
+                track_list.select(0);
+
+                self.search_results = Arc::new(Mutex::new(track_list));
+                self.search_results.lock().await.select(0);
+                self.album_results = Some(results);
+                self.app_state
+                    .config
+                    .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+            }
+
             self.event_loop(
                 client,
                 event_sender,
@@ -203,10 +235,10 @@ impl<'t> Tui<'t> {
                             } else {
                                 match key {
                                     Key::Char('1') => {
-                                        self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::NowPlaying);
+                                        switch_screen!(self.app_state, Screen::NowPlaying);
                                     }
                                     Key::Char('2') =>  {
-                                        self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+                                        switch_screen!(self.app_state, Screen::Search);
                                     }
                                     Key::Char('q') => {
                                         self.controls.stop().await;
@@ -223,24 +255,26 @@ impl<'t> Tui<'t> {
                                                     player::key_events(event, self.controls.clone(), self.track_list.clone()).await;
                                                 },
                                                 Screen::Search => {
-                                                    let mut search_results = self.search_results.lock().await;
-
                                                     match event {
                                                        Event::Input(key) => {
                                                             match key {
                                                                 Key::Up => {
+                                                                    let mut search_results = self.search_results.lock().await;
                                                                     search_results.previous();
                                                                 }
                                                                 Key::Down => {
+                                                                    let mut search_results = self.search_results.lock().await;
                                                                     search_results.next();
                                                                 }
                                                                 Key::Char('\n') => {
+                                                                    let search_results = self.search_results.lock().await;
                                                                     if let Some(selected) = search_results.selected() {
                                                                         let album_results = self.album_results.clone();
                                                                         if let Some(results) = album_results {
                                                                             if let Some(album) = results.albums.items.get(selected) {
                                                                                 self.controls.clear().await;
                                                                                 self.controls.play_album(album.clone()).await;
+                                                                                switch_screen!(self.app_state, Screen::NowPlaying);
                                                                             };
                                                                         }
                                                                     }
@@ -340,7 +374,7 @@ where
 {
     let padding = (rect.width as usize / 2) - 4;
 
-    let titles = ["Now Playing", "Search"]
+    let titles = ["Now Playing", "Search Results"]
         .iter()
         .cloned()
         .map(|t| {
@@ -372,7 +406,7 @@ where
     B: Backend,
 {
     let block = Block::default()
-        .title("Search")
+        .title("Enter query")
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(Color::Indexed(250)));
@@ -419,3 +453,12 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         )
         .split(popup_layout[1])[1]
 }
+
+// #[macro_export]
+// macro_rules! switch_screen {
+//     ($app_state:expr, $screen:path) => {
+//         $app_state
+//             .app
+//             .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), $screen);
+//     };
+// }

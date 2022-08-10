@@ -105,7 +105,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     controls.play().await;
 
                     let mut tui = ui::terminal::new(app_state, controls, no_tui)?;
-                    tui.start(client).await?;
+                    tui.start(client, None).await?;
                 }
             } else {
                 return Err(Error::PlayerError {
@@ -159,7 +159,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     player.play_album(album, quality).await;
 
                     let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
-                    tui.start(client).await?;
+                    tui.start(client, None).await?;
                 }
             }
 
@@ -185,11 +185,22 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             query,
             limit,
             output_format,
+            no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.search_albums(query, limit).await?;
 
-            output!(results, output_format);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let player = player::new(app_state.clone(), client.clone());
+
+                player.setup(false).await;
+
+                let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
+                tui.start(client, Some(results)).await?;
+            }
+
             Ok(())
         }
         Commands::GetAlbum { id, output_format } => {
@@ -254,7 +265,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.play_track(track, quality.unwrap()).await;
 
             let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
-            tui.start(client).await?;
+            tui.start(client, None).await?;
 
             Ok(())
         }
@@ -282,7 +293,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             player.play_album(album, quality).await;
 
             let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
-            tui.start(client).await?;
+            tui.start(client, None).await?;
 
             Ok(())
         }

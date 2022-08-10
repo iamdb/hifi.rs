@@ -45,6 +45,8 @@ pub enum Commands {
         #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
         #[clap(long, short)]
+        no_tui: bool,
+        #[clap(long, short)]
         limit: Option<i32>,
     },
     /// Get information for a specific album.
