@@ -152,7 +152,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                     client.quality()
                 };
 
-                let player = player::new(app_state.clone(), client.clone());
+                let mut player = player::new(app_state.clone(), client.clone());
                 player.setup(false).await;
 
                 if let Ok(album) = client.album(selected_album.id).await {
@@ -193,8 +193,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(app_state.clone(), client.clone());
-
+                let mut player = player::new(app_state.clone(), client.clone());
                 player.setup(false).await;
 
                 let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
@@ -257,7 +256,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
         }
         Commands::StreamTrack { track_id, quality } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let player = player::new(app_state.clone(), client.clone());
+            let mut player = player::new(app_state.clone(), client.clone());
             let track = client.track(track_id).await?;
 
             app_state.player.clear();
@@ -278,7 +277,7 @@ pub async fn cli(command: Commands, app_state: AppState, creds: Credentials) -> 
                 .await
                 .expect("failed to create client");
 
-            let player = player::new(app_state.clone(), client.clone());
+            let mut player = player::new(app_state.clone(), client.clone());
             let album = client.album(album_id).await?;
 
             app_state.player.clear();
