@@ -180,7 +180,7 @@ impl StringValue {
 }
 
 /// A wrapper for gstreamer state values
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StatusValue(GstState);
 
 impl From<Bytes> for StatusValue {

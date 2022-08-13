@@ -166,7 +166,7 @@ impl<'t> Tui<'t> {
 
         Ok(())
     }
-    async fn event_loop(
+    async fn event_loop<'c>(
         &mut self,
         client: Client,
         event_sender: Sender<Event>,

@@ -150,7 +150,7 @@ impl<'t> TrackList<'t> {
     }
 }
 
-pub fn track_list<'a, B>(f: &mut Frame<B>, mut playlist: TrackList<'a>, area: Rect)
+pub fn track_list<B>(f: &mut Frame<B>, mut playlist: TrackList<'_>, area: Rect)
 where
     B: Backend,
 {
