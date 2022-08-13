@@ -113,9 +113,6 @@ impl<'t> Tui<'t> {
         results: Option<AlbumSearchResults>,
     ) -> Result<()> {
         if !self.no_tui {
-            let event_sender = self.tx.clone();
-            let event_receiver = self.rx.clone();
-
             if let Some(results) = results {
                 let items = results
                     .albums
@@ -133,7 +130,7 @@ impl<'t> Tui<'t> {
                     .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
             }
 
-            self.event_loop(client, event_sender, event_receiver).await;
+            self.event_loop(client).await;
         } else {
             let mut quitter = self.app_state.quitter();
 
@@ -157,13 +154,13 @@ impl<'t> Tui<'t> {
 
         Ok(())
     }
-    async fn event_loop<'c>(
-        &mut self,
-        client: Client,
-        event_sender: Sender<Event>,
-        event_receiver: Receiver<Event>,
-    ) {
-        let tx = event_sender.clone();
+    async fn tick(&self) {
+        if let Err(err) = self.tx.send_async(Event::Tick).await {
+            error!("error sending tick: {}", err.to_string());
+        }
+    }
+    async fn event_loop<'c>(&mut self, client: Client) {
+        let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || {
             let stdin = std::io::stdin();
@@ -176,11 +173,12 @@ impl<'t> Tui<'t> {
                 }
 
                 if let Err(err) = event_sender.send(Event::Input(key)) {
-                    error!("{:?}", err);
+                    error!("error sending key event: {}", err.to_string());
                 }
             }
         });
 
+        let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || loop {
             if let Ok(quit) = q.try_recv() {
@@ -188,22 +186,27 @@ impl<'t> Tui<'t> {
                     break;
                 }
             }
-            if let Err(err) = tx.send(Event::Tick) {
-                error!("{:?}", err);
+            if let Err(err) = event_sender.send(Event::Tick) {
+                error!("error sending tick: {}", err.to_string());
             }
             std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         });
 
+        let event_receiver = self.rx.clone();
         let mut event_stream = event_receiver.stream();
+        let mut quitter = self.app_state.quitter();
 
         loop {
             select! {
+                Ok(quit) = quitter.recv() => {
+                    if quit {
+                        break;
+                    }
+                }
                 Some(event) = event_stream.next() => {
                     match event {
                        Event::Input(key) => {
                             if self.show_search {
-                                let mut search_results = self.search_results.lock().await;
-
                                 match key {
                                     Key::Char('\n') => {
                                         let query = self.search_query.drain(..).map(|q| q.to_string()).collect::<Vec<String>>().join("");
@@ -211,9 +214,10 @@ impl<'t> Tui<'t> {
                                         if let Ok(results) = client.search_albums(query, Some(100)).await {
                                             self.album_results = Some(results.clone());
 
-                                            let size = self.terminal.size().unwrap().width as usize;
+                                            let size = self.terminal.size().expect("failed to get size of terminal").width as usize;
                                             let items: Vec<Item> = results.albums.item_list(size, false);
 
+                                            let mut search_results = self.search_results.lock().await;
                                             search_results.set_items(items);
                                             self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
                                         }
@@ -235,24 +239,27 @@ impl<'t> Tui<'t> {
                                 match key {
                                     Key::Char('1') => {
                                         switch_screen!(self.app_state, Screen::NowPlaying);
+                                        self.tick().await;
                                     }
                                     Key::Char('2') =>  {
                                         switch_screen!(self.app_state, Screen::Search);
+                                        self.tick().await;
                                     }
                                     Key::Char('q') => {
                                         self.controls.stop().await;
                                         self.app_state.quit();
-                                        return;
                                     },
                                     Key::Char('/') => {
                                         self.show_search = true;
                                     }
                                     _ => {
-                                        let app_tree = self.app_state.app.clone();
+                                        let app_tree = &self.app_state.app;
                                         if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
                                             match active_screen {
                                                 Screen::NowPlaying => {
-                                                    player::key_events(event, self.controls.clone(), self.track_list.clone()).await;
+                                                    if player::key_events(event, self.controls.clone(), self.track_list.clone()).await {
+                                                        self.tick().await;
+                                                    }
                                                 },
                                                 Screen::Search => {
                                                     match event {
@@ -284,7 +291,6 @@ impl<'t> Tui<'t> {
                                                         }
                                                         Event::Tick => ()
                                                     }
-                                                    debug!("search key events");
                                                 },
                                             }
                                         };
@@ -453,12 +459,3 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         )
         .split(popup_layout[1])[1]
 }
-
-// #[macro_export]
-// macro_rules! switch_screen {
-//     ($app_state:expr, $screen:path) => {
-//         $app_state
-//             .app
-//             .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), $screen);
-//     };
-// }

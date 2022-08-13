@@ -218,7 +218,7 @@ impl StatusValue {
 }
 
 /// A wrapper for ClockTime values
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Deserialize)]
 pub struct ClockValue(ClockTime);
 
 impl ClockValue {
@@ -262,7 +262,7 @@ impl Display for ClockValue {
 
 /// A wrapper for float values
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
-pub struct FloatValue(f64);
+pub struct FloatValue(pub f64);
 
 impl From<Bytes> for FloatValue {
     fn from(bytes: Bytes) -> Self {

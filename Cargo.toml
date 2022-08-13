@@ -19,7 +19,6 @@ gstreamer = { version = "0.18", features = ["ser_de"] }
 gstreamer-player = "0.18"
 log = "0.4"
 md5 = "0.7.0"
-parking_lot = "0.12"
 pretty_env_logger = "0.4"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "blocking", "cookies", "stream"] }
@@ -43,3 +42,4 @@ codegen-units = 1
 lto = true
 opt-level = "z"
 panic = 'abort'
+debug = 1

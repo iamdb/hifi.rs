@@ -13,10 +13,7 @@ use gst::{bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, Stat
 use gstreamer::{self as gst, prelude::*};
 use snafu::prelude::*;
 use std::{collections::VecDeque, sync::Arc, time::Duration};
-use tokio::{
-    select,
-    sync::{Mutex, RwLock},
-};
+use tokio::{select, sync::RwLock};
 
 #[derive(Snafu, Debug)]
 pub enum Error {
@@ -61,9 +58,9 @@ pub struct Player {
     controls: Controls,
 }
 
-pub async fn new(app_state: AppState, client: Client, resume: bool) -> Arc<Mutex<Player>> {
+pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
-    let playbin = gst::ElementFactory::make("playbin", None).unwrap();
+    let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
     let controls = Controls::new(app_state.clone());
     let mut playlist = Arc::new(RwLock::new(PlaylistValue::new()));
     let mut playlist_previous = Arc::new(RwLock::new(PlaylistValue::new()));
@@ -80,15 +77,6 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Arc<Mutex
             playlist_previous = Arc::new(RwLock::new(pp));
         }
     }
-
-    let player = Arc::new(Mutex::new(Player {
-        client,
-        playbin: playbin.clone(),
-        playlist,
-        playlist_previous,
-        app_state: app_state.clone(),
-        controls,
-    }));
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -114,14 +102,24 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Arc<Mutex
         None
     });
 
+    let player = Player {
+        client,
+        playbin,
+        playlist,
+        playlist_previous,
+        app_state,
+        controls,
+    };
+
     let p = player.clone();
     tokio::spawn(async move {
-        player_loop(resume, about_to_finish_rx, next_track_tx, p).await;
+        p.player_loop(resume, about_to_finish_rx, next_track_tx)
+            .await;
     });
 
     let p = player.clone();
     tokio::spawn(async move {
-        clock_loop(app_state, p).await;
+        p.clock_loop().await;
     });
 
     player
@@ -192,6 +190,20 @@ impl Player {
     /// Current player state
     pub fn current_state(&self) -> StatusValue {
         self.playbin.current_state().into()
+    }
+    pub fn position(&self) -> ClockValue {
+        if let Some(position) = self.playbin.query_position::<ClockTime>() {
+            position.into()
+        } else {
+            ClockValue::default()
+        }
+    }
+    pub fn duration(&self) -> ClockValue {
+        if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
+            duration.into()
+        } else {
+            ClockValue::default()
+        }
     }
     /// Seek to a specified time in the current track.
     pub fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
@@ -459,6 +471,193 @@ impl Player {
             );
         }
     }
+    /// Handles messages from the player and takes necessary action.
+    async fn player_loop<'p>(
+        &self,
+        mut resume: bool,
+        about_to_finish_rx: Receiver<bool>,
+        next_track_tx: Sender<String>,
+    ) {
+        let action_rx = self.controls.action_receiver();
+        let mut messages = self.message_stream().await;
+        let mut quitter = self.app_state.quitter();
+        let mut actions = action_rx.stream();
+        let mut about_to_finish = about_to_finish_rx.stream();
+
+        loop {
+            select! {
+                Ok(quit) = quitter.recv() => {
+                    if quit {
+                        debug!("quitting");
+                        break;
+                    }
+                }
+                Some(almost_done) = about_to_finish.next() => {
+                    if almost_done {
+                        if let Some(url) = self.prep_next_track().await {
+                            next_track_tx.send(url).expect("failed to send next track url");
+                        }
+                    }
+                }
+                Some(action) = actions.next() => {
+                    match action {
+                        Action::Play => self.play(),
+                        Action::Pause => self.pause(),
+                        Action::PlayPause => self.play_pause(),
+                        Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
+                        Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
+                        Action::Stop => {
+                            self.stop();
+                            self.app_state.quit();
+                        },
+                        Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
+                        Action::JumpForward => self.jump_forward(),
+                        Action::JumpBackward => self.jump_backward(),
+                        Action::Clear => {
+                            if self.is_playing() {
+                                self.stop();
+                            }
+
+                            self.playlist.write().await.clear();
+                            self.playlist_previous.write().await.clear();
+                            self.app_state.player.clear();
+                        }
+                        Action::PlayAlbum { album } => {
+                            let default_quality = self.client.default_quality.clone();
+
+                            let client = self.client.clone();
+
+                            let mut album = *album;
+                            album.attach_tracks(client).await;
+
+                            self.play_album(album, default_quality).await;
+                        }
+                    }
+                }
+                Some(msg) = messages.next() => {
+                    match msg.view() {
+                        MessageView::Eos(_) => {
+                            debug!("END OF STREAM");
+
+                            self.stop();
+                            self.app_state.quit();
+                            break;
+                        },
+                        MessageView::StreamStart(_) => {
+                            let tree = &self.app_state.player;
+
+                            // When a stream starts, add the new track duration
+                            // from the player to the state.
+                            if let Some(next_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+                               self.app_state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
+                            }
+                        }
+                        MessageView::AsyncDone(_) => {
+                            // If the player is resuming from a previous session,
+                            // seek to the last position saved to the state.
+                            if resume {
+                                let tree = &self.app_state.player;
+
+                                if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
+                                    resume = false;
+                                    self.seek(position, None).expect("seek failure");
+
+                                }
+                            }
+
+                        }
+                        MessageView::StateChanged(state_changed) => {
+                            if state_changed
+                                .src()
+                                .map(|s| s == self.playbin)
+                                .unwrap_or(false)
+                            {
+                                let current_state = state_changed
+                                    .current()
+                                    .to_value()
+                                    .get::<GstState>()
+                                    .unwrap();
+
+                                match current_state {
+                                    GstState::Playing => {
+                                        debug!("player state changed to Playing");
+                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
+                                    }
+                                    GstState::Paused => {
+                                        debug!("player state changed to Paused");
+                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
+                                    }
+                                    GstState::Ready => {
+                                        debug!("player state changed to Ready");
+                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
+                                    }
+                                    _ => (),
+                                }
+                            }
+                        }
+                        MessageView::Error(err) => {
+                            println!(
+                                "Error from {:?}: {} ({:?})",
+                                err.src().map(|s| s.path_string()),
+                                err.error(),
+                                err.debug()
+                            );
+                            break;
+                        }
+                        _ => (),
+                    }
+
+                }
+            }
+        }
+    }
+    /// Inserts the most recent position, duration and progress values into the state
+    /// at a set interval.
+    async fn clock_loop<'p>(&self) {
+        let mut quit_receiver = self.app_state.quitter();
+
+        loop {
+            if let Ok(quit) = quit_receiver.try_recv() {
+                if quit {
+                    debug!("quitting");
+                    break;
+                }
+            }
+            if self.current_state() != GstState::VoidPending.into()
+                || self.current_state() != GstState::Null.into()
+            {
+                let (position, duration) = (self.position(), self.duration());
+
+                self.app_state.player.insert::<String, ClockValue>(
+                    StateKey::Player(PlayerKey::Position),
+                    position.clone(),
+                );
+
+                self.app_state.player.insert::<String, ClockValue>(
+                    StateKey::Player(PlayerKey::Duration),
+                    duration.clone(),
+                );
+
+                if position >= ClockTime::from_seconds(0).into() && position <= duration {
+                    let duration = duration.inner_clocktime();
+                    let position = position.inner_clocktime();
+
+                    let remaining = duration - position;
+                    let progress = position.seconds() as f64 / duration.seconds() as f64;
+
+                    self.app_state.player.insert::<String, FloatValue>(
+                        StateKey::Player(PlayerKey::Progress),
+                        progress.into(),
+                    );
+                    self.app_state.player.insert::<String, ClockValue>(
+                        StateKey::Player(PlayerKey::DurationRemaining),
+                        remaining.into(),
+                    );
+                }
+            }
+            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
+        }
+    }
     /// Sets up basic functionality for the player.
     async fn prep_next_track(&self) -> Option<String> {
         let mut playlist = self.playlist.write().await;
@@ -513,207 +712,6 @@ impl Player {
     /// Get Gstreamer message stream
     pub async fn message_stream(&self) -> BusStream {
         self.playbin.bus().unwrap().stream()
-    }
-}
-
-/// Handles messages from the player and takes necessary action.
-async fn player_loop<'p>(
-    mut resume: bool,
-    about_to_finish_rx: Receiver<bool>,
-    next_track_tx: Sender<String>,
-    player: Arc<Mutex<Player>>,
-) {
-    let action_rx = player.lock().await.controls.action_receiver();
-    let mut messages = player.lock().await.message_stream().await;
-    let mut quitter = player.lock().await.app_state.quitter();
-    let mut actions = action_rx.stream();
-    let mut about_to_finish = about_to_finish_rx.stream();
-
-    loop {
-        select! {
-            Ok(quit) = quitter.recv() => {
-                if quit {
-                    debug!("quitting");
-                    break;
-                }
-            }
-            Some(almost_done) = about_to_finish.next() => {
-                if almost_done {
-                    if let Some(url) = player.lock().await.prep_next_track().await {
-                        next_track_tx.send(url).expect("failed to send next track url");
-                    }
-                }
-            }
-            Some(action) = actions.next() => {
-                match action {
-                    Action::Play => player.lock().await.play(),
-                    Action::Pause => player.lock().await.pause(),
-                    Action::PlayPause => player.lock().await.play_pause(),
-                    Action::Next => player.lock().await.skip_forward(None).await.expect("failed to skip forward"),
-                    Action::Previous => player.lock().await.skip_backward(None).await.expect("failed to skip forward"),
-                    Action::Stop => {
-                        let player = player.lock().await;
-                        player.stop();
-                        player.app_state.quit();
-                    },
-                    Action::SkipTo { num } => player.lock().await.skip_to(num).await.expect("failed to skip to track"),
-                    Action::JumpForward => player.lock().await.jump_forward(),
-                    Action::JumpBackward => player.lock().await.jump_backward(),
-                    Action::Clear => {
-                        let player = player.lock().await;
-                        if player.is_playing() {
-                            player.stop();
-                        }
-
-                        player.playlist.write().await.clear();
-                        player.playlist_previous.write().await.clear();
-                        player.app_state.player.clear();
-                    }
-                    Action::PlayAlbum { album } => {
-                        let player = player.lock().await;
-                        let default_quality = player.client.default_quality.clone();
-
-                        let client = player.client.clone();
-
-                        let mut album = *album;
-                        album.attach_tracks(client).await;
-
-                        player.play_album(album, default_quality).await;
-                    }
-                }
-            }
-            Some(msg) = messages.next() => {
-                match msg.view() {
-                    MessageView::Eos(_) => {
-                        debug!("END OF STREAM");
-                        let player = player.lock().await;
-
-                        player.stop();
-                        player.app_state.quit();
-                        break;
-                    },
-                    MessageView::StreamStart(_) => {
-                        let player = player.lock().await;
-                        let tree = &player.app_state.player;
-
-                        // When a stream starts, add the new track duration
-                        // from the player to the state.
-                        if let Some(next_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-                           player.app_state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
-                        }
-                    }
-                    MessageView::AsyncDone(_) => {
-                        // If the player is resuming from a previous session,
-                        // seek to the last position saved to the state.
-                        if resume {
-                            let player = player.lock().await;
-                            let tree = &player.app_state.player;
-
-                            if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
-                                resume = false;
-                                player.seek(position, None).expect("seek failure");
-
-                            }
-                        }
-
-                    }
-                    MessageView::StateChanged(state_changed) => {
-                        let player = player.lock().await;
-                        if state_changed
-                            .src()
-                            .map(|s| s == player.playbin)
-                            .unwrap_or(false)
-                        {
-                            let current_state = state_changed
-                                .current()
-                                .to_value()
-                                .get::<GstState>()
-                                .unwrap();
-
-                            match current_state {
-                                GstState::Playing => {
-                                    debug!("player state changed to Playing");
-                                    player.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
-                                }
-                                GstState::Paused => {
-                                    debug!("player state changed to Paused");
-                                    player.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
-                                }
-                                GstState::Ready => {
-                                    debug!("player state changed to Ready");
-                                    player.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
-                                }
-                                _ => (),
-                            }
-                        }
-                    }
-                    MessageView::Error(err) => {
-                        println!(
-                            "Error from {:?}: {} ({:?})",
-                            err.src().map(|s| s.path_string()),
-                            err.error(),
-                            err.debug()
-                        );
-                        break;
-                    }
-                    _ => (),
-                }
-
-            }
-        }
-    }
-}
-
-/// Inserts the most recent position, duration and progress values into the state
-/// at a set interval.
-async fn clock_loop<'p>(app_state: AppState, player: Arc<Mutex<Player>>) {
-    let mut quit_receiver = app_state.quitter();
-
-    loop {
-        if let Ok(quit) = quit_receiver.try_recv() {
-            if quit {
-                debug!("quitting");
-                break;
-            }
-        }
-        let player = player.lock().await;
-        if player.current_state() != GstState::VoidPending.into()
-            || player.current_state() != GstState::Null.into()
-        {
-            if let (Some(position), Some(duration)) = (
-                player.controls.position().await,
-                player.controls.duration().await,
-            ) {
-                if position >= ClockTime::from_seconds(0).into() && position <= duration {
-                    let duration = duration.inner_clocktime();
-                    let position = position.inner_clocktime();
-
-                    let remaining = duration - position;
-                    let progress = position.seconds() as f64 / duration.seconds() as f64;
-
-                    app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Position),
-                        position.into(),
-                    );
-
-                    app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Duration),
-                        duration.into(),
-                    );
-
-                    app_state.player.insert::<String, FloatValue>(
-                        StateKey::Player(PlayerKey::Progress),
-                        progress.into(),
-                    );
-                    app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::DurationRemaining),
-                        remaining.into(),
-                    );
-                }
-            }
-
-            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
-        }
     }
 }
 
@@ -780,11 +778,6 @@ impl Controls {
 
         get_player!(PlayerKey::Position, tree, ClockValue)
     }
-    pub async fn duration(&self) -> Option<ClockValue> {
-        let tree = &self.state.player;
-
-        get_player!(PlayerKey::Duration, tree, ClockValue)
-    }
     pub async fn status(&self) -> Option<StatusValue> {
         let tree = &self.state.player;
 
@@ -800,10 +793,8 @@ impl Controls {
 #[macro_export]
 macro_rules! action {
     ($self:ident, $action:expr) => {
-        $self
-            .action_tx
-            .send_async($action)
-            .await
-            .expect("failed to send action");
+        if let Err(_) = $self.action_tx.send_async($action).await {
+            error!("error sending action");
+        }
     };
 }
