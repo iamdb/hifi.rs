@@ -11,7 +11,7 @@ use tui::{
 
 use crate::{qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::player::Item};
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {
     pub query: String,
     pub artists: Artists,
@@ -29,7 +29,7 @@ impl From<ArtistSearchResults> for Vec<Vec<String>> {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Artists {
     pub limit: i64,
     pub offset: i64,
@@ -198,7 +198,7 @@ pub struct AudioInfo {
     pub replaygain_track_peak: f64,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Performer {
     pub id: i64,
     pub name: String,
@@ -305,7 +305,7 @@ impl From<Album> for Vec<Vec<String>> {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Composer {
     pub id: i64,
     pub name: String,
@@ -314,7 +314,7 @@ pub struct Composer {
     pub image: Option<Image>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Image {
     pub small: String,
     pub thumbnail: Option<String>,
@@ -322,7 +322,7 @@ pub struct Image {
     pub back: Option<String>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Artist {
     pub image: Option<Image>,
     pub name: String,
@@ -349,14 +349,14 @@ impl From<Artist> for Vec<Vec<String>> {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OtherArtists {
     pub id: i64,
     pub name: String,
     pub roles: Vec<String>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Label {
     pub name: String,
     pub id: i64,
@@ -365,7 +365,7 @@ pub struct Label {
     pub slug: String,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Genre {
     pub path: Vec<i64>,
     pub color: String,
@@ -385,7 +385,7 @@ pub struct TrackURL {
     pub bit_depth: i32,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct User {
     pub id: i64,
     pub login: String,
@@ -397,7 +397,7 @@ pub struct UserPlaylists {
     pub playlists: Playlists,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Owner {
     pub id: i64,
     pub name: String,

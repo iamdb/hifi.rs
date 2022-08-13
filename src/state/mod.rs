@@ -218,7 +218,7 @@ impl StatusValue {
 }
 
 /// A wrapper for ClockTime values
-#[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Deserialize)]
 pub struct ClockValue(ClockTime);
 
 impl ClockValue {
