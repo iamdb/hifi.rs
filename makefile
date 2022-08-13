@@ -18,7 +18,9 @@ clean:
 > rm -rf downloads
 .PHONY: clean
 
-test: tests/.tests-passed.sentinel 
+test: tests/.tests-passed.sentinel
+
+git-hooks: .git/hooks/commit-msg
 
 clippy: $(shell find src -type f)
 > cargo clippy --all-targets -- -D warnings
@@ -35,3 +37,6 @@ tests/.tests-passed.sentinel: $(shell find src -type f)
 target/release/hifi-rs: tests/.tests-passed.sentinel
 > cargo build --release
 > touch $@
+
+.git/hooks/commit-msg: git-hooks/commit-msg
+> cp git-hooks/commit-msg .git/hooks/commit-msg
