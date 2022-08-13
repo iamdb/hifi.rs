@@ -25,10 +25,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{
-    select,
-    sync::{broadcast::Receiver as BroadcastReceiver, Mutex},
-};
+use tokio::{select, sync::Mutex};
 use tokio_stream::StreamExt;
 use tui::{
     backend::{Backend, TermionBackend},
@@ -136,13 +133,7 @@ impl<'t> Tui<'t> {
                     .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
             }
 
-            self.event_loop(
-                client,
-                event_sender,
-                event_receiver,
-                self.app_state.quitter(),
-            )
-            .await;
+            self.event_loop(client, event_sender, event_receiver).await;
         } else {
             let mut quitter = self.app_state.quitter();
 
@@ -171,27 +162,35 @@ impl<'t> Tui<'t> {
         client: Client,
         event_sender: Sender<Event>,
         event_receiver: Receiver<Event>,
-        mut quitter: BroadcastReceiver<bool>,
     ) {
         let tx = event_sender.clone();
+        let mut q = self.app_state.quitter();
         thread::spawn(move || {
             let stdin = std::io::stdin();
             for key in stdin.keys().flatten() {
                 debug!("key pressed {:?}", key);
+                if let Ok(quit) = q.try_recv() {
+                    if quit {
+                        return;
+                    }
+                }
+
                 if let Err(err) = event_sender.send(Event::Input(key)) {
-                    eprintln!("{}", err);
-                    return;
+                    error!("{:?}", err);
                 }
             }
         });
 
+        let mut q = self.app_state.quitter();
         thread::spawn(move || loop {
-            if let Ok(quit) = quitter.try_recv() {
+            if let Ok(quit) = q.try_recv() {
                 if quit {
                     break;
                 }
             }
-            tx.send(Event::Tick).expect("failed to send tick");
+            if let Err(err) = tx.send(Event::Tick) {
+                error!("{:?}", err);
+            }
             std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         });
 
@@ -242,6 +241,7 @@ impl<'t> Tui<'t> {
                                     }
                                     Key::Char('q') => {
                                         self.controls.stop().await;
+                                        self.app_state.quit();
                                         return;
                                     },
                                     Key::Char('/') => {

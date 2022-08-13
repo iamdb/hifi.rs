@@ -206,7 +206,7 @@ pub async fn key_events(event: Event, controls: Controls, track_list: Arc<Mutex<
             }
             _ => (),
         },
-        Event::Tick => unimplemented!(),
+        Event::Tick => (),
     }
 }
 fn progress<B>(
