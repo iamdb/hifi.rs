@@ -10,7 +10,12 @@ ifeq ($(origin .RECIPEPREFIX), undefined)
 endif
 .RECIPEPREFIX = >
 
-build: target/release/hifi-rs
+OUTPUT=target/release/hifi-rs
+SRC_FILES=$(shell find src/ -type f -iname \*.rs)
+TEST_FILES=$(shell find tests -type f -iname \*.rs)
+TEST_SENTINEL=tests/.tests-passed.sentinel
+
+build: $(OUTPUT)
 .PHONY: build
 
 clean:
@@ -18,23 +23,23 @@ clean:
 > rm -rf downloads
 .PHONY: clean
 
-test: tests/.tests-passed.sentinel
+test: $(TEST_SENTINEL)
 
 git-hooks: .git/hooks/commit-msg
 
-clippy: $(shell find src -type f)
+clippy: $(SRC_FILES)
 > cargo clippy --all-targets -- -D warnings
 .PHONY: clippy
 
-format: $(shell find src -type f)
+format: $(SRC_FILES)
 > cargo fmt -- --check
 .PHONY: format
 
-tests/.tests-passed.sentinel: $(shell find src -type f)
+tests/.tests-passed.sentinel: $(SRC_FILES) $(TEST_FILES) 
 > cargo test
 > touch $@
 
-target/release/hifi-rs: tests/.tests-passed.sentinel
+target/release/hifi-rs: $(TEST_SENTINEL)
 > cargo build --release
 > touch $@
 
