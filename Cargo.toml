@@ -10,7 +10,7 @@ byteorder = "1.4"
 chrono = "0.4"
 clap = { version = "3.2", features = ["derive"] }
 comfy-table = "6.0"
-ctrlc = { version = "3.0", features = ["termination"] }
+ctrlc = { version = "3.2", features = ["termination"] }
 dialoguer = { version = "0.10.1", features = ["fuzzy-select"] }
 dirs = "4.0"
 flume = "0.10"
