@@ -9,11 +9,11 @@ use crate::{
         app::{ClientKey, PlayerKey, StateKey},
         AudioQuality, PlaylistValue, StringValue,
     },
-    ui,
+    ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
-use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, Password, Select};
+use dialoguer::{Confirm, Input, Password};
 use snafu::prelude::*;
 
 #[derive(Parser)]
@@ -31,13 +31,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Play something interactively
-    Play {
-        #[clap(value_parser)]
-        query: String,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
-    },
     /// Resume previous session
     Resume {
         #[clap(long, short)]
@@ -214,62 +207,17 @@ pub async fn run() -> Result<(), Error> {
                     let controls = player.controls();
                     controls.play().await;
 
-                    let mut tui = ui::terminal::new(app_state, controls, no_tui)?;
-                    tui.start(client, None).await?;
+                    if no_tui {
+                        wait!(app_state);
+                    } else {
+                        let mut tui = ui::terminal::new(app_state, controls)?;
+                        tui.start(client, None).await?;
+                    }
                 }
             } else {
                 return Err(Error::PlayerError {
                     error: player::Error::Session,
                 });
-            }
-
-            Ok(())
-        }
-        Commands::Play { query, quality } => {
-            let client = client::new(app_state.clone(), creds).await?;
-
-            let mut results = client.search_albums(query, Some(100)).await?;
-
-            let album_list = results
-                .albums
-                .items
-                .iter()
-                .map(|i| {
-                    format!(
-                        "{} - {} ({})",
-                        i.title,
-                        i.artist.name,
-                        i.release_date_original.get(0..4).unwrap()
-                    )
-                })
-                .collect::<Vec<String>>();
-
-            let selected = Select::with_theme(&ColorfulTheme::default())
-                .items(&album_list)
-                .default(0)
-                .max_length(10)
-                .interact_on_opt(&Term::stderr())
-                .expect("There was a problem saving your selection.");
-
-            if let Some(index) = selected {
-                let selected_album = results.albums.items.remove(index);
-
-                app_state.player.clear();
-
-                let quality = if let Some(q) = quality {
-                    q
-                } else {
-                    client.quality()
-                };
-
-                let mut player = player::new(app_state.clone(), client.clone(), false).await;
-
-                if let Ok(album) = client.album(selected_album.id).await {
-                    player.play_album(album, quality).await;
-
-                    let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
-                    tui.start(client, None).await?;
-                }
             }
 
             Ok(())
@@ -304,8 +252,12 @@ pub async fn run() -> Result<(), Error> {
             } else {
                 let mut player = player::new(app_state.clone(), client.clone(), false).await;
 
-                let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
-                tui.start(client, Some(results)).await?;
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui = ui::terminal::new(app_state, player.controls())?;
+                    tui.start(client, None).await?;
+                }
             }
 
             Ok(())
@@ -371,7 +323,7 @@ pub async fn run() -> Result<(), Error> {
             app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls(), false)?;
+            let mut tui = ui::terminal::new(app_state, player.controls())?;
             tui.start(client, None).await?;
 
             Ok(())
@@ -398,8 +350,12 @@ pub async fn run() -> Result<(), Error> {
 
             player.play_album(album, quality).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls(), no_tui)?;
-            tui.start(client, None).await?;
+            if no_tui {
+                wait!(app_state);
+            } else {
+                let mut tui = ui::terminal::new(app_state, player.controls())?;
+                tui.start(client, None).await?;
+            }
 
             Ok(())
         }
@@ -465,4 +421,28 @@ pub async fn run() -> Result<(), Error> {
             }
         },
     }
+}
+
+#[macro_export]
+macro_rules! wait {
+    ($state:expr) => {
+        let mut quitter = $state.quitter();
+
+        let state = $state.clone();
+        ctrlc::set_handler(move || {
+            state.quit();
+            std::process::exit(0);
+        })
+        .expect("error setting ctrlc handler");
+
+        loop {
+            if let Ok(quit) = quitter.try_recv() {
+                if quit {
+                    debug!("quitting");
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(REFRESH_RESOLUTION));
+        }
+    };
 }

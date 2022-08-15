@@ -13,23 +13,27 @@ use crate::{
     ui::terminal::{components, AppKey, List, Screen, StateKey},
 };
 
-pub fn render<'t, B>(f: &mut Frame<B>, search_results: &'t mut List<'_>, app_state: AppState)
-where
-    B: Backend,
-{
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(6),
-            Constraint::Min(4),
-            Constraint::Length(1),
-        ])
-        .margin(0);
+pub struct SearchScreen {}
 
-    let split_layout = layout.split(f.size());
-    components::player(f, split_layout[0], app_state);
-    components::track_list(f, search_results, split_layout[1]);
-    components::tabs(1, f, split_layout[2]);
+impl Screen for SearchScreen {
+    fn render<'t, B>(f: &mut Frame<B>, search_results: &'t mut List<'_>, app_state: AppState)
+    where
+        B: Backend,
+    {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(6),
+                Constraint::Min(4),
+                Constraint::Length(1),
+            ])
+            .margin(0);
+
+        let split_layout = layout.split(f.size());
+        components::player(f, split_layout[0], app_state);
+        components::track_list(f, search_results, split_layout[1]);
+        components::tabs(1, f, split_layout[2]);
+    }
 }
 
 pub async fn key_events<'l>(
@@ -53,7 +57,7 @@ pub async fn key_events<'l>(
                     if let Some(album) = album_results.albums.items.get(selected) {
                         controls.clear().await;
                         controls.play_album(album.clone()).await;
-                        switch_screen!(app_state, Screen::NowPlaying);
+                        switch_screen!(app_state, ActiveScreen::NowPlaying);
                     };
                 }
             }
