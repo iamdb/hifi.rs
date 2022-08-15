@@ -150,7 +150,7 @@ impl<'t> TrackList<'t> {
     }
 }
 
-pub fn track_list<'a, B>(f: &mut Frame<B>, mut playlist: TrackList<'a>, area: Rect)
+pub fn track_list<B>(f: &mut Frame<B>, mut playlist: TrackList<'_>, area: Rect)
 where
     B: Backend,
 {
@@ -170,21 +170,35 @@ where
     f.render_stateful_widget(list, layout[0], &mut playlist.state);
 }
 
-pub async fn key_events(event: Event, controls: Controls, track_list: Arc<Mutex<TrackList<'_>>>) {
+pub async fn key_events(
+    event: Event,
+    controls: Controls,
+    track_list: Arc<Mutex<TrackList<'_>>>,
+) -> bool {
     match event {
         Event::Input(key) => match key {
             Key::Char(c) => match c {
-                ' ' => controls.play_pause().await,
-                'N' => controls.next().await,
-                'P' => controls.previous().await,
+                ' ' => {
+                    controls.play_pause().await;
+                    return true;
+                }
+                'N' => {
+                    controls.next().await;
+                    return true;
+                }
+                'P' => {
+                    controls.previous().await;
+                    return true;
+                }
                 '\n' => {
-                    let mut track_list = track_list.lock().await;
+                    let track_list = track_list.lock().await;
 
                     if let Some(selection) = track_list.selected() {
                         debug!("playing selected track {}", selection);
                         controls.skip_to(selection).await;
-                        track_list.select(0);
                     }
+
+                    return true;
                 }
                 _ => (),
             },
@@ -192,22 +206,28 @@ pub async fn key_events(event: Event, controls: Controls, track_list: Arc<Mutex<
                 let mut track_list = track_list.lock().await;
 
                 track_list.next();
+                return true;
             }
             Key::Up => {
                 let mut track_list = track_list.lock().await;
 
                 track_list.previous();
+                return true;
             }
             Key::Right => {
                 controls.jump_forward().await;
+                return true;
             }
             Key::Left => {
                 controls.jump_backward().await;
+                return true;
             }
             _ => (),
         },
-        Event::Tick => unimplemented!(),
+        Event::Tick => (),
     }
+
+    false
 }
 fn progress<B>(
     position: ClockValue,
@@ -221,6 +241,11 @@ fn progress<B>(
     if duration.inner_clocktime() > ClockTime::default() {
         let position = position.to_string().as_str()[3..7].to_string();
         let duration = duration.to_string().as_str()[3..7].to_string();
+        let prog = if progress >= FloatValue(0.0) {
+            progress
+        } else {
+            FloatValue(0.0)
+        };
 
         let progress = Gauge::default()
             .label(format!("{} / {}", position, duration))
@@ -232,7 +257,7 @@ fn progress<B>(
                     .fg(Color::Indexed(38))
                     .add_modifier(Modifier::BOLD),
             )
-            .ratio(progress.into());
+            .ratio(prog.into());
         f.render_widget(progress, area);
     } else {
         let loading = Paragraph::new("LOADING")

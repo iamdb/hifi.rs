@@ -180,7 +180,7 @@ impl StringValue {
 }
 
 /// A wrapper for gstreamer state values
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StatusValue(GstState);
 
 impl From<Bytes> for StatusValue {
@@ -218,7 +218,7 @@ impl StatusValue {
 }
 
 /// A wrapper for ClockTime values
-#[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Deserialize)]
 pub struct ClockValue(ClockTime);
 
 impl ClockValue {
@@ -262,7 +262,7 @@ impl Display for ClockValue {
 
 /// A wrapper for float values
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
-pub struct FloatValue(f64);
+pub struct FloatValue(pub f64);
 
 impl From<Bytes> for FloatValue {
     fn from(bytes: Bytes) -> Self {

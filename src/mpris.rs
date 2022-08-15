@@ -14,7 +14,7 @@ pub async fn init(controls: Controls) {
     };
     let mpris_player = MprisPlayer { controls };
 
-    ConnectionBuilder::session()
+    if let Err(err) = ConnectionBuilder::session()
         .unwrap()
         .name("org.mpris.MediaPlayer2.hifirs")
         .unwrap()
@@ -24,7 +24,9 @@ pub async fn init(controls: Controls) {
         .unwrap()
         .build()
         .await
-        .expect("failed to attach to dbus");
+    {
+        error!("error connecting to dbus: {}", err);
+    }
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
