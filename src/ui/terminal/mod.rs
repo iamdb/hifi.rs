@@ -244,9 +244,9 @@ impl<'t> Tui<'t> {
                         },
                         Event::Mouse(m) => {
                             match m {
-                                MouseEvent::Press(button, x, y) => println!("mouse press button {:?} at {}x{}", button, x, y),
-                                MouseEvent::Release(x, y) => println!("mouse button released at {}x{}", x,y),
-                                MouseEvent::Hold(x, y) => println!("mouse button held at {}x{}", x,y),
+                                MouseEvent::Press(button, x, y) => debug!("mouse press button {:?} at {}x{}", button, x, y),
+                                MouseEvent::Release(x, y) => debug!("mouse button released at {}x{}", x,y),
+                                MouseEvent::Hold(x, y) => debug!("mouse button held at {}x{}", x,y),
                             }
                         },
                         Event::Unsupported(_) => {
