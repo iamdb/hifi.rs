@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use termion::event::Key;
-use tokio::sync::Mutex;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout},
@@ -35,15 +32,13 @@ where
     components::tabs(1, f, split_layout[2]);
 }
 
-pub async fn key_events(
+pub async fn key_events<'l>(
     key: Key,
     controls: Controls,
-    search_results: Arc<Mutex<List<'_>>>,
+    search_results: &'l mut List<'_>,
     album_results: Option<AlbumSearchResults>,
     app_state: AppState,
 ) -> bool {
-    let mut search_results = search_results.lock().await;
-
     match key {
         Key::Up => {
             search_results.previous();

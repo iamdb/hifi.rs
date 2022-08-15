@@ -1,12 +1,9 @@
-use std::sync::Arc;
-
 use crate::{
     player::Controls,
     state::app::AppState,
     ui::terminal::components::{self, List},
 };
 use termion::event::Key;
-use tokio::sync::Mutex;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout},
@@ -36,7 +33,7 @@ where
     components::track_list(f, list, split_layout[1]);
     components::tabs(0, f, split_layout[2]);
 }
-pub async fn key_events(key: Key, controls: Controls, track_list: Arc<Mutex<List<'_>>>) -> bool {
+pub async fn key_events<'l>(key: Key, controls: Controls, track_list: &'l mut List<'_>) -> bool {
     match key {
         Key::Char(c) => match c {
             ' ' => {
@@ -52,8 +49,6 @@ pub async fn key_events(key: Key, controls: Controls, track_list: Arc<Mutex<List
                 return true;
             }
             '\n' => {
-                let track_list = track_list.lock().await;
-
                 if let Some(selection) = track_list.selected() {
                     debug!("playing selected track {}", selection);
                     controls.skip_to(selection).await;
@@ -64,14 +59,10 @@ pub async fn key_events(key: Key, controls: Controls, track_list: Arc<Mutex<List
             _ => (),
         },
         Key::Down => {
-            let mut track_list = track_list.lock().await;
-
             track_list.next();
             return true;
         }
         Key::Up => {
-            let mut track_list = track_list.lock().await;
-
             track_list.previous();
             return true;
         }

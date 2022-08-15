@@ -16,14 +16,14 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
-use std::{char, io::Stdout, sync::Arc, thread, time::Duration};
+use std::{char, io::Stdout, thread, time::Duration};
 use termion::{
     event::{Event as TermEvent, Key, MouseEvent},
     input::{MouseTerminal, TermRead},
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{select, sync::Mutex};
+use tokio::select;
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
 
@@ -31,23 +31,29 @@ use tui::{backend::TermionBackend, Terminal};
 pub struct Tui<'t> {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    track_list: Arc<Mutex<List<'t>>>,
+    track_list: List<'t>,
     app_state: AppState,
     controls: Controls,
     no_tui: bool,
     terminal: Console,
     show_search: bool,
     search_query: Vec<char>,
-    search_results: Arc<Mutex<List<'t>>>,
+    search_results: List<'t>,
     album_results: Option<AlbumSearchResults>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 
+/// An input event from a keyboard, mouse or internal timer.
+#[derive(Debug, Clone)]
 pub enum Event {
+    /// Keyboard event
     Key(Key),
+    /// Mouse button event
     Mouse(MouseEvent),
+    /// Unsupported event
     Unsupported(Vec<u8>),
+    /// Tick event (triggers frame render)
     Tick,
 }
 
@@ -101,10 +107,10 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
         no_tui,
         rx,
         search_query: Vec::new(),
-        search_results: Arc::new(Mutex::new(List::new(None))),
+        search_results: List::new(None),
         show_search: false,
         terminal,
-        track_list: Arc::new(Mutex::new(List::new(None))),
+        track_list: List::new(None),
         tx,
     })
 }
@@ -125,8 +131,8 @@ impl<'t> Tui<'t> {
                 let mut track_list = List::new(Some(items));
                 track_list.select(0);
 
-                self.search_results = Arc::new(Mutex::new(track_list));
-                self.search_results.lock().await.select(0);
+                self.search_results = track_list;
+                self.search_results.select(0);
                 self.album_results = Some(results);
                 switch_screen!(self.app_state, Screen::Search);
             }
@@ -161,6 +167,8 @@ impl<'t> Tui<'t> {
         }
     }
     async fn event_loop<'c>(&mut self, _client: Client) {
+        // Watches stdin for input events and sends them to the
+        // router for handling.
         let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || {
@@ -178,6 +186,7 @@ impl<'t> Tui<'t> {
             }
         });
 
+        // Sends a tick every 500ms to render the frame
         let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || loop {
@@ -208,7 +217,7 @@ impl<'t> Tui<'t> {
                         Event::Tick => {
                             self.render().await;
                         },
-                       Event::Key(key) => {
+                        Event::Key(key) => {
                             match key {
                                 Key::Char('1') => {
                                     switch_screen!(self.app_state, Screen::NowPlaying);
@@ -227,12 +236,12 @@ impl<'t> Tui<'t> {
                                     if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
                                         match active_screen {
                                             Screen::NowPlaying => {
-                                                if nowplaying::key_events(key, self.controls.clone(), self.track_list.clone()).await {
+                                                if nowplaying::key_events(key, self.controls.clone(), &mut self.track_list).await {
                                                     self.tick().await;
                                                 }
                                             },
                                             Screen::Search => {
-                                                if search::key_events(key,self.controls.clone(),self.search_results.clone(),self.album_results.clone(),self.app_state.clone()).await {
+                                                if search::key_events(key,self.controls.clone(),&mut self.search_results,self.album_results.clone(),self.app_state.clone()).await {
                                                     self.tick().await;
                                                 }
                                             }
@@ -267,16 +276,13 @@ impl<'t> Tui<'t> {
 
         match screen {
             Screen::NowPlaying => {
-                let mut track_list = self.track_list.lock().await;
                 self.terminal
-                    .draw(|f| nowplaying::render(f, &mut track_list, self.app_state.clone()))
+                    .draw(|f| nowplaying::render(f, &mut self.track_list, self.app_state.clone()))
                     .expect("failed to draw terminal screen");
             }
             Screen::Search => {
-                let mut search_results = self.search_results.lock().await;
-
                 self.terminal
-                    .draw(|f| search::render(f, &mut search_results, self.app_state.clone()))
+                    .draw(|f| search::render(f, &mut self.search_results, self.app_state.clone()))
                     .expect("failed to draw terminal screen");
             }
         }
