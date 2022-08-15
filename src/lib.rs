@@ -30,7 +30,7 @@ pub struct Credentials {
     pub password: Option<String>,
 }
 
-pub const REFRESH_RESOLUTION: u64 = 250;
+pub const REFRESH_RESOLUTION: u64 = 500;
 
 pub fn capitalize(s: &str) -> String {
     let mut c = s.chars();

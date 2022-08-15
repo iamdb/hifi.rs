@@ -113,13 +113,13 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
 
     let p = player.clone();
     tokio::spawn(async move {
-        p.player_loop(resume, about_to_finish_rx, next_track_tx)
-            .await;
+        p.clock_loop().await;
     });
 
     let p = player.clone();
     tokio::spawn(async move {
-        p.clock_loop().await;
+        p.player_loop(resume, about_to_finish_rx, next_track_tx)
+            .await;
     });
 
     player
@@ -191,19 +191,15 @@ impl Player {
     pub fn current_state(&self) -> StatusValue {
         self.playbin.current_state().into()
     }
-    pub fn position(&self) -> ClockValue {
-        if let Some(position) = self.playbin.query_position::<ClockTime>() {
-            position.into()
-        } else {
-            ClockValue::default()
-        }
+    pub fn position(&self) -> Option<ClockValue> {
+        self.playbin
+            .query_position::<ClockTime>()
+            .map(|position| position.into())
     }
-    pub fn duration(&self) -> ClockValue {
-        if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
-            duration.into()
-        } else {
-            ClockValue::default()
-        }
+    pub fn duration(&self) -> Option<ClockValue> {
+        self.playbin
+            .query_duration::<ClockTime>()
+            .map(|duration| duration.into())
     }
     /// Seek to a specified time in the current track.
     pub fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
@@ -626,36 +622,37 @@ impl Player {
             if self.current_state() != GstState::VoidPending.into()
                 || self.current_state() != GstState::Null.into()
             {
-                let (position, duration) = (self.position(), self.duration());
-
-                self.app_state.player.insert::<String, ClockValue>(
-                    StateKey::Player(PlayerKey::Position),
-                    position.clone(),
-                );
-
-                self.app_state.player.insert::<String, ClockValue>(
-                    StateKey::Player(PlayerKey::Duration),
-                    duration.clone(),
-                );
-
-                if position >= ClockTime::from_seconds(0).into() && position <= duration {
-                    let duration = duration.inner_clocktime();
-                    let position = position.inner_clocktime();
-
-                    let remaining = duration - position;
-                    let progress = position.seconds() as f64 / duration.seconds() as f64;
-
-                    self.app_state.player.insert::<String, FloatValue>(
-                        StateKey::Player(PlayerKey::Progress),
-                        progress.into(),
-                    );
+                if let (Some(position), Some(duration)) = (self.position(), self.duration()) {
                     self.app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::DurationRemaining),
-                        remaining.into(),
+                        StateKey::Player(PlayerKey::Position),
+                        position.clone(),
                     );
+
+                    self.app_state.player.insert::<String, ClockValue>(
+                        StateKey::Player(PlayerKey::Duration),
+                        duration.clone(),
+                    );
+
+                    if position >= ClockTime::from_seconds(0).into() && position <= duration {
+                        let duration = duration.inner_clocktime();
+                        let position = position.inner_clocktime();
+
+                        let remaining = duration - position;
+                        let progress = position.seconds() as f64 / duration.seconds() as f64;
+
+                        self.app_state.player.insert::<String, FloatValue>(
+                            StateKey::Player(PlayerKey::Progress),
+                            progress.into(),
+                        );
+                        self.app_state.player.insert::<String, ClockValue>(
+                            StateKey::Player(PlayerKey::DurationRemaining),
+                            remaining.into(),
+                        );
+                    }
                 }
+
+                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
-            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         }
     }
     /// Sets up basic functionality for the player.

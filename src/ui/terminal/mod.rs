@@ -80,7 +80,7 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::bounded(1);
+    let (tx, rx) = flume::bounded(2);
 
     #[macro_export]
     macro_rules! switch_screen {
@@ -125,9 +125,7 @@ impl<'t> Tui<'t> {
                 self.search_results = Arc::new(Mutex::new(track_list));
                 self.search_results.lock().await.select(0);
                 self.album_results = Some(results);
-                self.app_state
-                    .config
-                    .insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
+                switch_screen!(self.app_state, Screen::Search);
             }
 
             self.event_loop(client).await;
@@ -225,13 +223,16 @@ impl<'t> Tui<'t> {
                                         self.show_search = false;
                                     }
                                     Key::Char(c) => {
-                                        self.search_query.push(c)
+                                        self.search_query.push(c);
+                                        self.tick().await;
                                     }
                                     Key::Backspace => {
                                         self.search_query.pop();
+                                        self.tick().await;
                                     }
                                     Key::Esc => {
                                         self.show_search = false;
+                                        self.tick().await;
                                     }
                                     _ => ()
                                 }
@@ -268,10 +269,12 @@ impl<'t> Tui<'t> {
                                                                 Key::Up => {
                                                                     let mut search_results = self.search_results.lock().await;
                                                                     search_results.previous();
+                                                                    self.tick().await;
                                                                 }
                                                                 Key::Down => {
                                                                     let mut search_results = self.search_results.lock().await;
                                                                     search_results.next();
+                                                                    self.tick().await;
                                                                 }
                                                                 Key::Char('\n') => {
                                                                     let search_results = self.search_results.lock().await;
@@ -282,6 +285,7 @@ impl<'t> Tui<'t> {
                                                                                 self.controls.clear().await;
                                                                                 self.controls.play_album(album.clone()).await;
                                                                                 switch_screen!(self.app_state, Screen::NowPlaying);
+                                                                                self.tick().await;
                                                                             };
                                                                         }
                                                                     }
