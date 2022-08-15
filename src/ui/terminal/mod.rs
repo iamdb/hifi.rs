@@ -1,6 +1,7 @@
-pub mod player;
+pub mod components;
+pub mod nowplaying;
+pub mod search;
 
-use self::player::TrackList;
 use crate::{
     get_app,
     player::Controls,
@@ -10,52 +11,54 @@ use crate::{
         Screen,
     },
     switch_screen,
-    ui::terminal::{
-        self,
-        player::{player, Item},
-    },
+    ui::terminal::components::List,
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
 use std::{char, io::Stdout, sync::Arc, thread, time::Duration};
 use termion::{
-    event::Key,
+    event::{Event as TermEvent, Key, MouseEvent},
     input::{MouseTerminal, TermRead},
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
 use tokio::{select, sync::Mutex};
 use tokio_stream::StreamExt;
-use tui::{
-    backend::{Backend, TermionBackend},
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    symbols::bar,
-    text::{Span, Spans, Text},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs},
-    Frame, Terminal,
-};
+use tui::{backend::TermionBackend, Terminal};
 
+#[allow(unused)]
 pub struct Tui<'t> {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    track_list: Arc<Mutex<TrackList<'t>>>,
+    track_list: Arc<Mutex<List<'t>>>,
     app_state: AppState,
     controls: Controls,
     no_tui: bool,
     terminal: Console,
     show_search: bool,
     search_query: Vec<char>,
-    search_results: Arc<Mutex<TrackList<'t>>>,
+    search_results: Arc<Mutex<List<'t>>>,
     album_results: Option<AlbumSearchResults>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 
 pub enum Event {
-    Input(Key),
+    Key(Key),
+    Mouse(MouseEvent),
+    Unsupported(Vec<u8>),
     Tick,
+}
+
+impl From<TermEvent> for Event {
+    fn from(e: TermEvent) -> Self {
+        match e {
+            TermEvent::Key(k) => Event::Key(k),
+            TermEvent::Mouse(m) => Event::Mouse(m),
+            TermEvent::Unsupported(u) => Event::Unsupported(u),
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -98,10 +101,10 @@ pub fn new<'t>(app_state: AppState, controls: Controls, no_tui: bool) -> Result<
         no_tui,
         rx,
         search_query: Vec::new(),
-        search_results: Arc::new(Mutex::new(TrackList::new(None))),
+        search_results: Arc::new(Mutex::new(List::new(None))),
         show_search: false,
         terminal,
-        track_list: Arc::new(Mutex::new(TrackList::new(None))),
+        track_list: Arc::new(Mutex::new(List::new(None))),
         tx,
     })
 }
@@ -119,7 +122,7 @@ impl<'t> Tui<'t> {
                     .clone()
                     .item_list(self.terminal.size().unwrap().width as usize, false);
 
-                let mut track_list = TrackList::new(Some(items));
+                let mut track_list = List::new(Some(items));
                 track_list.select(0);
 
                 self.search_results = Arc::new(Mutex::new(track_list));
@@ -157,20 +160,19 @@ impl<'t> Tui<'t> {
             error!("error sending tick: {}", err.to_string());
         }
     }
-    async fn event_loop<'c>(&mut self, client: Client) {
+    async fn event_loop<'c>(&mut self, _client: Client) {
         let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || {
             let stdin = std::io::stdin();
-            for key in stdin.keys().flatten() {
-                debug!("key pressed {:?}", key);
+            for event in stdin.events().flatten() {
                 if let Ok(quit) = q.try_recv() {
                     if quit {
                         return;
                     }
                 }
 
-                if let Err(err) = event_sender.send(Event::Input(key)) {
+                if let Err(err) = event_sender.send(event.into()) {
                     error!("error sending key event: {}", err.to_string());
                 }
             }
@@ -203,108 +205,52 @@ impl<'t> Tui<'t> {
                 }
                 Some(event) = event_stream.next() => {
                     match event {
-                       Event::Input(key) => {
-                            if self.show_search {
-                                match key {
-                                    Key::Char('\n') => {
-                                        let query = self.search_query.drain(..).map(|q| q.to_string()).collect::<Vec<String>>().join("");
-
-                                        if let Ok(results) = client.search_albums(query, Some(100)).await {
-                                            self.album_results = Some(results.clone());
-
-                                            let size = self.terminal.size().expect("failed to get size of terminal").width as usize;
-                                            let items: Vec<Item> = results.albums.item_list(size, false);
-
-                                            let mut search_results = self.search_results.lock().await;
-                                            search_results.set_items(items);
-                                            self.app_state.app.insert::<String, Screen>(StateKey::App(AppKey::ActiveScreen), Screen::Search);
-                                        }
-
-                                        self.show_search = false;
-                                    }
-                                    Key::Char(c) => {
-                                        self.search_query.push(c);
-                                        self.tick().await;
-                                    }
-                                    Key::Backspace => {
-                                        self.search_query.pop();
-                                        self.tick().await;
-                                    }
-                                    Key::Esc => {
-                                        self.show_search = false;
-                                        self.tick().await;
-                                    }
-                                    _ => ()
-                                }
-                            } else {
-                                match key {
-                                    Key::Char('1') => {
-                                        switch_screen!(self.app_state, Screen::NowPlaying);
-                                        self.tick().await;
-                                    }
-                                    Key::Char('2') =>  {
-                                        switch_screen!(self.app_state, Screen::Search);
-                                        self.tick().await;
-                                    }
-                                    Key::Char('q') => {
-                                        self.controls.stop().await;
-                                        self.app_state.quit();
-                                    },
-                                    Key::Char('/') => {
-                                        self.show_search = true;
-                                    }
-                                    _ => {
-                                        let app_tree = &self.app_state.app;
-                                        if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
-                                            match active_screen {
-                                                Screen::NowPlaying => {
-                                                    if player::key_events(event, self.controls.clone(), self.track_list.clone()).await {
-                                                        self.tick().await;
-                                                    }
-                                                },
-                                                Screen::Search => {
-                                                    match event {
-                                                       Event::Input(key) => {
-                                                            match key {
-                                                                Key::Up => {
-                                                                    let mut search_results = self.search_results.lock().await;
-                                                                    search_results.previous();
-                                                                    self.tick().await;
-                                                                }
-                                                                Key::Down => {
-                                                                    let mut search_results = self.search_results.lock().await;
-                                                                    search_results.next();
-                                                                    self.tick().await;
-                                                                }
-                                                                Key::Char('\n') => {
-                                                                    let search_results = self.search_results.lock().await;
-                                                                    if let Some(selected) = search_results.selected() {
-                                                                        let album_results = self.album_results.clone();
-                                                                        if let Some(results) = album_results {
-                                                                            if let Some(album) = results.albums.items.get(selected) {
-                                                                                self.controls.clear().await;
-                                                                                self.controls.play_album(album.clone()).await;
-                                                                                switch_screen!(self.app_state, Screen::NowPlaying);
-                                                                                self.tick().await;
-                                                                            };
-                                                                        }
-                                                                    }
-                                                                }
-                                                                _ => ()
-                                                            }
-                                                        }
-                                                        Event::Tick => ()
-                                                    }
-                                                },
-                                            }
-                                        };
-                                    }
-                                }
-                            }
-
-                        }
                         Event::Tick => {
                             self.render().await;
+                        },
+                       Event::Key(key) => {
+                            match key {
+                                Key::Char('1') => {
+                                    switch_screen!(self.app_state, Screen::NowPlaying);
+                                    self.tick().await;
+                                }
+                                Key::Char('2') =>  {
+                                    switch_screen!(self.app_state, Screen::Search);
+                                    self.tick().await;
+                                }
+                                Key::Char('q') => {
+                                    self.controls.stop().await;
+                                    self.app_state.quit();
+                                },
+                                _ => {
+                                    let app_tree = &self.app_state.app;
+                                    if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, Screen) {
+                                        match active_screen {
+                                            Screen::NowPlaying => {
+                                                if nowplaying::key_events(key, self.controls.clone(), self.track_list.clone()).await {
+                                                    self.tick().await;
+                                                }
+                                            },
+                                            Screen::Search => {
+                                                if search::key_events(key,self.controls.clone(),self.search_results.clone(),self.album_results.clone(),self.app_state.clone()).await {
+                                                    self.tick().await;
+                                                }
+                                            }
+                                        }
+
+                                    };
+                                }
+                            }
+                        },
+                        Event::Mouse(m) => {
+                            match m {
+                                MouseEvent::Press(button, x, y) => println!("mouse press button {:?} at {}x{}", button, x, y),
+                                MouseEvent::Release(x, y) => println!("mouse button released at {}x{}", x,y),
+                                MouseEvent::Hold(x, y) => println!("mouse button held at {}x{}", x,y),
+                            }
+                        },
+                        Event::Unsupported(_) => {
+                            error!("unsupported input");
                         }
                     }
                 }
@@ -319,147 +265,20 @@ impl<'t> Tui<'t> {
             Screen::NowPlaying
         };
 
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(6),
-                Constraint::Min(4),
-                Constraint::Length(1),
-            ])
-            .margin(0);
-
         match screen {
             Screen::NowPlaying => {
-                let mut list = self.track_list.lock().await;
-                if let Some(items) = self
-                    .app_state
-                    .player
-                    .item_list(self.terminal.size().unwrap().width as usize - 2)
-                {
-                    list.set_items(items);
-                }
-
+                let mut track_list = self.track_list.lock().await;
                 self.terminal
-                    .draw(|f| {
-                        let split_layout = layout.split(f.size());
-
-                        player(f, split_layout[0], self.app_state.clone());
-
-                        if self.show_search {
-                            search_popup(f, self.search_query.clone());
-                        } else {
-                            terminal::player::track_list(f, list.clone(), split_layout[1]);
-                        }
-
-                        tabs(0, f, split_layout[2]);
-                    })
+                    .draw(|f| nowplaying::render(f, &mut track_list, self.app_state.clone()))
                     .expect("failed to draw terminal screen");
             }
             Screen::Search => {
-                let list = self.search_results.lock().await;
+                let mut search_results = self.search_results.lock().await;
 
                 self.terminal
-                    .draw(|f| {
-                        let split_layout = layout.split(f.size());
-
-                        player(f, split_layout[0], self.app_state.clone());
-
-                        if self.show_search {
-                            search_popup(f, self.search_query.clone());
-                        } else {
-                            terminal::player::track_list(f, list.clone(), split_layout[1]);
-                        }
-
-                        tabs(1, f, split_layout[2]);
-                    })
+                    .draw(|f| search::render(f, &mut search_results, self.app_state.clone()))
                     .expect("failed to draw terminal screen");
             }
         }
     }
-}
-
-fn tabs<B>(num: usize, f: &mut Frame<B>, rect: Rect)
-where
-    B: Backend,
-{
-    let padding = (rect.width as usize / 2) - 4;
-
-    let titles = ["Now Playing", "Search Results"]
-        .iter()
-        .cloned()
-        .map(|t| {
-            let text = format!("{:^padding$}", t);
-            Spans::from(text)
-        })
-        .collect();
-
-    let mut bar = Span::from(bar::FULL);
-    bar.style = Style::default().fg(Color::Indexed(236));
-
-    let tabs = Tabs::new(titles)
-        .block(Block::default().style(Style::default().bg(Color::Indexed(235))))
-        .style(Style::default().fg(Color::White))
-        .highlight_style(
-            Style::default()
-                .bg(Color::Indexed(81))
-                .fg(Color::Indexed(235))
-                .add_modifier(Modifier::BOLD),
-        )
-        .divider(bar)
-        .select(num);
-
-    f.render_widget(tabs, rect);
-}
-
-fn search_popup<B>(f: &mut Frame<B>, search_query: Vec<char>)
-where
-    B: Backend,
-{
-    let block = Block::default()
-        .title("Enter query")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Indexed(250)));
-
-    let p = Paragraph::new(Text::from(Spans::from(
-        search_query
-            .iter()
-            .map(|c| Span::from(c.to_string()))
-            .collect::<Vec<Span>>(),
-    )))
-    .block(block);
-
-    let area = centered_rect(60, 10, f.size());
-
-    f.render_widget(Clear, area);
-    f.render_widget(p, area);
-    f.set_cursor(area.x + 1 + search_query.len() as u16, area.y + 1);
-}
-
-/// helper function to create a centered rect using up certain percentage of the available rect `r`
-/// https://github.com/fdehau/tui-rs/blob/master/examples/popup.rs
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
-            ]
-            .as_ref(),
-        )
-        .split(popup_layout[1])[1]
 }

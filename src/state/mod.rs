@@ -2,7 +2,7 @@ pub mod app;
 
 use crate::qobuz::PlaylistTrack;
 use crate::state::app::{PlayerKey, StateKey};
-use crate::ui::terminal::player::Item;
+use crate::ui::terminal::components::Item;
 
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
