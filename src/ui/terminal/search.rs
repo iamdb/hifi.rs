@@ -10,6 +10,8 @@ use crate::{
     ui::terminal::{components, AppKey, Console, List, Screen, StateKey},
 };
 
+// TODO:: MAKE SEARCH UI WORK AGAIN
+
 pub struct SearchScreen<'l> {
     search_results: List<'l>,
     app_state: AppState,
