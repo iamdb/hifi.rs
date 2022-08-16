@@ -50,16 +50,34 @@ where
     }
 }
 
-pub fn track_list<'t, B>(f: &mut Frame<B>, playlist: &'t mut List<'_>, area: Rect)
+pub fn text_box<B>(f: &mut Frame<B>, text: String, title: Option<&str>, area: Rect)
+where
+    B: Backend,
+{
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Indexed(250)));
+
+    if let Some(title) = title {
+        block = block.title(title);
+    }
+
+    let p = Paragraph::new(text).block(block);
+
+    f.render_widget(p, area);
+}
+
+pub fn list<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, area: Rect)
 where
     B: Backend,
 {
     let layout = Layout::default()
-        .margin(1)
+        .margin(0)
         .constraints([Constraint::Min(1)])
         .split(area);
 
-    let list = TermList::new(playlist.list_items())
+    let term_list = TermList::new(list.list_items())
         .highlight_style(
             Style::default()
                 .fg(Color::Indexed(81))
@@ -67,7 +85,7 @@ where
         )
         .highlight_symbol("");
 
-    f.render_stateful_widget(list, layout[0], &mut playlist.state);
+    f.render_stateful_widget(term_list, layout[0], &mut list.state);
 }
 
 fn progress<B>(

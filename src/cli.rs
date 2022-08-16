@@ -210,8 +210,8 @@ pub async fn run() -> Result<(), Error> {
                     if no_tui {
                         wait!(app_state);
                     } else {
-                        let mut tui = ui::terminal::new(app_state, controls, None)?;
-                        tui.start(client).await?;
+                        let mut tui = ui::terminal::new(app_state, controls, client, None, None)?;
+                        tui.start().await?;
                     }
                 }
             } else {
@@ -245,7 +245,7 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_albums(query, limit).await?;
+            let results = client.search_albums(query.clone(), limit).await?;
 
             if no_tui {
                 output!(results, output_format);
@@ -255,8 +255,14 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(app_state, player.controls(), Some(results))?;
-                    tui.start(client).await?;
+                    let mut tui = ui::terminal::new(
+                        app_state,
+                        player.controls(),
+                        client,
+                        Some(results),
+                        Some(query),
+                    )?;
+                    tui.start().await?;
                 }
             }
 
@@ -323,8 +329,8 @@ pub async fn run() -> Result<(), Error> {
             app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls(), None)?;
-            tui.start(client).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
+            tui.start().await?;
 
             Ok(())
         }
@@ -353,8 +359,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::terminal::new(app_state, player.controls(), None)?;
-                tui.start(client).await?;
+                let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
+                tui.start().await?;
             }
 
             Ok(())

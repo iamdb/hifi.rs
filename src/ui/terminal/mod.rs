@@ -30,6 +30,7 @@ use tui::{backend::TermionBackend, Terminal};
 pub trait Screen {
     fn render(&mut self, terminal: &mut Console);
     fn key_events(&mut self, key: Key) -> bool;
+    fn mouse_events(&mut self, event: MouseEvent) -> bool;
 }
 
 #[allow(unused)]
@@ -84,7 +85,9 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub fn new(
     app_state: AppState,
     controls: Controls,
+    client: Client,
     search_results: Option<AlbumSearchResults>,
+    query: Option<String>,
 ) -> Result<Tui> {
     let stdout = std::io::stdout();
     let stdout = stdout.into_raw_mode()?;
@@ -112,7 +115,9 @@ pub fn new(
         Rc::new(RefCell::new(SearchScreen::new(
             app_state.clone(),
             controls.clone(),
+            client,
             search_results,
+            query,
         ))) as Rc<RefCell<dyn Screen>>,
     );
     screens.insert(
@@ -135,8 +140,8 @@ pub fn new(
 }
 
 impl Tui {
-    pub async fn start(&mut self, client: Client) -> Result<()> {
-        self.event_loop(client).await;
+    pub async fn start(&mut self) -> Result<()> {
+        self.event_loop().await;
 
         Ok(())
     }
@@ -167,7 +172,7 @@ impl Tui {
             }
         }
     }
-    async fn event_loop<'c>(&mut self, _client: Client) {
+    async fn event_loop<'c>(&mut self) {
         // Watches stdin for input events and sends them to the
         // router for handling.
         let event_sender = self.tx.clone();
@@ -187,7 +192,8 @@ impl Tui {
             }
         });
 
-        // Sends a tick every 500ms to render the frame
+        // Sends a tick whose interval is defined by
+        // REFRESH_RESOLUTION
         let event_sender = self.tx.clone();
         let mut q = self.app_state.quitter();
         thread::spawn(move || loop {
@@ -261,13 +267,28 @@ impl Tui {
                     };
                 }
             },
-            Event::Mouse(m) => match m {
-                MouseEvent::Press(button, x, y) => {
-                    debug!("mouse press button {:?} at {}x{}", button, x, y)
+            Event::Mouse(m) => {
+                let app_tree = &self.app_state.app;
+                if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
+                {
+                    match active_screen {
+                        ActiveScreen::NowPlaying => {
+                            if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
+                                if screen.borrow_mut().mouse_events(m) {
+                                    self.tick().await;
+                                }
+                            }
+                        }
+                        ActiveScreen::Search => {
+                            if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
+                                if screen.borrow_mut().mouse_events(m) {
+                                    self.tick().await;
+                                }
+                            }
+                        }
+                    }
                 }
-                MouseEvent::Release(x, y) => debug!("mouse button released at {}x{}", x, y),
-                MouseEvent::Hold(x, y) => debug!("mouse button held at {}x{}", x, y),
-            },
+            }
             Event::Unsupported(_) => {
                 error!("unsupported input");
             }

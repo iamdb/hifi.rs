@@ -1,30 +1,35 @@
 use futures::executor;
-use termion::event::Key;
+use termion::event::{Key, MouseButton, MouseEvent};
 use tui::layout::{Constraint, Direction, Layout};
 
 use crate::{
     player::Controls,
-    qobuz::AlbumSearchResults,
+    qobuz::{client::Client, AlbumSearchResults},
     state::app::AppState,
     switch_screen,
     ui::terminal::{components, AppKey, Console, List, Screen, StateKey},
 };
 
-// TODO:: MAKE SEARCH UI WORK AGAIN
-
 pub struct SearchScreen<'l> {
+    client: Client,
     search_results: List<'l>,
     app_state: AppState,
     album_results: Option<AlbumSearchResults>,
     controls: Controls,
+    search_query: Vec<char>,
+    enter_search: bool,
 }
 
 impl<'l> SearchScreen<'l> {
     pub fn new(
         app_state: AppState,
         controls: Controls,
+        client: Client,
         album_results: Option<AlbumSearchResults>,
+        query: Option<String>,
     ) -> SearchScreen<'l> {
+        let mut enter_search = false;
+
         let search_results = if let Some(search_results) = album_results.clone() {
             let mut list = List::new(Some(search_results.albums.item_list(100, false)));
             list.select(0);
@@ -32,14 +37,24 @@ impl<'l> SearchScreen<'l> {
 
             list
         } else {
+            enter_search = true;
             List::new(None)
         };
 
+        let search_query = if let Some(query) = query {
+            query.chars().collect::<Vec<char>>()
+        } else {
+            Vec::new()
+        };
+
         SearchScreen {
-            search_results,
-            app_state,
-            controls,
             album_results,
+            app_state,
+            client,
+            controls,
+            enter_search,
+            search_query,
+            search_results,
         }
     }
 }
@@ -52,15 +67,27 @@ impl<'l> Screen for SearchScreen<'l> {
                     .direction(Direction::Vertical)
                     .constraints([
                         Constraint::Length(6),
+                        Constraint::Length(3),
                         Constraint::Min(4),
                         Constraint::Length(1),
                     ])
-                    .margin(0);
+                    .margin(0)
+                    .split(f.size());
 
-                let split_layout = layout.split(f.size());
-                components::player(f, split_layout[0], self.app_state.clone());
-                components::track_list(f, &mut self.search_results, split_layout[1]);
-                components::tabs(1, f, split_layout[2]);
+                components::player(f, layout[0], self.app_state.clone());
+
+                let text = String::from_iter(&self.search_query);
+                components::text_box(f, text, Some("Search"), layout[1]);
+
+                if self.enter_search {
+                    f.set_cursor(
+                        layout[1].x + 1 + self.search_query.len() as u16,
+                        layout[1].y + 1,
+                    );
+                }
+
+                components::list(f, &mut self.search_results, layout[2]);
+                components::tabs(1, f, layout[3]);
             })
             .expect("failed to draw screen");
     }
@@ -74,20 +101,91 @@ impl<'l> Screen for SearchScreen<'l> {
                 self.search_results.next();
                 return true;
             }
-            Key::Char('\n') => {
-                if let Some(selected) = self.search_results.selected() {
-                    if let Some(album_results) = &self.album_results {
-                        if let Some(album) = album_results.albums.items.get(selected) {
-                            executor::block_on(self.controls.clear());
-                            executor::block_on(self.controls.play_album(album.clone()));
-                            switch_screen!(self.app_state, ActiveScreen::NowPlaying);
-                            return true;
-                        };
-                    }
+            Key::Backspace => {
+                if self.enter_search {
+                    self.search_query.pop();
+                    return true;
                 }
             }
+            Key::Esc => {
+                if self.enter_search {
+                    self.enter_search = false;
+                    return true;
+                }
+            }
+            Key::Char(char) => match char {
+                '\n' => {
+                    if self.enter_search {
+                        let query = String::from_iter(self.search_query.clone());
+                        if let Ok(results) =
+                            executor::block_on(self.client.search_albums(query, Some(100)))
+                        {
+                            self.album_results = Some(results.clone());
+                            self.search_results
+                                .set_items(results.albums.item_list(100, false));
+                            self.search_results.select(0);
+                            self.enter_search = false;
+                        }
+                    } else if let Some(selected) = self.search_results.selected() {
+                        if let Some(album_results) = &self.album_results {
+                            if let Some(album) = album_results.albums.items.get(selected) {
+                                executor::block_on(self.controls.clear());
+                                executor::block_on(self.controls.play_album(album.clone()));
+                                switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                                return true;
+                            };
+                        }
+                    }
+                }
+                '/' => {
+                    if !self.enter_search {
+                        self.enter_search = true;
+                        return true;
+                    }
+                }
+                char => {
+                    if self.enter_search {
+                        self.search_query.push(char);
+                        return true;
+                    }
+                }
+            },
             _ => (),
         };
+
+        false
+    }
+    fn mouse_events(&mut self, event: MouseEvent) -> bool {
+        match event {
+            MouseEvent::Press(button, _, y) => match button {
+                MouseButton::Left => {
+                    if y == 8 && !self.enter_search {
+                        self.enter_search = true;
+                        return true;
+                    }
+                }
+                MouseButton::Right => {
+                    debug!("right")
+                }
+                MouseButton::Middle => {
+                    debug!("middle")
+                }
+                MouseButton::WheelUp => {
+                    debug!("wheel up");
+                    self.search_results.previous();
+                    return true;
+                }
+                MouseButton::WheelDown => {
+                    debug!("wheel down");
+                    self.search_results.next();
+                    return true;
+                }
+            },
+            MouseEvent::Release(_, _) => {
+                debug!("released")
+            }
+            MouseEvent::Hold(_, _) => debug!("held"),
+        }
 
         false
     }

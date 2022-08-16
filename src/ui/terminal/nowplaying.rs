@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use futures::executor;
-use termion::event::Key;
+use termion::event::{Key, MouseEvent};
 use tui::layout::{Constraint, Direction, Layout};
 
 pub struct NowPlayingScreen<'l> {
@@ -56,7 +56,7 @@ impl<'l> Screen for NowPlayingScreen<'l> {
                 let split_layout = layout.split(f.size());
 
                 components::player(f, split_layout[0], self.app_state.clone());
-                components::track_list(f, &mut self.track_list, split_layout[1]);
+                components::list(f, &mut self.track_list, split_layout[1]);
                 components::tabs(0, f, split_layout[2]);
             })
             .expect("failed to draw screen");
@@ -106,6 +106,21 @@ impl<'l> Screen for NowPlayingScreen<'l> {
             _ => (),
         }
 
+        false
+    }
+
+    fn mouse_events(&mut self, _event: MouseEvent) -> bool {
+        // match event {
+        //     MouseEvent::Press(button, _, _) => match button {
+        //         termion::event::MouseButton::Left => todo!(),
+        //         termion::event::MouseButton::Right => todo!(),
+        //         termion::event::MouseButton::Middle => todo!(),
+        //         termion::event::MouseButton::WheelUp => todo!(),
+        //         termion::event::MouseButton::WheelDown => todo!(),
+        //     },
+        //     MouseEvent::Release(_, _) => todo!(),
+        //     MouseEvent::Hold(_, _) => todo!(),
+        // };
         false
     }
 }
