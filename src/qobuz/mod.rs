@@ -9,7 +9,9 @@ use tui::{
     widgets::ListItem,
 };
 
-use crate::{qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::player::Item};
+use crate::{
+    qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::components::Item,
+};
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {

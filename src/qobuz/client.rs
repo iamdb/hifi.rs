@@ -8,7 +8,7 @@ use crate::{
         app::{AppState, ClientKey, StateKey},
         AudioQuality, StringValue,
     },
-    Credentials,
+    util::capitalize,
 };
 use clap::ValueEnum;
 use reqwest::{
@@ -32,6 +32,12 @@ macro_rules! format_info {
     };
 }
 
+#[derive(Clone, Debug)]
+pub struct Credentials {
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
+
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("No username provided."))]
@@ -51,7 +57,7 @@ pub enum Error {
     #[snafu(display("Failed to create client"))]
     Create,
     #[snafu(display("{message}"))]
-    API { message: String },
+    Api { message: String },
     #[snafu(display("Failed to deserialize json: {message}"))]
     DeserializeJSON { message: String },
 }
@@ -61,16 +67,16 @@ impl From<reqwest::Error> for Error {
         let status = error.status();
 
         match status {
-            Some(StatusCode::BAD_REQUEST) => Error::API {
+            Some(StatusCode::BAD_REQUEST) => Error::Api {
                 message: "Bad request".to_string(),
             },
-            Some(StatusCode::UNAUTHORIZED) => Error::API {
+            Some(StatusCode::UNAUTHORIZED) => Error::Api {
                 message: "Unauthorized request".to_string(),
             },
-            Some(StatusCode::NOT_FOUND) => Error::API {
+            Some(StatusCode::NOT_FOUND) => Error::Api {
                 message: "Item not found".to_string(),
             },
-            Some(_) | None => Error::API {
+            Some(_) | None => Error::Api {
                 message: "Error calling the API.".to_string(),
             },
         }
@@ -179,7 +185,7 @@ macro_rules! call {
                     message: error.to_string(),
                 }),
             },
-            Err(error) => Err(Error::API {
+            Err(error) => Err(Error::Api {
                 message: error.to_string(),
             }),
         }
@@ -514,13 +520,13 @@ impl Client {
     // Handle a response retrieved from the api
     async fn handle_response(&self, response: Response) -> Result<String> {
         match response.status() {
-            StatusCode::BAD_REQUEST => Err(Error::API {
+            StatusCode::BAD_REQUEST => Err(Error::Api {
                 message: "Bad request".to_string(),
             }),
-            StatusCode::UNAUTHORIZED => Err(Error::API {
+            StatusCode::UNAUTHORIZED => Err(Error::Api {
                 message: "Unauthorized request".to_string(),
             }),
-            StatusCode::NOT_FOUND => Err(Error::API {
+            StatusCode::NOT_FOUND => Err(Error::Api {
                 message: "Item not found".to_string(),
             }),
             StatusCode::OK => {
@@ -573,7 +579,7 @@ impl Client {
                 let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
                 let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-                let info_regex = format!(format_info!(), crate::capitalize(&timezone));
+                let info_regex = format!(format_info!(), capitalize(&timezone));
                 let info_regex_str = info_regex.as_str();
                 regex::Regex::new(info_regex_str)
                     .unwrap()
@@ -638,13 +644,13 @@ impl Client {
 macro_rules! output {
     ($results:ident, $output_format:expr) => {
         match $output_format {
-            Some(OutputFormat::JSON) => {
+            Some(OutputFormat::Json) => {
                 let json =
                     serde_json::to_string(&$results).expect("failed to convert results to string");
 
                 print!("{}", json);
             }
-            Some(OutputFormat::TSV) => {
+            Some(OutputFormat::Tsv) => {
                 let formatted_results: Vec<Vec<String>> = $results.into();
 
                 let rows = formatted_results
@@ -680,7 +686,50 @@ pub(crate) use output;
 
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum OutputFormat {
-    JSON,
+    Json,
     #[clap(name = "tabs")]
-    TSV,
+    Tsv,
+}
+
+#[tokio::test]
+async fn can_use_methods() {
+    use crate::TEST_TEMP_PATH;
+    use nanoid::nanoid;
+    use std::{path::PathBuf, str::FromStr};
+    use tokio_test::assert_ok;
+
+    let id = nanoid!();
+    let path_string = format!("{}_{}", TEST_TEMP_PATH, id);
+    let path = PathBuf::from_str(path_string.as_str()).expect("failed to create path");
+    let app_state = crate::state::app::new(path.clone()).expect("failed to create database");
+    let creds = Credentials {
+        username: Some(env!("QOBUZ_USERNAME").to_string()),
+        password: Some(env!("QOBUZ_PASSWORD").to_string()),
+    };
+
+    let client = new(app_state.clone(), creds.clone())
+        .await
+        .expect("failed to create client");
+
+    assert_ok!(client.user_playlists().await);
+    let album_response = assert_ok!(
+        client
+            .search_albums("a love supreme".to_string(), Some(10))
+            .await
+    );
+    assert_eq!(album_response.albums.items.len(), 10);
+    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await);
+    let artist_response = assert_ok!(
+        client
+            .search_artists("pink floyd".to_string(), Some(10))
+            .await
+    );
+    assert_eq!(artist_response.artists.items.len(), 10);
+    assert_ok!(client.artist(148745, Some(10)).await);
+    assert_ok!(client.track(155999429).await);
+    assert_ok!(
+        client
+            .track_url(155999429, Some(AudioQuality::Mp3), None)
+            .await
+    );
 }

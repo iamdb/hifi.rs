@@ -2,7 +2,7 @@ pub mod app;
 
 use crate::qobuz::PlaylistTrack;
 use crate::state::app::{PlayerKey, StateKey};
-use crate::ui::terminal::player::Item;
+use crate::ui::terminal::components::Item;
 
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
@@ -107,33 +107,33 @@ macro_rules! get_app {
     };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
-pub enum Screen {
+pub enum ActiveScreen {
     NowPlaying,
     Search,
 }
 
-impl Screen {
+impl ActiveScreen {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Screen::NowPlaying => "now_playing",
-            Screen::Search => "search",
+            ActiveScreen::NowPlaying => "now_playing",
+            ActiveScreen::Search => "search",
         }
     }
 }
 
-impl From<Bytes> for Screen {
+impl From<Bytes> for ActiveScreen {
     fn from(bytes: Bytes) -> Self {
-        let deserialized: Screen =
+        let deserialized: ActiveScreen =
             bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
 
         deserialized
     }
 }
 
-impl From<Screen> for Bytes {
-    fn from(screen: Screen) -> Self {
+impl From<ActiveScreen> for Bytes {
+    fn from(screen: ActiveScreen) -> Self {
         bincode::serialize(&screen)
             .expect("failed to serialize string value")
             .into()
