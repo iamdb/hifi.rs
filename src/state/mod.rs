@@ -107,7 +107,7 @@ macro_rules! get_app {
     };
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ActiveScreen {
     NowPlaying,

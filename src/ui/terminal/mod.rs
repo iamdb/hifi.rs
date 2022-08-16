@@ -16,7 +16,7 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use snafu::prelude::*;
-use std::{char, io::Stdout, thread, time::Duration};
+use std::{cell::RefCell, collections::HashMap, io::Stdout, rc::Rc, thread, time::Duration};
 use termion::{
     event::{Event as TermEvent, Key, MouseEvent},
     input::{MouseTerminal, TermRead},
@@ -25,29 +25,21 @@ use termion::{
 };
 use tokio::select;
 use tokio_stream::StreamExt;
-use tui::{
-    backend::{Backend, TermionBackend},
-    Frame, Terminal,
-};
+use tui::{backend::TermionBackend, Terminal};
 
 pub trait Screen {
-    fn render<'t, B>(f: &mut Frame<B>, search_results: &'t mut List<'_>, app_state: AppState)
-    where
-        B: Backend;
+    fn render(&mut self, terminal: &mut Console);
+    fn key_events(&mut self, key: Key) -> bool;
 }
 
 #[allow(unused)]
-pub struct Tui<'t> {
+pub struct Tui {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    track_list: List<'t>,
     app_state: AppState,
     controls: Controls,
     terminal: Console,
-    show_search: bool,
-    search_query: Vec<char>,
-    search_results: List<'t>,
-    album_results: Option<AlbumSearchResults>,
+    screens: HashMap<ActiveScreen, Rc<RefCell<dyn Screen>>>,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
@@ -89,7 +81,11 @@ impl From<std::io::Error> for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn new<'t>(app_state: AppState, controls: Controls) -> Result<Tui<'t>> {
+pub fn new(
+    app_state: AppState,
+    controls: Controls,
+    search_results: Option<AlbumSearchResults>,
+) -> Result<Tui> {
     let stdout = std::io::stdout();
     let stdout = stdout.into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
@@ -110,41 +106,36 @@ pub fn new<'t>(app_state: AppState, controls: Controls) -> Result<Tui<'t>> {
         };
     }
 
+    let mut screens = HashMap::new();
+    screens.insert(
+        ActiveScreen::Search,
+        Rc::new(RefCell::new(SearchScreen::new(
+            app_state.clone(),
+            controls.clone(),
+            search_results,
+        ))) as Rc<RefCell<dyn Screen>>,
+    );
+    screens.insert(
+        ActiveScreen::NowPlaying,
+        Rc::new(RefCell::new(NowPlayingScreen::new(
+            app_state.clone(),
+            controls.clone(),
+            None,
+        ))) as Rc<RefCell<dyn Screen>>,
+    );
+
     Ok(Tui {
-        album_results: None,
         app_state,
         controls,
         rx,
-        search_query: Vec::new(),
-        search_results: List::new(None),
-        show_search: false,
         terminal,
-        track_list: List::new(None),
         tx,
+        screens,
     })
 }
 
-impl<'t> Tui<'t> {
-    pub async fn start(
-        &mut self,
-        client: Client,
-        results: Option<AlbumSearchResults>,
-    ) -> Result<()> {
-        if let Some(results) = results {
-            let items = results
-                .albums
-                .clone()
-                .item_list(self.terminal.size().unwrap().width as usize, false);
-
-            let mut track_list = List::new(Some(items));
-            track_list.select(0);
-
-            self.search_results = track_list;
-            self.search_results.select(0);
-            self.album_results = Some(results);
-            switch_screen!(self.app_state, ActiveScreen::Search);
-        }
-
+impl Tui {
+    pub async fn start(&mut self, client: Client) -> Result<()> {
         self.event_loop(client).await;
 
         Ok(())
@@ -152,6 +143,28 @@ impl<'t> Tui<'t> {
     async fn tick(&self) {
         if let Err(err) = self.tx.send_async(Event::Tick).await {
             error!("error sending tick: {}", err.to_string());
+        }
+    }
+    async fn render(&mut self) {
+        let app_tree = self.app_state.app.clone();
+        let screen =
+            if let Some(saved_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen) {
+                saved_screen
+            } else {
+                ActiveScreen::NowPlaying
+            };
+
+        match screen {
+            ActiveScreen::NowPlaying => {
+                if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
+                    screen.borrow_mut().render(&mut self.terminal);
+                }
+            }
+            ActiveScreen::Search => {
+                if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
+                    screen.borrow_mut().render(&mut self.terminal);
+                }
+            }
         }
     }
     async fn event_loop<'c>(&mut self, _client: Client) {
@@ -201,82 +214,62 @@ impl<'t> Tui<'t> {
                     }
                 }
                 Some(event) = event_stream.next() => {
-                    match event {
-                        Event::Tick => {
-                            self.render().await;
-                        },
-                        Event::Key(key) => {
-                            match key {
-                                Key::Char('1') => {
-                                    switch_screen!(self.app_state, ActiveScreen::NowPlaying);
-                                    self.tick().await;
-                                }
-                                Key::Char('2') =>  {
-                                    switch_screen!(self.app_state, ActiveScreen::Search);
-                                    self.tick().await;
-                                }
-                                Key::Char('q') => {
-                                    self.controls.stop().await;
-                                    self.app_state.quit();
-                                },
-                                _ => {
-                                    let app_tree = &self.app_state.app;
-                                    if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen) {
-                                        match active_screen {
-                                            ActiveScreen::NowPlaying => {
-                                                if nowplaying::key_events(key, self.controls.clone(), &mut self.track_list).await {
-                                                    self.tick().await;
-                                                }
-                                            },
-                                            ActiveScreen::Search => {
-                                                if search::key_events(key,self.controls.clone(),&mut self.search_results,self.album_results.clone(),self.app_state.clone()).await {
-                                                    self.tick().await;
-                                                }
-                                            }
-                                        }
-
-                                    };
-                                }
-                            }
-                        },
-                        Event::Mouse(m) => {
-                            match m {
-                                MouseEvent::Press(button, x, y) => debug!("mouse press button {:?} at {}x{}", button, x, y),
-                                MouseEvent::Release(x, y) => debug!("mouse button released at {}x{}", x,y),
-                                MouseEvent::Hold(x, y) => debug!("mouse button held at {}x{}", x,y),
-                            }
-                        },
-                        Event::Unsupported(_) => {
-                            error!("unsupported input");
-                        }
-                    }
+                    self.handle_event(event).await
                 }
             }
         }
     }
-    async fn render(&mut self) {
-        let app_tree = self.app_state.app.clone();
-        let screen =
-            if let Some(saved_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen) {
-                saved_screen
-            } else {
-                ActiveScreen::NowPlaying
-            };
-
-        match screen {
-            ActiveScreen::NowPlaying => {
-                self.terminal
-                    .draw(|f| {
-                        NowPlayingScreen::render(f, &mut self.track_list, self.app_state.clone())
-                    })
-                    .expect("failed to draw terminal screen");
+    async fn handle_event(&mut self, event: Event) {
+        match event {
+            Event::Tick => {
+                self.render().await;
             }
-            ActiveScreen::Search => {
-                self.terminal
-                    .draw(|f| {
-                        SearchScreen::render(f, &mut self.search_results, self.app_state.clone())
-                    })
-                    .expect("failed to draw terminal screen");
+            Event::Key(key) => match key {
+                Key::Char('1') => {
+                    switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                    self.tick().await;
+                }
+                Key::Char('2') => {
+                    switch_screen!(self.app_state, ActiveScreen::Search);
+                    self.tick().await;
+                }
+                Key::Char('q') => {
+                    self.controls.stop().await;
+                    self.app_state.quit();
+                }
+                _ => {
+                    let app_tree = &self.app_state.app;
+                    if let Some(active_screen) =
+                        get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
+                    {
+                        match active_screen {
+                            ActiveScreen::NowPlaying => {
+                                if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
+                                    if screen.borrow_mut().key_events(key) {
+                                        self.tick().await;
+                                    }
+                                }
+                            }
+                            ActiveScreen::Search => {
+                                if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
+                                    if screen.borrow_mut().key_events(key) {
+                                        self.tick().await;
+                                    }
+                                }
+                            }
+                        }
+                    };
+                }
+            },
+            Event::Mouse(m) => match m {
+                MouseEvent::Press(button, x, y) => {
+                    debug!("mouse press button {:?} at {}x{}", button, x, y)
+                }
+                MouseEvent::Release(x, y) => debug!("mouse button released at {}x{}", x, y),
+                MouseEvent::Hold(x, y) => debug!("mouse button held at {}x{}", x, y),
+            },
+            Event::Unsupported(_) => {
+                error!("unsupported input");
             }
         }
     }

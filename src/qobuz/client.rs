@@ -693,12 +693,12 @@ pub enum OutputFormat {
 
 #[tokio::test]
 async fn can_use_methods() {
+    use crate::TEST_TEMP_PATH;
     use nanoid::nanoid;
     use std::{path::PathBuf, str::FromStr};
     use tokio_test::assert_ok;
 
     let id = nanoid!();
-    use crate::TEST_TEMP_PATH;
     let path_string = format!("{}_{}", TEST_TEMP_PATH, id);
     let path = PathBuf::from_str(path_string.as_str()).expect("failed to create path");
     let app_state = crate::state::app::new(path.clone()).expect("failed to create database");

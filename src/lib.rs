@@ -14,5 +14,5 @@ mod state;
 mod ui;
 mod util;
 
-pub const REFRESH_RESOLUTION: u64 = 500;
+const REFRESH_RESOLUTION: u64 = 500;
 pub const TEST_TEMP_PATH: &str = "/tmp/hifirs_test";

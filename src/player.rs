@@ -712,6 +712,8 @@ impl Player {
     }
 }
 
+/// Provides controls for other modules to send commands
+/// to the player
 #[derive(Debug, Clone)]
 pub struct Controls {
     action_tx: Sender<Action>,

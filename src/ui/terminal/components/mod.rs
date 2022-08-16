@@ -395,6 +395,7 @@ impl<'t> List<'t> {
         self.state.selected()
     }
 
+    #[allow(unused)]
     pub fn select(&mut self, num: usize) {
         self.state.select(Some(num));
     }

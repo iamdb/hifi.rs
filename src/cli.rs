@@ -210,8 +210,8 @@ pub async fn run() -> Result<(), Error> {
                     if no_tui {
                         wait!(app_state);
                     } else {
-                        let mut tui = ui::terminal::new(app_state, controls)?;
-                        tui.start(client, None).await?;
+                        let mut tui = ui::terminal::new(app_state, controls, None)?;
+                        tui.start(client).await?;
                     }
                 }
             } else {
@@ -255,8 +255,8 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(app_state, player.controls())?;
-                    tui.start(client, None).await?;
+                    let mut tui = ui::terminal::new(app_state, player.controls(), Some(results))?;
+                    tui.start(client).await?;
                 }
             }
 
@@ -323,8 +323,8 @@ pub async fn run() -> Result<(), Error> {
             app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls())?;
-            tui.start(client, None).await?;
+            let mut tui = ui::terminal::new(app_state, player.controls(), None)?;
+            tui.start(client).await?;
 
             Ok(())
         }
@@ -353,8 +353,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::terminal::new(app_state, player.controls())?;
-                tui.start(client, None).await?;
+                let mut tui = ui::terminal::new(app_state, player.controls(), None)?;
+                tui.start(client).await?;
             }
 
             Ok(())

@@ -2,88 +2,110 @@ use crate::{
     player::Controls,
     state::app::AppState,
     ui::terminal::{
-        components::{self, List},
-        Screen,
+        components::{self, Item, List},
+        Console, Screen,
     },
 };
+use futures::executor;
 use termion::event::Key;
-use tui::{
-    backend::Backend,
-    layout::{Constraint, Direction, Layout},
-    Frame,
-};
+use tui::layout::{Constraint, Direction, Layout};
 
-pub struct NowPlayingScreen {}
+pub struct NowPlayingScreen<'l> {
+    track_list: List<'l>,
+    app_state: AppState,
+    controls: Controls,
+}
 
-impl Screen for NowPlayingScreen {
-    fn render<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, app_state: AppState)
-    where
-        B: Backend,
-    {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(6),
-                Constraint::Min(4),
-                Constraint::Length(1),
-            ])
-            .margin(0);
+impl<'l> NowPlayingScreen<'l> {
+    pub fn new(
+        app_state: AppState,
+        controls: Controls,
+        list_items: Option<Vec<Item<'_>>>,
+    ) -> NowPlayingScreen {
+        let track_list = if let Some(items) = list_items {
+            List::new(Some(items))
+        } else {
+            List::new(None)
+        };
 
-        if let Some(items) = app_state.player.item_list(f.size().width as usize - 2) {
-            list.set_items(items);
+        NowPlayingScreen {
+            track_list,
+            app_state,
+            controls,
         }
-
-        let split_layout = layout.split(f.size());
-
-        components::player(f, split_layout[0], app_state.clone());
-        components::track_list(f, list, split_layout[1]);
-        components::tabs(0, f, split_layout[2]);
     }
 }
 
-pub async fn key_events<'l>(key: Key, controls: Controls, track_list: &'l mut List<'_>) -> bool {
-    match key {
-        Key::Char(c) => match c {
-            ' ' => {
-                controls.play_pause().await;
-                return true;
-            }
-            'N' => {
-                controls.next().await;
-                return true;
-            }
-            'P' => {
-                controls.previous().await;
-                return true;
-            }
-            '\n' => {
-                if let Some(selection) = track_list.selected() {
-                    debug!("playing selected track {}", selection);
-                    controls.skip_to(selection).await;
+impl<'l> Screen for NowPlayingScreen<'l> {
+    fn render(&mut self, terminal: &mut Console) {
+        terminal
+            .draw(|f| {
+                let layout = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(6),
+                        Constraint::Min(4),
+                        Constraint::Length(1),
+                    ])
+                    .margin(0);
+
+                if let Some(items) = self.app_state.player.item_list(f.size().width as usize - 2) {
+                    self.track_list.set_items(items);
                 }
 
+                let split_layout = layout.split(f.size());
+
+                components::player(f, split_layout[0], self.app_state.clone());
+                components::track_list(f, &mut self.track_list, split_layout[1]);
+                components::tabs(0, f, split_layout[2]);
+            })
+            .expect("failed to draw screen");
+    }
+
+    fn key_events(&mut self, key: Key) -> bool {
+        match key {
+            Key::Char(c) => match c {
+                ' ' => {
+                    executor::block_on(self.controls.play_pause());
+                    return true;
+                }
+                'N' => {
+                    executor::block_on(self.controls.next());
+                    return true;
+                }
+                'P' => {
+                    executor::block_on(self.controls.previous());
+                    return true;
+                }
+                '\n' => {
+                    if let Some(selection) = self.track_list.selected() {
+                        debug!("playing selected track {}", selection);
+                        executor::block_on(self.controls.skip_to(selection));
+                    }
+
+                    return true;
+                }
+                _ => (),
+            },
+            Key::Down => {
+                self.track_list.next();
+                return true;
+            }
+            Key::Up => {
+                self.track_list.previous();
+                return true;
+            }
+            Key::Right => {
+                executor::block_on(self.controls.jump_forward());
+                return true;
+            }
+            Key::Left => {
+                executor::block_on(self.controls.jump_backward());
                 return true;
             }
             _ => (),
-        },
-        Key::Down => {
-            track_list.next();
-            return true;
         }
-        Key::Up => {
-            track_list.previous();
-            return true;
-        }
-        Key::Right => {
-            controls.jump_forward().await;
-            return true;
-        }
-        Key::Left => {
-            controls.jump_backward().await;
-            return true;
-        }
-        _ => (),
-    }
 
-    false
+        false
+    }
 }
