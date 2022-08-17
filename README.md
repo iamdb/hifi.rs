@@ -1,4 +1,4 @@
-# Hifi.rs
+# hifi.rs
 
 ### A terminal-based (tui), high resolution audio player for the discerning listener.<super>\*</super>
 
