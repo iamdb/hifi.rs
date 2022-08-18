@@ -7,12 +7,15 @@ use crate::{
     qobuz::{client::Client, AlbumSearchResults},
     state::app::AppState,
     switch_screen,
-    ui::terminal::{components, AppKey, Console, List, Screen, StateKey},
+    ui::terminal::{
+        components::{self, Table},
+        AppKey, Console, Screen, StateKey,
+    },
 };
 
 pub struct SearchScreen<'l> {
     client: Client,
-    search_results: List<'l>,
+    search_results: Table<'l>,
     app_state: AppState,
     album_results: Option<AlbumSearchResults>,
     controls: Controls,
@@ -27,18 +30,28 @@ impl<'l> SearchScreen<'l> {
         client: Client,
         album_results: Option<AlbumSearchResults>,
         query: Option<String>,
+        screen_size: u16,
     ) -> SearchScreen<'l> {
         let mut enter_search = false;
 
         let search_results = if let Some(search_results) = album_results.clone() {
-            let mut list = List::new(Some(search_results.albums.item_list(100, false)));
-            list.select(0);
+            let header = search_results
+                .table_headers()
+                .iter()
+                .map(|h| h.to_string())
+                .collect::<Vec<String>>();
+            let mut table = Table::new(
+                header,
+                search_results.header_constraints(screen_size),
+                Some(search_results.albums.row_list()),
+            );
+            table.select(0);
             switch_screen!(app_state, ActiveScreen::Search);
 
-            list
+            table
         } else {
             enter_search = true;
-            List::new(None)
+            Table::new(Vec::new(), Vec::new(), None)
         };
 
         let search_query = if let Some(query) = query {
@@ -86,7 +99,7 @@ impl<'l> Screen for SearchScreen<'l> {
                     );
                 }
 
-                components::list(f, &mut self.search_results, layout[2]);
+                components::table(f, &mut self.search_results, layout[2]);
                 components::tabs(1, f, layout[3]);
             })
             .expect("failed to draw screen");
@@ -121,8 +134,7 @@ impl<'l> Screen for SearchScreen<'l> {
                             executor::block_on(self.client.search_albums(query, Some(100)))
                         {
                             self.album_results = Some(results.clone());
-                            self.search_results
-                                .set_items(results.albums.item_list(100, false));
+                            self.search_results.set_rows(results.albums.row_list());
                             self.search_results.select(0);
                             self.enter_search = false;
                         }

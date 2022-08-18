@@ -92,6 +92,8 @@ enum Commands {
         track_id: i32,
         #[clap(short, long, value_enum)]
         quality: Option<AudioQuality>,
+        #[clap(short, long)]
+        no_tui: bool,
     },
     /// Stream a full album by its ID.
     StreamAlbum {
@@ -211,7 +213,7 @@ pub async fn run() -> Result<(), Error> {
                         wait!(app_state);
                     } else {
                         let mut tui = ui::terminal::new(app_state, controls, client, None, None)?;
-                        tui.start().await?;
+                        tui.event_loop().await?;
                     }
                 }
             } else {
@@ -262,7 +264,7 @@ pub async fn run() -> Result<(), Error> {
                         Some(results),
                         Some(query),
                     )?;
-                    tui.start().await?;
+                    tui.event_loop().await?;
                 }
             }
 
@@ -299,6 +301,7 @@ pub async fn run() -> Result<(), Error> {
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
+            // TODO: Finish implementing table headers
             print!("{}", json);
             Ok(())
         }
@@ -320,7 +323,11 @@ pub async fn run() -> Result<(), Error> {
             print!("{}", json);
             Ok(())
         }
-        Commands::StreamTrack { track_id, quality } => {
+        Commands::StreamTrack {
+            track_id,
+            quality,
+            no_tui,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
             let mut player = player::new(app_state.clone(), client.clone(), false).await;
 
@@ -329,8 +336,12 @@ pub async fn run() -> Result<(), Error> {
             app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
-            tui.start().await?;
+            if no_tui {
+                wait!(app_state);
+            } else {
+                let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
+            }
 
             Ok(())
         }
@@ -360,7 +371,7 @@ pub async fn run() -> Result<(), Error> {
                 wait!(app_state);
             } else {
                 let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
-                tui.start().await?;
+                tui.event_loop().await?;
             }
 
             Ok(())

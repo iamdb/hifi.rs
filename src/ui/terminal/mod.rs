@@ -11,7 +11,7 @@ use crate::{
         ActiveScreen,
     },
     switch_screen,
-    ui::terminal::{components::List, nowplaying::NowPlayingScreen, search::SearchScreen},
+    ui::terminal::{nowplaying::NowPlayingScreen, search::SearchScreen},
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
@@ -118,6 +118,7 @@ pub fn new(
             client,
             search_results,
             query,
+            terminal.size().unwrap().width,
         ))) as Rc<RefCell<dyn Screen>>,
     );
     screens.insert(
@@ -140,11 +141,6 @@ pub fn new(
 }
 
 impl Tui {
-    pub async fn start(&mut self) -> Result<()> {
-        self.event_loop().await;
-
-        Ok(())
-    }
     async fn tick(&self) {
         if let Err(err) = self.tx.send_async(Event::Tick).await {
             error!("error sending tick: {}", err.to_string());
@@ -172,7 +168,7 @@ impl Tui {
             }
         }
     }
-    async fn event_loop<'c>(&mut self) {
+    pub async fn event_loop<'c>(&mut self) -> Result<()> {
         // Watches stdin for input events and sends them to the
         // router for handling.
         let event_sender = self.tx.clone();
@@ -224,6 +220,8 @@ impl Tui {
                 }
             }
         }
+
+        Ok(())
     }
     async fn handle_event(&mut self, event: Event) {
         match event {
@@ -231,15 +229,24 @@ impl Tui {
                 self.render().await;
             }
             Event::Key(key) => match key {
-                Key::Char('1') => {
-                    switch_screen!(self.app_state, ActiveScreen::NowPlaying);
-                    self.tick().await;
+                Key::Char('\t') => {
+                    let app_tree = &self.app_state.app;
+                    if let Some(active_screen) =
+                        get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
+                    {
+                        match active_screen {
+                            ActiveScreen::NowPlaying => {
+                                switch_screen!(self.app_state, ActiveScreen::Search);
+                                self.tick().await;
+                            }
+                            ActiveScreen::Search => {
+                                switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                                self.tick().await;
+                            }
+                        }
+                    }
                 }
-                Key::Char('2') => {
-                    switch_screen!(self.app_state, ActiveScreen::Search);
-                    self.tick().await;
-                }
-                Key::Char('q') => {
+                Key::Ctrl('c') | Key::Ctrl('q') => {
                     self.controls.stop().await;
                     self.app_state.quit();
                 }

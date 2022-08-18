@@ -14,7 +14,7 @@ use tui::{
     text::{Span, Spans, Text},
     widgets::{
         Block, BorderType, Borders, Clear, Gauge, List as TermList, ListItem, ListState, Paragraph,
-        Tabs, Wrap,
+        Row as TermRow, Table as TermTable, TableState, Tabs, Wrap,
     },
     Frame,
 };
@@ -56,7 +56,7 @@ where
 {
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .border_style(Style::default().fg(Color::Indexed(250)));
 
     if let Some(title) = title {
@@ -86,6 +86,35 @@ where
         .highlight_symbol("");
 
     f.render_stateful_widget(term_list, layout[0], &mut list.state);
+}
+
+pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table<'_>, area: Rect)
+where
+    B: Backend,
+{
+    let layout = Layout::default()
+        .constraints([Constraint::Min(1)])
+        .split(area);
+
+    let rows = table.term_rows();
+    let term_table = TermTable::new(rows)
+        .header(
+            TermRow::new(table.header.clone()).style(
+                Style::default()
+                    .bg(Color::Indexed(236))
+                    .fg(Color::Indexed(81)),
+            ),
+        )
+        .widths(table.widths.as_slice())
+        .block(Block::default())
+        .style(Style::default().fg(Color::Indexed(250)))
+        .highlight_style(
+            Style::default()
+                .fg(Color::Indexed(81))
+                .bg(Color::Indexed(235)),
+        );
+
+    f.render_stateful_widget(term_table, layout[0], &mut table.state);
 }
 
 fn progress<B>(
@@ -399,6 +428,108 @@ impl<'t> List<'t> {
         let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() || i == 0 {
+                    0
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn selected(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
+    #[allow(unused)]
+    pub fn select(&mut self, num: usize) {
+        self.state.select(Some(num));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Row<'r>(TermRow<'r>);
+
+impl<'r> Row<'r> {
+    pub fn new(row: TermRow) -> Row {
+        Row(row)
+    }
+}
+
+impl From<TermRow<'_>> for Row<'_> {
+    fn from(row: TermRow) -> Self {
+        row.into()
+    }
+}
+
+impl<'r> From<Row<'r>> for TermRow<'r> {
+    fn from(row: Row<'r>) -> Self {
+        row.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Table<'r> {
+    rows: Vec<Row<'r>>,
+    header: Vec<String>,
+    state: TableState,
+    widths: Vec<Constraint>,
+}
+
+impl<'r> Table<'r> {
+    pub fn new(
+        header: Vec<String>,
+        widths: Vec<Constraint>,
+        items: Option<Vec<Row<'r>>>,
+    ) -> Table<'r> {
+        if let Some(i) = items {
+            Table {
+                rows: i,
+                state: TableState::default(),
+                header,
+                widths,
+            }
+        } else {
+            Table {
+                rows: Vec::new(),
+                state: TableState::default(),
+                header,
+                widths,
+            }
+        }
+    }
+    fn term_rows(&mut self) -> Vec<TermRow<'r>> {
+        self.rows
+            .iter()
+            .map(|r| r.clone().into())
+            .collect::<Vec<TermRow<'r>>>()
+    }
+
+    pub fn set_rows(&mut self, rows: Vec<Row<'r>>) {
+        self.rows = rows;
+    }
+
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.rows.is_empty() {
+                    0
+                } else if i >= self.rows.len() - 1 {
+                    self.rows.len() - 1
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.rows.is_empty() || i == 0 {
                     0
                 } else {
                     i - 1

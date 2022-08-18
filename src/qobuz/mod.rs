@@ -1,16 +1,19 @@
 pub mod client;
 
+use crate::{
+    qobuz::client::Client,
+    state::AudioQuality,
+    state::Bytes,
+    ui::terminal::components::{Item, Row},
+};
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 use sled::IVec;
 use tui::{
+    layout::Constraint,
     style::{Color, Modifier, Style},
     text::Text,
-    widgets::ListItem,
-};
-
-use crate::{
-    qobuz::client::Client, state::AudioQuality, state::Bytes, ui::terminal::components::Item,
+    widgets::{ListItem, Row as TermRow},
 };
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -57,12 +60,14 @@ pub struct AlbumSearchResults {
 
 impl AlbumSearchResults {
     pub fn table_headers(&self) -> Vec<&str> {
+        vec!["Title", "Arist", "Year"]
+    }
+
+    pub fn header_constraints(&self, screen_width: u16) -> Vec<Constraint> {
         vec![
-            "Album title",
-            "Arist Name",
-            "Release Year",
-            "Duration",
-            "ID",
+            Constraint::Length((screen_width as f64 * 0.5) as u16),
+            Constraint::Length((screen_width as f64 * 0.4) as u16),
+            Constraint::Length((screen_width as f64 * 0.1) as u16),
         ]
     }
 }
@@ -101,6 +106,17 @@ impl Albums {
                 ListItem::new(Text::raw(title)).style(style).into()
             })
             .collect::<Vec<Item>>()
+    }
+
+    pub fn row_list<'r>(&self) -> Vec<Row<'r>> {
+        self.items
+            .iter()
+            .map(|t| t.clone().into())
+            .collect::<Vec<Row<'_>>>()
+    }
+
+    pub fn table_headers(&'_ self) -> Vec<&'_ str> {
+        self.items.first().unwrap().table_headers()
     }
 }
 
@@ -304,6 +320,14 @@ impl From<Album> for Vec<String> {
 impl From<Album> for Vec<Vec<String>> {
     fn from(album: Album) -> Self {
         vec![album.into()]
+    }
+}
+
+impl<'r> From<Album> for Row<'r> {
+    fn from(album: Album) -> Self {
+        let strings: Vec<String> = album.into();
+
+        Row::new(TermRow::new(strings).style(Style::default()))
     }
 }
 
