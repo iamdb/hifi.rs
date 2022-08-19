@@ -1,4 +1,5 @@
 use crate::ui::terminal::components::TableHeaders;
+use crate::ui::terminal::search::SearchResults;
 use crate::{
     get_player, player,
     qobuz::{
@@ -70,6 +71,8 @@ enum Commands {
         query: String,
         #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
+        #[clap(long, short)]
+        no_tui: bool,
         #[clap(long, short)]
         limit: Option<i32>,
     },
@@ -262,7 +265,7 @@ pub async fn run() -> Result<(), Error> {
                         app_state,
                         player.controls(),
                         client,
-                        Some(results),
+                        Some(SearchResults::Albums(results)),
                         Some(query),
                     )?;
                     tui.event_loop().await?;
@@ -282,11 +285,30 @@ pub async fn run() -> Result<(), Error> {
             query,
             limit,
             output_format,
+            no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_artists(query, limit).await?;
+            let results = client.search_artists(query.clone(), limit).await?;
 
-            output!(results, output_format);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui = ui::terminal::new(
+                        app_state,
+                        player.controls(),
+                        client,
+                        Some(SearchResults::Artists(results)),
+                        Some(query),
+                    )?;
+                    tui.event_loop().await?;
+                }
+            }
+
             Ok(())
         }
         Commands::GetArtist { id, output_format } => {

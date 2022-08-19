@@ -16,7 +16,7 @@ use tui::{
     widgets::{ListItem, Row as TermRow},
 };
 
-#[derive(Default, Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {
     pub query: String,
     pub artists: Artists,
@@ -34,7 +34,7 @@ impl TableHeaders for ArtistSearchResults {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Artists {
     pub limit: i64,
     pub offset: i64,
@@ -45,6 +45,25 @@ pub struct Artists {
 impl TableHeaders for Artists {
     fn headers(&self) -> Vec<String> {
         self.items.first().unwrap().headers()
+    }
+}
+
+impl TableRows for Artists {
+    fn rows<'a>(&self) -> Vec<Row<'a>> {
+        self.items
+            .iter()
+            .map(|t| t.into())
+            .collect::<Vec<Row<'a>>>()
+    }
+}
+
+impl TableWidths for Artists {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        vec![
+            Constraint::Length((size as f64 * 0.5) as u16),
+            Constraint::Length((size as f64 * 0.4) as u16),
+            Constraint::Length((size as f64 * 0.1) as u16),
+        ]
     }
 }
 
@@ -114,9 +133,9 @@ impl TableWidths for Albums {
 }
 
 impl Albums {
-    pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
+    pub fn item_list(&self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
         self.items
-            .into_iter()
+            .iter()
             .map(|t| {
                 let title = textwrap::wrap(
                     format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
@@ -399,13 +418,14 @@ pub struct Image {
     pub back: Option<String>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Artist {
     pub image: Option<Image>,
     pub name: String,
     pub id: i64,
     pub albums_count: i64,
     pub slug: String,
+    pub albums: Option<Albums>,
 }
 
 impl TableHeaders for Artist {
@@ -420,9 +440,23 @@ impl From<Artist> for Vec<String> {
     }
 }
 
+impl From<&Artist> for Vec<String> {
+    fn from(artist: &Artist) -> Self {
+        vec![artist.name.clone(), artist.id.to_string()]
+    }
+}
+
 impl From<Artist> for Vec<Vec<String>> {
     fn from(artist: Artist) -> Self {
         vec![artist.into()]
+    }
+}
+
+impl From<&Artist> for Row<'_> {
+    fn from(artist: &Artist) -> Self {
+        let strings: Vec<String> = artist.into();
+
+        Row::new(TermRow::new(strings).style(Style::default()))
     }
 }
 

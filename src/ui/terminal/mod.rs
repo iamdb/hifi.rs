@@ -5,13 +5,16 @@ pub mod search;
 use crate::{
     get_app,
     player::Controls,
-    qobuz::{client::Client, AlbumSearchResults},
+    qobuz::client::Client,
     state::{
         app::{AppKey, AppState, StateKey},
         ActiveScreen,
     },
     switch_screen,
-    ui::terminal::{nowplaying::NowPlayingScreen, search::SearchScreen},
+    ui::terminal::{
+        nowplaying::NowPlayingScreen,
+        search::{SearchResults, SearchScreen},
+    },
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
@@ -86,7 +89,7 @@ pub fn new(
     app_state: AppState,
     controls: Controls,
     client: Client,
-    search_results: Option<AlbumSearchResults>,
+    search_results: Option<SearchResults>,
     query: Option<String>,
 ) -> Result<Tui> {
     let stdout = std::io::stdout();

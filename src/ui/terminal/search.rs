@@ -4,7 +4,7 @@ use tui::layout::{Constraint, Direction, Layout};
 
 use crate::{
     player::Controls,
-    qobuz::{client::Client, AlbumSearchResults},
+    qobuz::{client::Client, AlbumSearchResults, ArtistSearchResults},
     state::app::AppState,
     switch_screen,
     ui::terminal::{
@@ -13,11 +13,16 @@ use crate::{
     },
 };
 
+pub enum SearchResults {
+    Albums(AlbumSearchResults),
+    Artists(ArtistSearchResults),
+}
+
 pub struct SearchScreen<'l> {
     client: Client,
-    search_results: Table<'l>,
+    results_table: Table<'l>,
     app_state: AppState,
-    album_results: Option<AlbumSearchResults>,
+    search_results: Option<SearchResults>,
     controls: Controls,
     search_query: Vec<char>,
     enter_search: bool,
@@ -28,7 +33,7 @@ impl<'l> SearchScreen<'l> {
         app_state: AppState,
         controls: Controls,
         client: Client,
-        album_results: Option<AlbumSearchResults>,
+        search_results: Option<SearchResults>,
         query: Option<String>,
     ) -> SearchScreen<'l> {
         let enter_search = false;
@@ -60,13 +65,13 @@ impl<'l> SearchScreen<'l> {
         };
 
         SearchScreen {
-            album_results,
+            search_results,
             app_state,
             client,
             controls,
             enter_search,
             search_query,
-            search_results: Table::new(None, None, None),
+            results_table: Table::new(None, None, None),
         }
     }
 }
@@ -98,15 +103,18 @@ impl<'l> Screen for SearchScreen<'l> {
                     );
                 }
 
-                let widths = if let Some(results) = &self.album_results {
-                    results.albums.widths(f.size().width)
+                let widths = if let Some(results) = &self.search_results {
+                    match results {
+                        SearchResults::Albums(a) => a.albums.widths(f.size().width),
+                        SearchResults::Artists(a) => a.artists.widths(f.size().width),
+                    }
                 } else {
                     vec![Constraint::Min(1)]
                 };
 
-                self.search_results.set_widths(widths);
+                self.results_table.set_widths(widths);
 
-                components::table(f, &mut self.search_results, layout[2]);
+                components::table(f, &mut self.results_table, layout[2]);
                 components::tabs(1, f, layout[3]);
             })
             .expect("failed to draw screen");
@@ -114,11 +122,11 @@ impl<'l> Screen for SearchScreen<'l> {
     fn key_events(&mut self, key: Key) -> bool {
         match key {
             Key::Up => {
-                self.search_results.previous();
+                self.results_table.previous();
                 return true;
             }
             Key::Down => {
-                self.search_results.next();
+                self.results_table.next();
                 return true;
             }
             Key::Backspace => {
@@ -138,22 +146,49 @@ impl<'l> Screen for SearchScreen<'l> {
                     if self.enter_search {
                         let query = String::from_iter(self.search_query.clone());
                         if let Ok(results) =
-                            executor::block_on(self.client.search_albums(query, Some(100)))
+                            executor::block_on(self.client.search_artists(query, Some(100)))
                         {
-                            self.album_results = Some(results.clone());
-                            self.search_results.set_header(results.albums.headers());
-                            self.search_results.set_rows(results.albums.rows());
-                            self.search_results.select(0);
+                            self.search_results = Some(SearchResults::Artists(results.clone()));
+                            self.results_table.set_header(results.artists.headers());
+                            self.results_table.set_rows(results.artists.rows());
+                            self.results_table.select(0);
                             self.enter_search = false;
                         }
-                    } else if let Some(selected) = self.search_results.selected() {
-                        if let Some(album_results) = &self.album_results {
-                            if let Some(album) = album_results.albums.items.get(selected) {
-                                executor::block_on(self.controls.clear());
-                                executor::block_on(self.controls.play_album(album.clone()));
-                                switch_screen!(self.app_state, ActiveScreen::NowPlaying);
-                                return true;
-                            };
+                    } else if let Some(selected) = self.results_table.selected() {
+                        if let Some(results) = &self.search_results {
+                            match results {
+                                SearchResults::Albums(results) => {
+                                    if let Some(album) = results.albums.items.get(selected) {
+                                        executor::block_on(self.controls.clear());
+                                        executor::block_on(self.controls.play_album(album.clone()));
+                                        switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                                        return true;
+                                    };
+                                }
+                                SearchResults::Artists(results) => {
+                                    if let Some(artist) = results.artists.items.get(selected) {
+                                        if let Ok(artist_info) = executor::block_on(
+                                            self.client.artist(artist.id.try_into().unwrap(), None),
+                                        ) {
+                                            if let Some(albums) = artist_info.albums {
+                                                self.results_table.set_rows(albums.rows());
+                                                self.results_table.set_header(albums.headers());
+                                                self.results_table.set_widths(albums.widths(100));
+
+                                                self.search_results = Some(SearchResults::Albums(
+                                                    AlbumSearchResults {
+                                                        query: String::from_iter(
+                                                            &self.search_query,
+                                                        ),
+                                                        albums,
+                                                    },
+                                                ));
+                                            }
+                                        }
+                                        return true;
+                                    };
+                                }
+                            }
                         }
                     }
                 }
@@ -192,12 +227,12 @@ impl<'l> Screen for SearchScreen<'l> {
                 }
                 MouseButton::WheelUp => {
                     debug!("wheel up");
-                    self.search_results.previous();
+                    self.results_table.previous();
                     return true;
                 }
                 MouseButton::WheelDown => {
                     debug!("wheel down");
-                    self.search_results.next();
+                    self.results_table.next();
                     return true;
                 }
             },
