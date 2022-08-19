@@ -1,17 +1,19 @@
-use crate::ui::terminal::components::TableHeaders;
-use crate::ui::terminal::search::SearchResults;
 use crate::{
     get_player, player,
     qobuz::{
         client::{self, output, Credentials, OutputFormat},
-        PlaylistTrack,
+        track::PlaylistTrack,
     },
     state::{
         self,
         app::{ClientKey, PlayerKey, StateKey},
         AudioQuality, PlaylistValue, StringValue,
     },
-    ui, wait, REFRESH_RESOLUTION,
+    ui::{
+        self,
+        terminal::{components::TableHeaders, search::SearchResults},
+    },
+    wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};

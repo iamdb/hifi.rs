@@ -1,7 +1,12 @@
-use super::{Album, AlbumSearchResults, Artist, ArtistSearchResults, Playlist, Track, TrackURL};
 use crate::{
     get_client,
-    qobuz::UserPlaylistsResult,
+    qobuz::{
+        album::{Album, AlbumSearchResults},
+        artist::{Artist, ArtistSearchResults},
+        playlist::{Playlist, UserPlaylistsResult},
+        track::Track,
+        TrackURL,
+    },
     state::{
         app::{AppState, ClientKey, StateKey},
         AudioQuality, StringValue,

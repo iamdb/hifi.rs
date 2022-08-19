@@ -1,6 +1,11 @@
 use crate::{
     action, get_player, mpris,
-    qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
+    qobuz::{
+        album::Album,
+        client::Client,
+        track::{PlaylistTrack, Track},
+        TrackURL,
+    },
     state::{
         app::{AppState, PlayerKey, StateKey},
         AudioQuality, ClockValue, FloatValue, PlaylistValue, StatusValue,

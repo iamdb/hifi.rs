@@ -1,5 +1,5 @@
 use crate::{
-    qobuz::PlaylistTrack,
+    qobuz::track::PlaylistTrack,
     state::{
         app::{AppState, PlayerKey, StateKey},
         ClockValue, FloatValue, StatusValue,

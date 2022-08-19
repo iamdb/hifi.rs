@@ -1,6 +1,6 @@
 pub mod app;
 
-use crate::qobuz::PlaylistTrack;
+use crate::qobuz::track::PlaylistTrack;
 use crate::state::app::{PlayerKey, StateKey};
 use crate::ui::terminal::components::Item;
 

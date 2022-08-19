@@ -4,7 +4,10 @@ use tui::layout::{Constraint, Direction, Layout};
 
 use crate::{
     player::Controls,
-    qobuz::{client::Client, AlbumSearchResults, ArtistSearchResults, UserPlaylistsResult},
+    qobuz::{
+        album::AlbumSearchResults, artist::ArtistSearchResults, client::Client,
+        playlist::UserPlaylistsResult,
+    },
     state::app::AppState,
     switch_screen,
     ui::terminal::{
@@ -21,14 +24,7 @@ pub enum SearchResults {
     //Playlist(Playlist),
 }
 
-impl SearchResults {
-    fn widths(&self, size: u16) -> Vec<Constraint> {
-        match self {
-            SearchResults::Albums(r) => r.albums.widths(size),
-            SearchResults::Artists(r) => r.artists.widths(size),
-            SearchResults::UserPlaylists(r) => r.playlists.widths(size),
-        }
-    }
+impl TableRows for SearchResults {
     fn rows<'s>(&self) -> Vec<Row<'s>> {
         match self {
             SearchResults::Albums(r) => r.albums.rows(),
@@ -36,11 +32,24 @@ impl SearchResults {
             SearchResults::UserPlaylists(r) => r.playlists.rows(),
         }
     }
+}
+
+impl TableHeaders for SearchResults {
     fn headers(&self) -> Vec<String> {
         match self {
             SearchResults::Albums(r) => r.albums.headers(),
             SearchResults::Artists(r) => r.artists.headers(),
             SearchResults::UserPlaylists(r) => r.playlists.headers(),
+        }
+    }
+}
+
+impl TableWidths for SearchResults {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        match self {
+            SearchResults::Albums(r) => r.albums.widths(size),
+            SearchResults::Artists(r) => r.artists.widths(size),
+            SearchResults::UserPlaylists(r) => r.playlists.widths(size),
         }
     }
 }
