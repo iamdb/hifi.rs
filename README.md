@@ -18,6 +18,6 @@ As a linux user who enjoys the Qobuz music service, I was frustrated that there 
   - `tabs`: tab-separated list of pre-selected fields, ideal for piping to `awk`, `cut`, etc.
   - `json`: entire json payload, ideal for `jq`, etc.
 
-I've spent [![n hours](https://wakatime.com/badge/user/a20519d3-9690-4af7-ad04-136d21595be5/project/aaa28014-a87d-40db-961a-0d1ab3b0f3ea.svg)](https://wakatime.com/badge/user/a20519d3-9690-4af7-ad04-136d21595be5/project/aaa28014-a87d-40db-961a-0d1ab3b0f3ea) building this.
+I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
 
-<super>\*</super> /s
+<super>\*</super>/s
