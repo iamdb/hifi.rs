@@ -124,9 +124,20 @@ impl TableHeaders for Albums {
 
 impl TableWidths for Albums {
     fn widths(&self, size: u16) -> Vec<Constraint> {
+        let artist_width = if let Some(width) = self.items.iter().map(|i| i.artist.name.len()).max()
+        {
+            if width < size as usize {
+                width
+            } else {
+                (size as f64 * 0.4) as usize
+            }
+        } else {
+            10
+        };
+
         vec![
             Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length((size as f64 * 0.4) as u16),
+            Constraint::Length(artist_width as u16),
             Constraint::Length((size as f64 * 0.1) as u16),
         ]
     }
@@ -209,6 +220,26 @@ pub struct Track {
 impl From<Track> for Vec<u8> {
     fn from(track: Track) -> Self {
         bincode::serialize(&track).expect("failed to serialize track")
+    }
+}
+
+impl From<&Track> for Row<'_> {
+    fn from(track: &Track) -> Self {
+        let strings: Vec<String> = track.into();
+
+        Row::new(TermRow::new(strings).style(Style::default()))
+    }
+}
+
+impl From<&Track> for Vec<String> {
+    fn from(track: &Track) -> Self {
+        let mut fields = vec![track.title.clone()];
+
+        if let Some(album) = &track.album {
+            fields.push(album.title.clone());
+        }
+
+        fields
     }
 }
 
@@ -503,9 +534,27 @@ pub struct User {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct UserPlaylists {
+pub struct UserPlaylistsResult {
     pub user: User,
     pub playlists: Playlists,
+}
+
+impl TableHeaders for UserPlaylistsResult {
+    fn headers(&self) -> Vec<String> {
+        self.playlists.headers()
+    }
+}
+
+impl From<UserPlaylistsResult> for Vec<Vec<String>> {
+    fn from(playlist: UserPlaylistsResult) -> Self {
+        vec![playlist.into()]
+    }
+}
+
+impl From<UserPlaylistsResult> for Vec<String> {
+    fn from(playlist: UserPlaylistsResult) -> Self {
+        playlist.into()
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -553,6 +602,91 @@ pub struct Playlists {
     pub limit: i64,
     pub total: i64,
     pub items: Vec<Playlist>,
+}
+
+impl From<Playlists> for Vec<Vec<String>> {
+    fn from(playlists: Playlists) -> Self {
+        playlists
+            .items
+            .into_iter()
+            .map(|i| vec![i.name, i.id.to_string()])
+            .collect::<Vec<Vec<String>>>()
+    }
+}
+
+impl TableRows for Playlists {
+    fn rows<'a>(&self) -> Vec<Row<'a>> {
+        self.items
+            .iter()
+            .map(|t| t.into())
+            .collect::<Vec<Row<'a>>>()
+    }
+}
+
+impl TableHeaders for Playlists {
+    fn headers(&self) -> Vec<String> {
+        if let Some(first) = self.items.first() {
+            first.headers()
+        } else {
+            vec![]
+        }
+    }
+}
+
+impl From<Playlist> for Vec<String> {
+    fn from(playlist: Playlist) -> Self {
+        vec![playlist.name, playlist.id.to_string()]
+    }
+}
+
+impl From<&Playlist> for Vec<String> {
+    fn from(playlist: &Playlist) -> Self {
+        vec![playlist.name.clone(), playlist.id.to_string()]
+    }
+}
+
+impl From<Playlist> for Vec<Vec<String>> {
+    fn from(playlist: Playlist) -> Self {
+        vec![playlist.into()]
+    }
+}
+
+impl From<&Playlist> for Row<'_> {
+    fn from(playlist: &Playlist) -> Self {
+        let strings: Vec<String> = playlist.into();
+
+        Row::new(TermRow::new(strings).style(Style::default()))
+    }
+}
+
+impl TableHeaders for Playlist {
+    fn headers(&self) -> Vec<String> {
+        vec!["Title".to_string()]
+    }
+}
+
+impl TableRows for Playlist {
+    fn rows<'a>(&self) -> Vec<Row<'a>> {
+        if let Some(tracks) = &self.tracks {
+            tracks
+                .items
+                .iter()
+                .map(|i| i.into())
+                .collect::<Vec<Row<'a>>>()
+        } else {
+            vec![]
+        }
+    }
+}
+
+impl TableWidths for Playlists {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        vec![
+            Constraint::Length((size as f64 * 0.5) as u16),
+            Constraint::Length((size as f64 * 0.4) as u16),
+            Constraint::Length((size as f64 * 0.1) as u16),
+        ]
+    }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

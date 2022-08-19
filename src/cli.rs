@@ -109,7 +109,12 @@ enum Commands {
         no_tui: bool,
     },
     /// Retreive a list of your playlsits.
-    MyPlaylists {},
+    MyPlaylists {
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
+        #[clap(short, long)]
+        no_tui: bool,
+    },
     /// Retreive information about a specific playlist.
     Playlist { playlist_id: String },
     /// Set configuration options
@@ -328,13 +333,34 @@ pub async fn run() -> Result<(), Error> {
             print!("{}", json);
             Ok(())
         }
-        Commands::MyPlaylists {} => {
+        Commands::MyPlaylists {
+            no_tui,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
             let results = client.user_playlists().await?;
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui = ui::terminal::new(
+                        app_state,
+                        player.controls(),
+                        client,
+                        Some(SearchResults::UserPlaylists(results)),
+                        None,
+                    )?;
+                    tui.event_loop().await?;
+                }
+            }
+
             Ok(())
         }
         Commands::Playlist { playlist_id } => {

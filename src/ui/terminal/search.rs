@@ -4,7 +4,7 @@ use tui::layout::{Constraint, Direction, Layout};
 
 use crate::{
     player::Controls,
-    qobuz::{client::Client, AlbumSearchResults, ArtistSearchResults},
+    qobuz::{client::Client, AlbumSearchResults, ArtistSearchResults, UserPlaylistsResult},
     state::app::AppState,
     switch_screen,
     ui::terminal::{
@@ -17,6 +17,8 @@ use crate::{
 pub enum SearchResults {
     Albums(AlbumSearchResults),
     Artists(ArtistSearchResults),
+    UserPlaylists(UserPlaylistsResult),
+    //Playlist(Playlist),
 }
 
 impl SearchResults {
@@ -24,18 +26,21 @@ impl SearchResults {
         match self {
             SearchResults::Albums(r) => r.albums.widths(size),
             SearchResults::Artists(r) => r.artists.widths(size),
+            SearchResults::UserPlaylists(r) => r.playlists.widths(size),
         }
     }
     fn rows<'s>(&self) -> Vec<Row<'s>> {
         match self {
             SearchResults::Albums(r) => r.albums.rows(),
             SearchResults::Artists(r) => r.artists.rows(),
+            SearchResults::UserPlaylists(r) => r.playlists.rows(),
         }
     }
     fn headers(&self) -> Vec<String> {
         match self {
             SearchResults::Albums(r) => r.albums.headers(),
             SearchResults::Artists(r) => r.artists.headers(),
+            SearchResults::UserPlaylists(r) => r.playlists.headers(),
         }
     }
 }
@@ -117,10 +122,7 @@ impl<'l> Screen for SearchScreen<'l> {
                 }
 
                 let widths = if let Some(results) = &self.search_results {
-                    match results {
-                        SearchResults::Albums(a) => a.albums.widths(f.size().width),
-                        SearchResults::Artists(a) => a.artists.widths(f.size().width),
-                    }
+                    results.widths(f.size().width)
                 } else {
                     vec![Constraint::Min(1)]
                 };
@@ -200,6 +202,20 @@ impl<'l> Screen for SearchScreen<'l> {
                                         }
                                         return true;
                                     };
+                                }
+                                SearchResults::UserPlaylists(_) => {
+                                    // if let Some(playlist) = results.playlists.items.get(selected) {
+                                    //     if let Ok(playlist_info) = executor::block_on(
+                                    //         self.client.playlist(playlist.id.to_string()),
+                                    //     ) {
+                                    //         self.search_results = Some(SearchResults::UserPlaylist(playlist_info))
+                                    //         self.results_table.set_rows(results.playlists.rows());
+                                    //         self.results_table
+                                    //             .set_header(results.playlists.headers());
+                                    //         self.results_table
+                                    //             .set_widths(results.playlists.widths(100));
+                                    //     }
+                                    // }
                                 }
                             }
                         }

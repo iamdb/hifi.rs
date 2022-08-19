@@ -1,9 +1,7 @@
-use super::{
-    Album, AlbumSearchResults, Artist, ArtistSearchResults, Playlist, Track, TrackURL,
-    UserPlaylists,
-};
+use super::{Album, AlbumSearchResults, Artist, ArtistSearchResults, Playlist, Track, TrackURL};
 use crate::{
     get_client,
+    qobuz::UserPlaylistsResult,
     state::{
         app::{AppState, ClientKey, StateKey},
         AudioQuality, StringValue,
@@ -307,7 +305,7 @@ impl Client {
     }
 
     /// Retrieve a list of the user's playlists
-    pub async fn user_playlists(&self) -> Result<UserPlaylists> {
+    pub async fn user_playlists(&self) -> Result<UserPlaylistsResult> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
