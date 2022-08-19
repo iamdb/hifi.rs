@@ -121,6 +121,7 @@ pub fn new(
             client,
             search_results,
             query,
+            terminal.size().unwrap().width,
         ))) as Rc<RefCell<dyn Screen>>,
     );
     screens.insert(

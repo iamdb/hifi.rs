@@ -8,14 +8,36 @@ use crate::{
     state::app::AppState,
     switch_screen,
     ui::terminal::{
-        components::{self, Table, TableHeaders, TableRows, TableWidths},
+        components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
         AppKey, Console, Screen, StateKey,
     },
 };
 
+#[derive(Clone, Debug)]
 pub enum SearchResults {
     Albums(AlbumSearchResults),
     Artists(ArtistSearchResults),
+}
+
+impl SearchResults {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        match self {
+            SearchResults::Albums(r) => r.albums.widths(size),
+            SearchResults::Artists(r) => r.artists.widths(size),
+        }
+    }
+    fn rows<'s>(&self) -> Vec<Row<'s>> {
+        match self {
+            SearchResults::Albums(r) => r.albums.rows(),
+            SearchResults::Artists(r) => r.artists.rows(),
+        }
+    }
+    fn headers(&self) -> Vec<String> {
+        match self {
+            SearchResults::Albums(r) => r.albums.headers(),
+            SearchResults::Artists(r) => r.artists.headers(),
+        }
+    }
 }
 
 pub struct SearchScreen<'l> {
@@ -35,28 +57,19 @@ impl<'l> SearchScreen<'l> {
         client: Client,
         search_results: Option<SearchResults>,
         query: Option<String>,
+        screen_width: u16,
     ) -> SearchScreen<'l> {
         let enter_search = false;
 
-        // let search_results = if let Some(search_results) = album_results.clone() {
-        //     let header = search_results
-        //         .table_headers()
-        //         .iter()
-        //         .map(|h| h.to_string())
-        //         .collect::<Vec<String>>();
-        //     let mut table = Table::new(
-        //         header,
-        //         search_results.header_constraints(screen_size),
-        //         Some(search_results.albums.rows()),
-        //     );
-        //     table.select(0);
-        //     switch_screen!(app_state, ActiveScreen::Search);
-        //
-        //     table
-        // } else {
-        //     enter_search = true;
-        //     Table::new(Vec::new(), Vec::new(), None)
-        // };
+        let results_table = if let Some(search_results) = search_results.clone() {
+            Table::new(
+                Some(search_results.headers()),
+                Some(search_results.rows()),
+                Some(search_results.widths(screen_width)),
+            )
+        } else {
+            Table::new(None, None, None)
+        };
 
         let search_query = if let Some(query) = query {
             query.chars().collect::<Vec<char>>()
@@ -71,7 +84,7 @@ impl<'l> SearchScreen<'l> {
             controls,
             enter_search,
             search_query,
-            results_table: Table::new(None, None, None),
+            results_table,
         }
     }
 }
