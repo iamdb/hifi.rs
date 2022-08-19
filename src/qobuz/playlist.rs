@@ -156,13 +156,23 @@ impl TableRows for Playlist {
     }
 }
 
-impl TableWidths for Playlists {
+impl TableWidths for Playlist {
     fn widths(&self, size: u16) -> Vec<Constraint> {
         vec![
             Constraint::Length((size as f64 * 0.5) as u16),
             Constraint::Length((size as f64 * 0.4) as u16),
             Constraint::Length((size as f64 * 0.1) as u16),
         ]
+    }
+}
+
+impl TableWidths for Playlists {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        if let Some(first) = self.items.first() {
+            first.widths(size)
+        } else {
+            vec![Constraint::Min(1)]
+        }
     }
 }
 

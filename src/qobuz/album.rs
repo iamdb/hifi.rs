@@ -208,20 +208,9 @@ impl TableHeaders for Albums {
 
 impl TableWidths for Albums {
     fn widths(&self, size: u16) -> Vec<Constraint> {
-        let artist_width = if let Some(width) = self.items.iter().map(|i| i.artist.name.len()).max()
-        {
-            if width < size as usize {
-                width
-            } else {
-                (size as f64 * 0.4) as usize
-            }
-        } else {
-            10
-        };
-
         vec![
             Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length(artist_width as u16),
+            Constraint::Length((size as f64 * 0.4) as u16),
             Constraint::Length((size as f64 * 0.1) as u16),
         ]
     }
