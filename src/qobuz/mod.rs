@@ -4,7 +4,7 @@ use crate::{
     qobuz::client::Client,
     state::AudioQuality,
     state::Bytes,
-    ui::terminal::components::{Item, Row},
+    ui::terminal::components::{Item, Row, TableHeaders, TableRows, TableWidths},
 };
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
@@ -22,15 +22,15 @@ pub struct ArtistSearchResults {
     pub artists: Artists,
 }
 
-impl ArtistSearchResults {
-    pub fn table_headers(&self) -> Vec<&str> {
-        vec!["Arist Name", "ID"]
-    }
-}
-
 impl From<ArtistSearchResults> for Vec<Vec<String>> {
     fn from(results: ArtistSearchResults) -> Self {
         results.artists.into()
+    }
+}
+
+impl TableHeaders for ArtistSearchResults {
+    fn headers(&self) -> Vec<String> {
+        self.artists.headers()
     }
 }
 
@@ -40,6 +40,12 @@ pub struct Artists {
     pub offset: i64,
     pub total: i64,
     pub items: Vec<Artist>,
+}
+
+impl TableHeaders for Artists {
+    fn headers(&self) -> Vec<String> {
+        self.items.first().unwrap().headers()
+    }
 }
 
 impl From<Artists> for Vec<Vec<String>> {
@@ -58,17 +64,9 @@ pub struct AlbumSearchResults {
     pub albums: Albums,
 }
 
-impl AlbumSearchResults {
-    pub fn table_headers(&self) -> Vec<&str> {
-        vec!["Title", "Arist", "Year"]
-    }
-
-    pub fn header_constraints(&self, screen_width: u16) -> Vec<Constraint> {
-        vec![
-            Constraint::Length((screen_width as f64 * 0.5) as u16),
-            Constraint::Length((screen_width as f64 * 0.4) as u16),
-            Constraint::Length((screen_width as f64 * 0.1) as u16),
-        ]
+impl TableHeaders for AlbumSearchResults {
+    fn headers(&self) -> Vec<String> {
+        self.albums.headers()
     }
 }
 
@@ -84,6 +82,35 @@ pub struct Albums {
     pub offset: i64,
     pub total: i64,
     pub items: Vec<Album>,
+}
+
+impl TableRows for Albums {
+    fn rows<'a>(&self) -> Vec<Row<'a>> {
+        self.items
+            .iter()
+            .map(|t| t.into())
+            .collect::<Vec<Row<'a>>>()
+    }
+}
+
+impl TableHeaders for Albums {
+    fn headers(&self) -> Vec<String> {
+        if let Some(first) = self.items.first() {
+            first.headers()
+        } else {
+            vec![]
+        }
+    }
+}
+
+impl TableWidths for Albums {
+    fn widths(&self, size: u16) -> Vec<Constraint> {
+        vec![
+            Constraint::Length((size as f64 * 0.5) as u16),
+            Constraint::Length((size as f64 * 0.4) as u16),
+            Constraint::Length((size as f64 * 0.1) as u16),
+        ]
+    }
 }
 
 impl Albums {
@@ -106,17 +133,6 @@ impl Albums {
                 ListItem::new(Text::raw(title)).style(style).into()
             })
             .collect::<Vec<Item>>()
-    }
-
-    pub fn row_list<'r>(&self) -> Vec<Row<'r>> {
-        self.items
-            .iter()
-            .map(|t| t.clone().into())
-            .collect::<Vec<Row<'_>>>()
-    }
-
-    pub fn table_headers(&'_ self) -> Vec<&'_ str> {
-        self.items.first().unwrap().table_headers()
     }
 }
 
@@ -279,10 +295,16 @@ pub struct Album {
     pub version: Option<String>,
 }
 
-impl Album {
-    pub fn table_headers(&self) -> Vec<&str> {
-        vec!["Title", "Artist", "Release Date", "Duration"]
+impl TableHeaders for Album {
+    fn headers(&self) -> Vec<String> {
+        vec!["Title", "Artist", "Year"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
     }
+}
+
+impl Album {
     pub fn to_playlist_tracklist(&self, quality: AudioQuality) -> Option<Vec<PlaylistTrack>> {
         self.tracks.as_ref().map(|t| {
             t.items
@@ -295,6 +317,29 @@ impl Album {
         if let Ok(album) = client.album(self.id.clone()).await {
             self.tracks = album.tracks;
         }
+    }
+}
+
+impl From<&Album> for Vec<String> {
+    fn from(album: &Album) -> Self {
+        let mut fields = vec![
+            album.title.clone(),
+            album.artist.name.clone(),
+            album.release_date_original.clone(),
+        ];
+
+        if let Some(duration) = album.duration {
+            fields.push(
+                ClockTime::from_seconds(duration as u64)
+                    .to_string()
+                    .as_str()[2..7]
+                    .to_string(),
+            );
+        }
+
+        fields.push(album.id.clone());
+
+        fields
     }
 }
 
@@ -323,8 +368,14 @@ impl From<Album> for Vec<Vec<String>> {
     }
 }
 
-impl<'r> From<Album> for Row<'r> {
-    fn from(album: Album) -> Self {
+impl From<&Album> for Vec<Vec<String>> {
+    fn from(album: &Album) -> Self {
+        vec![album.into()]
+    }
+}
+
+impl From<&Album> for Row<'_> {
+    fn from(album: &Album) -> Self {
         let strings: Vec<String> = album.into();
 
         Row::new(TermRow::new(strings).style(Style::default()))
@@ -357,8 +408,8 @@ pub struct Artist {
     pub slug: String,
 }
 
-impl Artist {
-    pub fn table_headers(&self) -> Vec<String> {
+impl TableHeaders for Artist {
+    fn headers(&self) -> Vec<String> {
         vec!["Name".to_string(), "ID".to_string()]
     }
 }

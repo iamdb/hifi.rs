@@ -477,13 +477,29 @@ pub struct Table<'r> {
     widths: Vec<Constraint>,
 }
 
+pub trait TableRows {
+    fn rows<'a>(&self) -> Vec<Row<'a>>;
+}
+
+pub trait TableHeaders {
+    fn headers(&self) -> Vec<String>;
+}
+
+pub trait TableWidths {
+    fn widths(&self, size: u16) -> Vec<Constraint>;
+}
+
+pub trait TableStatus {
+    fn state(&mut self) -> &mut TableState;
+}
+
 impl<'r> Table<'r> {
     pub fn new(
-        header: Vec<String>,
-        widths: Vec<Constraint>,
+        header: Option<Vec<String>>,
         items: Option<Vec<Row<'r>>>,
+        widths: Option<Vec<Constraint>>,
     ) -> Table<'r> {
-        if let Some(i) = items {
+        if let (Some(i), Some(header), Some(widths)) = (items, header, widths) {
             Table {
                 rows: i,
                 state: TableState::default(),
@@ -494,8 +510,8 @@ impl<'r> Table<'r> {
             Table {
                 rows: Vec::new(),
                 state: TableState::default(),
-                header,
-                widths,
+                header: vec![],
+                widths: vec![],
             }
         }
     }
@@ -505,9 +521,14 @@ impl<'r> Table<'r> {
             .map(|r| r.clone().into())
             .collect::<Vec<TermRow<'r>>>()
     }
-
+    pub fn set_header(&mut self, header: Vec<String>) {
+        self.header = header;
+    }
     pub fn set_rows(&mut self, rows: Vec<Row<'r>>) {
         self.rows = rows;
+    }
+    pub fn set_widths(&mut self, widths: Vec<Constraint>) {
+        self.widths = widths;
     }
 
     pub fn next(&mut self) {

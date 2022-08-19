@@ -1,3 +1,4 @@
+use crate::ui::terminal::components::TableHeaders;
 use crate::{
     get_player, player,
     qobuz::{

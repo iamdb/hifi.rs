@@ -668,7 +668,7 @@ macro_rules! output {
                 let mut table = Table::new();
                 table.load_preset(UTF8_FULL);
                 table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-                table.set_header($results.table_headers());
+                table.set_header($results.headers());
 
                 let table_rows: Vec<Vec<String>> = $results.into();
 
