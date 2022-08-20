@@ -6,6 +6,7 @@ use crate::{
     },
 };
 use gstreamer::{ClockTime, State as GstState};
+use textwrap::fill;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -88,15 +89,11 @@ where
     f.render_stateful_widget(term_list, layout[0], &mut list.state);
 }
 
-pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table<'_>, area: Rect)
+pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, area: Rect)
 where
     B: Backend,
 {
-    let layout = Layout::default()
-        .constraints([Constraint::Min(1)])
-        .split(area);
-
-    let rows = table.term_rows();
+    let rows = table.term_rows(f.size().width);
     let term_table = TermTable::new(rows)
         .header(
             TermRow::new(table.header.clone()).style(
@@ -114,7 +111,7 @@ where
                 .bg(Color::Indexed(235)),
         );
 
-    f.render_stateful_widget(term_table, layout[0], &mut table.state);
+    f.render_stateful_widget(term_table, area, &mut table.state.clone());
 }
 
 fn progress<B>(
@@ -449,36 +446,38 @@ impl<'t> List<'t> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Row<'r>(TermRow<'r>);
+pub struct Row {
+    columns: Vec<String>,
+}
 
-impl<'r> Row<'r> {
-    pub fn new(row: TermRow) -> Row {
-        Row(row)
+impl Row {
+    pub fn new(columns: Vec<String>) -> Row {
+        Row { columns }
     }
 }
 
-impl From<TermRow<'_>> for Row<'_> {
+impl From<TermRow<'_>> for Row {
     fn from(row: TermRow) -> Self {
         row.into()
     }
 }
 
-impl<'r> From<Row<'r>> for TermRow<'r> {
-    fn from(row: Row<'r>) -> Self {
-        row.0
+impl From<Row> for TermRow<'_> {
+    fn from(row: Row) -> Self {
+        TermRow::new(row.columns).style(Style::default())
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Table<'r> {
-    rows: Vec<Row<'r>>,
+pub struct Table {
+    rows: Vec<Row>,
     header: Vec<String>,
     state: TableState,
     widths: Vec<Constraint>,
 }
 
 pub trait TableRows {
-    fn rows<'a>(&self) -> Vec<Row<'a>>;
+    fn rows(&self) -> Vec<Row>;
 }
 
 pub trait TableHeaders {
@@ -489,16 +488,12 @@ pub trait TableWidths {
     fn widths(&self, size: u16) -> Vec<Constraint>;
 }
 
-pub trait TableStatus {
-    fn state(&mut self) -> &mut TableState;
-}
-
-impl<'r> Table<'r> {
+impl Table {
     pub fn new(
         header: Option<Vec<String>>,
-        items: Option<Vec<Row<'r>>>,
+        items: Option<Vec<Row>>,
         widths: Option<Vec<Constraint>>,
-    ) -> Table<'r> {
+    ) -> Table {
         if let (Some(i), Some(header), Some(widths)) = (items, header, widths) {
             Table {
                 rows: i,
@@ -515,16 +510,35 @@ impl<'r> Table<'r> {
             }
         }
     }
-    fn term_rows(&mut self) -> Vec<TermRow<'r>> {
+    fn term_rows(&self, screen_width: u16) -> Vec<TermRow> {
         self.rows
             .iter()
-            .map(|r| r.clone().into())
-            .collect::<Vec<TermRow<'r>>>()
+            .map(move |r| {
+                let mut height = 1;
+
+                let formatted = r
+                    .columns
+                    .iter()
+                    .map(|c| {
+                        if c.len() as u16 >= screen_width / 2 {
+                            height = 2;
+                            fill(c, screen_width as usize / 2)
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect::<Vec<String>>();
+
+                TermRow::new(formatted)
+                    .style(Style::default())
+                    .height(height)
+            })
+            .collect::<Vec<TermRow>>()
     }
     pub fn set_header(&mut self, header: Vec<String>) {
         self.header = header;
     }
-    pub fn set_rows(&mut self, rows: Vec<Row<'r>>) {
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
         self.rows = rows;
     }
     pub fn set_widths(&mut self, widths: Vec<Constraint>) {

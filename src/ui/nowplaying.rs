@@ -1,7 +1,7 @@
 use crate::{
     player::Controls,
     state::app::AppState,
-    ui::terminal::{
+    ui::{
         components::{self, Item, List},
         Console, Screen,
     },

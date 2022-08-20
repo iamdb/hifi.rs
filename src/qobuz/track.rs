@@ -1,11 +1,9 @@
-use serde::{Deserialize, Serialize};
-use tui::{style::Style, widgets::Row as TermRow};
-
 use crate::{
     qobuz::{album::Album, TrackURL},
     state::{AudioQuality, Bytes},
-    ui::terminal::components::Row,
+    ui::components::Row,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tracks {
@@ -54,23 +52,17 @@ impl From<Track> for Vec<u8> {
     }
 }
 
-impl From<&Track> for Row<'_> {
+impl From<&Track> for Row {
     fn from(track: &Track) -> Self {
         let strings: Vec<String> = track.into();
 
-        Row::new(TermRow::new(strings).style(Style::default()))
+        Row::new(strings)
     }
 }
 
 impl From<&Track> for Vec<String> {
     fn from(track: &Track) -> Self {
-        let mut fields = vec![track.title.clone()];
-
-        if let Some(album) = &track.album {
-            fields.push(album.title.clone());
-        }
-
-        fields
+        vec![track.title.clone(), track.performer.name.clone()]
     }
 }
 

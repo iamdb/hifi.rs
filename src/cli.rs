@@ -11,7 +11,7 @@ use crate::{
     },
     ui::{
         self,
-        terminal::{components::TableHeaders, search::SearchResults},
+        {components::TableHeaders, search::SearchResults},
     },
     wait, REFRESH_RESOLUTION,
 };
@@ -153,7 +153,7 @@ pub enum Error {
         error: player::Error,
     },
     TerminalError {
-        error: ui::terminal::Error,
+        error: ui::Error,
     },
 }
 
@@ -169,8 +169,8 @@ impl From<player::Error> for Error {
     }
 }
 
-impl From<ui::terminal::Error> for Error {
-    fn from(error: ui::terminal::Error) -> Self {
+impl From<ui::Error> for Error {
+    fn from(error: ui::Error) -> Self {
         Error::TerminalError { error }
     }
 }
@@ -223,7 +223,7 @@ pub async fn run() -> Result<(), Error> {
                     if no_tui {
                         wait!(app_state);
                     } else {
-                        let mut tui = ui::terminal::new(app_state, controls, client, None, None)?;
+                        let mut tui = ui::new(app_state, controls, client, None, None)?;
                         tui.event_loop().await?;
                     }
                 }
@@ -268,7 +268,7 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(
+                    let mut tui = ui::new(
                         app_state,
                         player.controls(),
                         client,
@@ -305,7 +305,7 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(
+                    let mut tui = ui::new(
                         app_state,
                         player.controls(),
                         client,
@@ -352,7 +352,7 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(
+                    let mut tui = ui::new(
                         app_state,
                         player.controls(),
                         client,
@@ -390,7 +390,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
                 tui.event_loop().await?;
             }
 
@@ -421,7 +421,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
                 tui.event_loop().await?;
             }
 

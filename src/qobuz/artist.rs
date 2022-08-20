@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
-use tui::{layout::Constraint, style::Style, widgets::Row as TermRow};
+use tui::layout::Constraint;
 
 use crate::{
     qobuz::{album::Albums, Image},
-    ui::terminal::components::{Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{Row, TableHeaders, TableRows, TableWidths},
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,21 +39,14 @@ impl TableHeaders for Artists {
 }
 
 impl TableRows for Artists {
-    fn rows<'a>(&self) -> Vec<Row<'a>> {
-        self.items
-            .iter()
-            .map(|t| t.into())
-            .collect::<Vec<Row<'a>>>()
+    fn rows(&self) -> Vec<Row> {
+        self.items.iter().map(|t| t.into()).collect::<Vec<Row>>()
     }
 }
 
 impl TableWidths for Artists {
     fn widths(&self, size: u16) -> Vec<Constraint> {
-        vec![
-            Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length((size as f64 * 0.4) as u16),
-            Constraint::Length((size as f64 * 0.1) as u16),
-        ]
+        vec![Constraint::Length((size as f64 * 0.5) as u16)]
     }
 }
 
@@ -62,7 +55,7 @@ impl From<Artists> for Vec<Vec<String>> {
         artists
             .items
             .into_iter()
-            .map(|i| vec![i.name, i.id.to_string()])
+            .map(|i| i.into())
             .collect::<Vec<Vec<String>>>()
     }
 }
@@ -77,9 +70,30 @@ pub struct Artist {
     pub albums: Option<Albums>,
 }
 
+impl Artist {
+    pub fn columns(&self) -> Vec<String> {
+        vec![self.name.clone()]
+    }
+    pub fn row(&self, screen_width: u16) -> Vec<String> {
+        let column_width = screen_width;
+        let columns = self.columns();
+
+        columns
+            .into_iter()
+            .map(|c| {
+                if c.len() as u16 > column_width {
+                    textwrap::fill(&c, column_width as usize)
+                } else {
+                    c
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+}
+
 impl TableHeaders for Artist {
     fn headers(&self) -> Vec<String> {
-        vec!["Name".to_string(), "ID".to_string()]
+        vec!["Name".to_string()]
     }
 }
 
@@ -101,11 +115,11 @@ impl From<Artist> for Vec<Vec<String>> {
     }
 }
 
-impl From<&Artist> for Row<'_> {
+impl From<&Artist> for Row {
     fn from(artist: &Artist) -> Self {
         let strings: Vec<String> = artist.into();
 
-        Row::new(TermRow::new(strings).style(Style::default()))
+        Row::new(strings)
     }
 }
 

@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use sled::IVec;
-use tui::{layout::Constraint, style::Style, widgets::Row as TermRow};
+use tui::layout::Constraint;
 
 use crate::{
     qobuz::{
         track::{PlaylistTrack, Tracks},
         User,
     },
-    ui::terminal::components::{Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{Row, TableHeaders, TableRows, TableWidths},
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct UserPlaylistsResult {
 
 impl TableHeaders for UserPlaylistsResult {
     fn headers(&self) -> Vec<String> {
-        self.playlists.headers()
+        vec!["Title".to_string()]
     }
 }
 
@@ -86,17 +86,14 @@ impl From<Playlists> for Vec<Vec<String>> {
         playlists
             .items
             .into_iter()
-            .map(|i| vec![i.name, i.id.to_string()])
+            .map(|i| vec![i.name])
             .collect::<Vec<Vec<String>>>()
     }
 }
 
 impl TableRows for Playlists {
-    fn rows<'a>(&self) -> Vec<Row<'a>> {
-        self.items
-            .iter()
-            .map(|t| t.into())
-            .collect::<Vec<Row<'a>>>()
+    fn rows(&self) -> Vec<Row> {
+        self.items.iter().map(|t| t.into()).collect::<Vec<Row>>()
     }
 }
 
@@ -112,13 +109,13 @@ impl TableHeaders for Playlists {
 
 impl From<Playlist> for Vec<String> {
     fn from(playlist: Playlist) -> Self {
-        vec![playlist.name, playlist.id.to_string()]
+        vec![playlist.name]
     }
 }
 
 impl From<&Playlist> for Vec<String> {
     fn from(playlist: &Playlist) -> Self {
-        vec![playlist.name.clone(), playlist.id.to_string()]
+        vec![playlist.name.clone()]
     }
 }
 
@@ -128,28 +125,24 @@ impl From<Playlist> for Vec<Vec<String>> {
     }
 }
 
-impl From<&Playlist> for Row<'_> {
+impl From<&Playlist> for Row {
     fn from(playlist: &Playlist) -> Self {
         let strings: Vec<String> = playlist.into();
 
-        Row::new(TermRow::new(strings).style(Style::default()))
+        Row::new(strings)
     }
 }
 
 impl TableHeaders for Playlist {
     fn headers(&self) -> Vec<String> {
-        vec!["Title".to_string()]
+        vec!["Title".to_string(), "Artist".to_string()]
     }
 }
 
 impl TableRows for Playlist {
-    fn rows<'a>(&self) -> Vec<Row<'a>> {
+    fn rows(&self) -> Vec<Row> {
         if let Some(tracks) = &self.tracks {
-            tracks
-                .items
-                .iter()
-                .map(|i| i.into())
-                .collect::<Vec<Row<'a>>>()
+            tracks.items.iter().map(|i| i.into()).collect::<Vec<Row>>()
         } else {
             vec![]
         }
@@ -160,8 +153,7 @@ impl TableWidths for Playlist {
     fn widths(&self, size: u16) -> Vec<Constraint> {
         vec![
             Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length((size as f64 * 0.4) as u16),
-            Constraint::Length((size as f64 * 0.1) as u16),
+            Constraint::Length((size as f64 * 0.5) as u16),
         ]
     }
 }

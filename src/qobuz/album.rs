@@ -6,7 +6,7 @@ use crate::{
         Composer, Image,
     },
     state::AudioQuality,
-    ui::terminal::components::{Item, Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{Item, Row, TableHeaders, TableRows, TableWidths},
 };
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use tui::{
     layout::Constraint,
     style::{Color, Modifier, Style},
     text::Text,
-    widgets::{ListItem, Row as TermRow},
+    widgets::ListItem,
 };
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,11 +153,11 @@ impl From<&Album> for Vec<Vec<String>> {
     }
 }
 
-impl From<&Album> for Row<'_> {
+impl From<&Album> for Row {
     fn from(album: &Album) -> Self {
         let strings: Vec<String> = album.into();
 
-        Row::new(TermRow::new(strings).style(Style::default()))
+        Row::new(strings)
     }
 }
 
@@ -188,11 +188,8 @@ pub struct Albums {
 }
 
 impl TableRows for Albums {
-    fn rows<'a>(&self) -> Vec<Row<'a>> {
-        self.items
-            .iter()
-            .map(|t| t.into())
-            .collect::<Vec<Row<'a>>>()
+    fn rows(&self) -> Vec<Row> {
+        self.items.iter().map(|t| t.into()).collect::<Vec<Row>>()
     }
 }
 
@@ -217,6 +214,19 @@ impl TableWidths for Albums {
 }
 
 impl Albums {
+    pub fn sort_by_date(&mut self) {
+        self.items.sort_by(|a, b| {
+            chrono::NaiveDate::parse_from_str(a.release_date_original.as_str(), "%Y-%m-%d")
+                .unwrap()
+                .cmp(
+                    &chrono::NaiveDate::parse_from_str(
+                        b.release_date_original.as_str(),
+                        "%Y-%m-%d",
+                    )
+                    .unwrap(),
+                )
+        });
+    }
     pub fn item_list(&self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
         self.items
             .iter()

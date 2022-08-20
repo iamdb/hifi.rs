@@ -12,7 +12,7 @@ use crate::{
     },
     state::app::AppState,
     switch_screen,
-    ui::terminal::{
+    ui::{
         components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
         AppKey, Console, Screen, StateKey,
     },
@@ -27,7 +27,7 @@ pub enum SearchResults {
 }
 
 impl TableRows for SearchResults {
-    fn rows<'s>(&self) -> Vec<Row<'s>> {
+    fn rows(&self) -> Vec<Row> {
         match self {
             SearchResults::Albums(r) => r.albums.rows(),
             SearchResults::Artists(r) => r.artists.rows(),
@@ -42,7 +42,7 @@ impl TableHeaders for SearchResults {
         match self {
             SearchResults::Albums(r) => r.albums.headers(),
             SearchResults::Artists(r) => r.artists.headers(),
-            SearchResults::UserPlaylists(r) => r.playlists.headers(),
+            SearchResults::UserPlaylists(r) => r.headers(),
             SearchResults::Playlist(r) => r.headers(),
         }
     }
@@ -59,9 +59,9 @@ impl TableWidths for SearchResults {
     }
 }
 
-pub struct SearchScreen<'l> {
+pub struct SearchScreen {
     client: Client,
-    results_table: Table<'l>,
+    results_table: Table,
     app_state: AppState,
     search_results: Option<SearchResults>,
     controls: Controls,
@@ -70,7 +70,7 @@ pub struct SearchScreen<'l> {
     screen_width: u16,
 }
 
-impl<'l> SearchScreen<'l> {
+impl SearchScreen {
     pub fn new(
         app_state: AppState,
         controls: Controls,
@@ -78,7 +78,7 @@ impl<'l> SearchScreen<'l> {
         search_results: Option<SearchResults>,
         query: Option<String>,
         screen_width: u16,
-    ) -> SearchScreen<'l> {
+    ) -> SearchScreen {
         let enter_search = false;
 
         let results_table = if let Some(search_results) = search_results.clone() {
@@ -167,7 +167,7 @@ impl<'l> SearchScreen<'l> {
     }
 }
 
-impl<'l> Screen for SearchScreen<'l> {
+impl Screen for SearchScreen {
     fn render(&mut self, terminal: &mut Console) {
         terminal
             .draw(|f| {
