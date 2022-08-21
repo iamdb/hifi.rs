@@ -1,13 +1,10 @@
 use crate::{
-    get_player, player,
-    qobuz::{
-        client::{self, output, Credentials, OutputFormat},
-        track::PlaylistTrack,
-    },
+    player,
+    qobuz::client::{self, output, Credentials, OutputFormat},
     state::{
         self,
-        app::{ClientKey, PlayerKey, StateKey},
-        AudioQuality, PlaylistValue, StringValue,
+        app::{ClientKey, StateKey},
+        AudioQuality, StringValue,
     },
     ui::{
         self,
@@ -196,41 +193,16 @@ pub async fn run() -> Result<(), Error> {
     #[allow(unused)]
     match cli.command {
         Commands::Resume { no_tui } => {
-            let tree = app_state.player.clone();
-            if let (Some(playlist), Some(next_up)) = (
-                get_player!(PlayerKey::Playlist, tree, PlaylistValue),
-                get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
-            ) {
-                let client = client::new(app_state.clone(), creds).await?;
+            let client = client::new(app_state.clone(), creds).await?;
+            let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
-                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+            player.play();
 
-                let next_track = player.attach_track_url(next_up).await?;
-
-                if let Some(track_url) = next_track.track_url {
-                    player.set_playlist(playlist);
-                    player.set_uri(track_url);
-
-                    if let Some(prev_playlist) =
-                        get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
-                    {
-                        player.set_prev_playlist(prev_playlist);
-                    }
-
-                    let controls = player.controls();
-                    controls.play().await;
-
-                    if no_tui {
-                        wait!(app_state);
-                    } else {
-                        let mut tui = ui::new(app_state, controls, client, None, None)?;
-                        tui.event_loop().await?;
-                    }
-                }
+            if no_tui {
+                wait!(app_state);
             } else {
-                return Err(Error::PlayerError {
-                    error: player::Error::Session,
-                });
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
             }
 
             Ok(())
@@ -263,7 +235,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+                let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
@@ -300,7 +272,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+                let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);

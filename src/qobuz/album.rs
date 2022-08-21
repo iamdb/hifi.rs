@@ -76,7 +76,7 @@ pub struct Album {
 
 impl TableHeaders for Album {
     fn headers(&self) -> Vec<String> {
-        vec!["Title", "Artist", "Year"]
+        vec!["Title", "Artist", "Date"]
             .iter()
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
@@ -205,10 +205,13 @@ impl TableHeaders for Albums {
 
 impl TableWidths for Albums {
     fn widths(&self, size: u16) -> Vec<Constraint> {
+        let date_size = self.items.first().unwrap().release_date_original.len();
+        let date_percent = ((date_size as f64 / size as f64) * 100.).ceil() as u16;
+
         vec![
-            Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length((size as f64 * 0.4) as u16),
-            Constraint::Length((size as f64 * 0.1) as u16),
+            Constraint::Percentage(48 - (date_percent / 2)),
+            Constraint::Percentage(48 - (date_percent / 2)),
+            Constraint::Percentage(date_percent),
         ]
     }
 }
