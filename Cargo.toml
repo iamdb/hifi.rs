@@ -13,12 +13,14 @@ comfy-table = "6.0"
 ctrlc = { version = "3.0", features = ["termination"] }
 dialoguer = { version = "0.10.1", features = ["fuzzy-select"] }
 dirs = "4.0"
+enum-as-inner = "0.5"
 flume = "0.10"
 futures = "0.3"
 gstreamer = { version = "0.18", features = ["ser_de"] }
 gstreamer-player = "0.18"
 log = "0.4"
 md5 = "0.7.0"
+parking_lot = { version = "0.12", features = ["serde", "arc_lock"] }
 pretty_env_logger = "0.4"
 regex = "1.5"
 reqwest = { version = "0.11", features = ["json", "blocking", "cookies", "stream"] }
@@ -31,7 +33,7 @@ textwrap = "0.15"
 tokio = { version = "1.0", features = ["full"]} 
 tokio-stream = "0.1"
 tui = { version = "0.18", default-features = false, features = ["termion"] }
-zbus = { version = "2", default-features = false, features = ["tokio"] }
+zbus = { version = "3", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tokio-test = "0.4"

@@ -1,13 +1,13 @@
 use crate::{
-    get_player, player,
+    player,
     qobuz::{
         client::{self, output, Credentials, OutputFormat},
-        PlaylistTrack,
+        search_results::SearchResults,
     },
     state::{
         self,
-        app::{ClientKey, PlayerKey, StateKey},
-        AudioQuality, PlaylistValue, StringValue,
+        app::{ClientKey, StateKey},
+        AudioQuality, StringValue,
     },
     ui, wait, REFRESH_RESOLUTION,
 };
@@ -70,6 +70,8 @@ enum Commands {
         #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
         #[clap(long, short)]
+        no_tui: bool,
+        #[clap(long, short)]
         limit: Option<i32>,
     },
     /// Get information for a specific artist.
@@ -92,6 +94,8 @@ enum Commands {
         track_id: i32,
         #[clap(short, long, value_enum)]
         quality: Option<AudioQuality>,
+        #[clap(short, long)]
+        no_tui: bool,
     },
     /// Stream a full album by its ID.
     StreamAlbum {
@@ -103,7 +107,12 @@ enum Commands {
         no_tui: bool,
     },
     /// Retreive a list of your playlsits.
-    MyPlaylists {},
+    MyPlaylists {
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
+        #[clap(short, long)]
+        no_tui: bool,
+    },
     /// Retreive information about a specific playlist.
     Playlist { playlist_id: String },
     /// Set configuration options
@@ -140,7 +149,7 @@ pub enum Error {
         error: player::Error,
     },
     TerminalError {
-        error: ui::terminal::Error,
+        error: ui::Error,
     },
 }
 
@@ -156,8 +165,8 @@ impl From<player::Error> for Error {
     }
 }
 
-impl From<ui::terminal::Error> for Error {
-    fn from(error: ui::terminal::Error) -> Self {
+impl From<ui::Error> for Error {
+    fn from(error: ui::Error) -> Self {
         Error::TerminalError { error }
     }
 }
@@ -183,41 +192,16 @@ pub async fn run() -> Result<(), Error> {
     #[allow(unused)]
     match cli.command {
         Commands::Resume { no_tui } => {
-            let tree = app_state.player.clone();
-            if let (Some(playlist), Some(next_up)) = (
-                get_player!(PlayerKey::Playlist, tree, PlaylistValue),
-                get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
-            ) {
-                let client = client::new(app_state.clone(), creds).await?;
+            let client = client::new(app_state.clone(), creds).await?;
+            let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
-                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+            player.play();
 
-                let next_track = player.attach_track_url(next_up).await?;
-
-                if let Some(track_url) = next_track.track_url {
-                    player.set_playlist(playlist);
-                    player.set_uri(track_url);
-
-                    if let Some(prev_playlist) =
-                        get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
-                    {
-                        player.set_prev_playlist(prev_playlist);
-                    }
-
-                    let controls = player.controls();
-                    controls.play().await;
-
-                    if no_tui {
-                        wait!(app_state);
-                    } else {
-                        let mut tui = ui::terminal::new(app_state, controls, client, None, None)?;
-                        tui.start().await?;
-                    }
-                }
+            if no_tui {
+                wait!(app_state);
             } else {
-                return Err(Error::PlayerError {
-                    error: player::Error::Session,
-                });
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
             }
 
             Ok(())
@@ -245,24 +229,24 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_albums(query.clone(), limit).await?;
+            let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+                let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::terminal::new(
+                    let mut tui = ui::new(
                         app_state,
                         player.controls(),
                         client,
                         Some(results),
                         Some(query),
                     )?;
-                    tui.start().await?;
+                    tui.event_loop().await?;
                 }
             }
 
@@ -270,7 +254,7 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::GetAlbum { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.album(id).await?;
+            let results = SearchResults::Album(Box::new(client.album(id).await?));
 
             output!(results, output_format);
             Ok(())
@@ -279,16 +263,36 @@ pub async fn run() -> Result<(), Error> {
             query,
             limit,
             output_format,
+            no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_artists(query, limit).await?;
+            let results =
+                SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
 
-            output!(results, output_format);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui = ui::new(
+                        app_state,
+                        player.controls(),
+                        client,
+                        Some(results),
+                        Some(query),
+                    )?;
+                    tui.event_loop().await?;
+                }
+            }
+
             Ok(())
         }
         Commands::GetArtist { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.artist(id, None).await?;
+            let results = SearchResults::Artist(client.artist(id, None).await?);
 
             output!(results, output_format);
             Ok(())
@@ -299,16 +303,31 @@ pub async fn run() -> Result<(), Error> {
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
+            // TODO: Finish implementing table headers
             print!("{}", json);
             Ok(())
         }
-        Commands::MyPlaylists {} => {
+        Commands::MyPlaylists {
+            no_tui,
+            output_format,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.user_playlists().await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
+            let results = SearchResults::UserPlaylists(client.user_playlists().await?);
 
-            print!("{}", json);
+            if no_tui {
+                output!(results, output_format);
+            } else {
+                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui =
+                        ui::new(app_state, player.controls(), client, Some(results), None)?;
+                    tui.event_loop().await?;
+                }
+            }
+
             Ok(())
         }
         Commands::Playlist { playlist_id } => {
@@ -320,7 +339,11 @@ pub async fn run() -> Result<(), Error> {
             print!("{}", json);
             Ok(())
         }
-        Commands::StreamTrack { track_id, quality } => {
+        Commands::StreamTrack {
+            track_id,
+            quality,
+            no_tui,
+        } => {
             let client = client::new(app_state.clone(), creds).await?;
             let mut player = player::new(app_state.clone(), client.clone(), false).await;
 
@@ -329,8 +352,12 @@ pub async fn run() -> Result<(), Error> {
             app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
-            let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
-            tui.start().await?;
+            if no_tui {
+                wait!(app_state);
+            } else {
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
+            }
 
             Ok(())
         }
@@ -359,8 +386,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::terminal::new(app_state, player.controls(), client, None, None)?;
-                tui.start().await?;
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
             }
 
             Ok(())

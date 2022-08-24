@@ -1,20 +1,22 @@
+mod player;
+
 use crate::{
-    qobuz::PlaylistTrack,
+    qobuz::track::PlaylistTrack,
     state::{
         app::{AppState, PlayerKey, StateKey},
         ClockValue, FloatValue, StatusValue,
     },
 };
-use gstreamer::{ClockTime, State as GstState};
+use textwrap::fill;
 use tui::{
     backend::Backend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols::bar,
     text::{Span, Spans, Text},
     widgets::{
-        Block, BorderType, Borders, Clear, Gauge, List as TermList, ListItem, ListState, Paragraph,
-        Tabs, Wrap,
+        Block, BorderType, Borders, Clear, List as TermList, ListItem, ListState, Paragraph,
+        Row as TermRow, Table as TermTable, TableState, Tabs,
     },
     Frame,
 };
@@ -32,7 +34,7 @@ where
 
     if let Some(track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
         if let Some(status) = get_player!(PlayerKey::Status, tree, StatusValue) {
-            current_track(track, status, f, layout[0]);
+            player::current_track(track, status, f, layout[0]);
         }
     }
 
@@ -41,7 +43,7 @@ where
         get_player!(PlayerKey::Duration, tree, ClockValue),
         get_player!(PlayerKey::Progress, tree, FloatValue),
     ) {
-        progress(position, duration, prog, f, layout[1]);
+        player::progress(position, duration, prog, f, layout[1]);
     } else {
         f.render_widget(
             Block::default().style(Style::default().bg(Color::Indexed(236))),
@@ -56,7 +58,7 @@ where
 {
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .border_style(Style::default().fg(Color::Indexed(250)));
 
     if let Some(title) = title {
@@ -88,153 +90,30 @@ where
     f.render_stateful_widget(term_list, layout[0], &mut list.state);
 }
 
-fn progress<B>(
-    position: ClockValue,
-    duration: ClockValue,
-    progress: FloatValue,
-    f: &mut Frame<B>,
-    area: Rect,
-) where
+pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, area: Rect)
+where
     B: Backend,
 {
-    if duration.inner_clocktime() > ClockTime::default() {
-        let position = position.to_string().as_str()[3..7].to_string();
-        let duration = duration.to_string().as_str()[3..7].to_string();
-        let prog = if progress >= FloatValue(0.0) {
-            progress
-        } else {
-            FloatValue(0.0)
-        };
+    let (rows, widths, header) = table.term_table(f.size().width);
 
-        let progress = Gauge::default()
-            .label(format!("{} / {}", position, duration))
-            .use_unicode(true)
-            .block(Block::default().style(Style::default().bg(Color::Indexed(236))))
-            .gauge_style(
+    let term_table = TermTable::new(rows)
+        .header(
+            TermRow::new(header).style(
                 Style::default()
-                    .bg(Color::Indexed(235))
-                    .fg(Color::Indexed(38))
-                    .add_modifier(Modifier::BOLD),
-            )
-            .ratio(prog.into());
-        f.render_widget(progress, area);
-    } else {
-        let loading = Paragraph::new("LOADING")
-            .alignment(Alignment::Center)
-            .style(Style::default().bg(Color::Indexed(236)));
-
-        f.render_widget(loading, area);
-    }
-}
-
-fn current_track<B>(
-    playlist_track: PlaylistTrack,
-    status: StatusValue,
-    f: &mut Frame<B>,
-    area: Rect,
-) where
-    B: Backend,
-{
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(4),
-            Constraint::Length(1),
-            Constraint::Min(4),
-            Constraint::Length(1),
-            Constraint::Length(9),
-        ])
-        .margin(0)
-        .split(area);
-
-    let spacer = Block::default().style(Style::default().bg(Color::Indexed(237)));
-    f.render_widget(spacer.clone(), chunks[1]);
-    f.render_widget(spacer, chunks[3]);
-
-    let title_style = Style::default()
-        .bg(Color::Indexed(24))
-        .fg(Color::Indexed(81))
-        .add_modifier(Modifier::BOLD);
-
-    let mut current_track_text = vec![
-        Spans::from(vec![Span::styled(
-            playlist_track.track.title.clone(),
-            title_style,
-        )]),
-        Spans::from(vec![Span::from(playlist_track.track.performer.name)]),
-    ];
-
-    if playlist_track.track.title.len() <= chunks[2].width as usize {
-        current_track_text.insert(0, Spans::from(""));
-    }
-
-    let mut track_number_text = vec![
-        Spans::from(""),
-        Spans::from(format!("{:02}", playlist_track.track.track_number)),
-    ];
-
-    if let Some(album) = playlist_track.album {
-        let release_year =
-            chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
-                .unwrap()
-                .format("%Y");
-        current_track_text.push(Spans::from(format!("{} ({})", album.title, release_year)));
-
-        track_number_text.push(Spans::from("of"));
-        track_number_text.push(Spans::from(format!("{:02}", album.tracks_count)));
-        track_number_text.push(Spans::from(""));
-    }
-
-    let current_track = Paragraph::new(current_track_text)
-        .wrap(Wrap { trim: false })
-        .block(Block::default().style(Style::default().bg(Color::Indexed(237))));
-
-    let track_number = Paragraph::new(track_number_text)
-        .block(
-            Block::default().style(
-                Style::default()
-                    .bg(Color::Indexed(235))
-                    .fg(Color::Indexed(31)),
+                    .bg(Color::Indexed(236))
+                    .fg(Color::Indexed(81)),
             ),
         )
-        .alignment(tui::layout::Alignment::Center);
+        .block(Block::default())
+        .widths(widths.as_slice())
+        .style(Style::default().fg(Color::Indexed(250)))
+        .highlight_style(
+            Style::default()
+                .fg(Color::Indexed(81))
+                .bg(Color::Indexed(235)),
+        );
 
-    let mut resolution_text = vec![Spans::from("")];
-
-    let current_state: String = match status.into() {
-        GstState::Playing => '\u{25B6}'.to_string().to_uppercase(),
-        GstState::Paused => '\u{23F8}'.to_string().to_uppercase(),
-        GstState::Ready => "...".to_string().to_uppercase(),
-        GstState::Null => "Null".to_string().to_uppercase(),
-        _ => "".to_string(),
-    };
-
-    if !current_state.is_empty() {
-        resolution_text.push(Spans::from(current_state));
-    }
-
-    if let Some(track_url) = playlist_track.track_url {
-        resolution_text.push(Spans::from(format!("{}khz", track_url.sampling_rate)));
-        resolution_text.push(Spans::from(format!("{}bit", track_url.bit_depth)));
-        resolution_text.push(Spans::from(""));
-    }
-
-    if !resolution_text.is_empty() {
-        let resolution = Paragraph::new(resolution_text)
-            .alignment(Alignment::Center)
-            .block(
-                Block::default().style(
-                    Style::default()
-                        .bg(Color::Indexed(235))
-                        .fg(Color::Indexed(31)),
-                ),
-            );
-
-        f.render_widget(resolution, chunks[4]);
-    }
-
-    f.render_widget(track_number, chunks[0]);
-    f.render_widget(current_track, chunks[2]);
+    f.render_stateful_widget(term_table, area, &mut table.state.clone());
 }
 
 pub fn tabs<B>(num: usize, f: &mut Frame<B>, rect: Rect)
@@ -399,6 +278,190 @@ impl<'t> List<'t> {
         let i = match self.state.selected() {
             Some(i) => {
                 if self.items.is_empty() || i == 0 {
+                    0
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn selected(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
+    #[allow(unused)]
+    pub fn select(&mut self, num: usize) {
+        self.state.select(Some(num));
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Row {
+    columns: Vec<String>,
+    widths: Vec<ColumnWidth>,
+}
+
+impl Row {
+    pub fn new(columns: Vec<String>, widths: Vec<ColumnWidth>) -> Row {
+        Row { columns, widths }
+    }
+
+    pub fn term_row(&self, size: u16) -> TermRow<'_> {
+        let column_widths = self
+            .widths
+            .iter()
+            .map(|w| (size as f64 * (w.column_size as f64 * 0.01)).floor() as u16)
+            .collect::<Vec<u16>>();
+
+        let formatted = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let width = column_widths.get(i).unwrap();
+
+                fill(c, *width as usize)
+            })
+            .collect::<Vec<String>>();
+
+        let height = formatted
+            .iter()
+            .map(|f| {
+                let count = f.matches('\n').count();
+
+                if count == 0 {
+                    1
+                } else {
+                    count + 1
+                }
+            })
+            .max()
+            .unwrap_or(1);
+
+        TermRow::new(formatted)
+            .style(Style::default())
+            .height(height as u16)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ColumnWidth {
+    /// Table column size in percent
+    column_size: u16,
+    constraint: Constraint,
+}
+
+impl ColumnWidth {
+    /// Column sizes are in percent.
+    pub fn new(column_size: u16) -> Self {
+        ColumnWidth {
+            column_size,
+            constraint: Constraint::Percentage(column_size),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Table {
+    rows: Vec<Row>,
+    header: Vec<String>,
+    state: TableState,
+    widths: Vec<ColumnWidth>,
+}
+
+pub trait TableRows {
+    fn rows(&self) -> Vec<Row>;
+}
+
+pub trait TableRow {
+    fn row(&self) -> Row;
+}
+
+pub trait TableHeaders {
+    fn headers() -> Vec<String>;
+}
+
+pub trait TableWidths {
+    fn widths() -> Vec<ColumnWidth>;
+}
+
+impl Table {
+    pub fn new(
+        header: Option<Vec<String>>,
+        items: Option<Vec<Row>>,
+        widths: Option<Vec<ColumnWidth>>,
+    ) -> Table {
+        if let (Some(i), Some(header), Some(widths)) = (items, header, widths) {
+            Table {
+                rows: i,
+                state: TableState::default(),
+                header,
+                widths,
+            }
+        } else {
+            Table {
+                rows: Vec::new(),
+                state: TableState::default(),
+                header: vec![],
+                widths: vec![],
+            }
+        }
+    }
+
+    fn term_table(&self, size: u16) -> (Vec<TermRow>, Vec<Constraint>, Vec<String>) {
+        let rows = self.term_rows(size);
+        let widths = self
+            .widths
+            .iter()
+            .map(|w| w.constraint)
+            .collect::<Vec<Constraint>>();
+        let header = self.header.clone();
+
+        (rows, widths, header)
+    }
+
+    fn term_rows(&self, size: u16) -> Vec<TermRow> {
+        self.rows
+            .iter()
+            .map(move |r| r.term_row(size))
+            .collect::<Vec<TermRow>>()
+    }
+
+    pub fn set_header(&mut self, header: Vec<String>) {
+        self.header = header;
+    }
+
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.rows = rows;
+    }
+
+    pub fn set_widths(&mut self, widths: Vec<ColumnWidth>) {
+        self.widths = widths;
+    }
+
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.rows.is_empty() {
+                    0
+                } else if i >= self.rows.len() - 1 {
+                    self.rows.len() - 1
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.rows.is_empty() || i == 0 {
                     0
                 } else {
                     i - 1

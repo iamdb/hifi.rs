@@ -1,9 +1,12 @@
-use super::{
-    Album, AlbumSearchResults, Artist, ArtistSearchResults, Playlist, Track, TrackURL,
-    UserPlaylists,
-};
 use crate::{
     get_client,
+    qobuz::{
+        album::{Album, AlbumSearchResults},
+        artist::{Artist, ArtistSearchResults},
+        playlist::{Playlist, UserPlaylistsResult},
+        track::Track,
+        TrackURL,
+    },
     state::{
         app::{AppState, ClientKey, StateKey},
         AudioQuality, StringValue,
@@ -94,7 +97,7 @@ pub struct Client {
     password: Option<StringValue>,
     base_url: String,
     client: reqwest::Client,
-    pub default_quality: AudioQuality,
+    default_quality: AudioQuality,
     user_token: Option<StringValue>,
     bundle_regex: regex::Regex,
     app_id_regex: regex::Regex,
@@ -307,7 +310,7 @@ impl Client {
     }
 
     /// Retrieve a list of the user's playlists
-    pub async fn user_playlists(&self) -> Result<UserPlaylists> {
+    pub async fn user_playlists(&self) -> Result<UserPlaylistsResult> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
@@ -668,7 +671,7 @@ macro_rules! output {
                 let mut table = Table::new();
                 table.load_preset(UTF8_FULL);
                 table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-                table.set_header($results.table_headers());
+                table.set_header($results.headers());
 
                 let table_rows: Vec<Vec<String>> = $results.into();
 

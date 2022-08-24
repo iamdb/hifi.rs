@@ -1,6 +1,11 @@
 use crate::{
     action, get_player, mpris,
-    qobuz::{client::Client, Album, PlaylistTrack, Track, TrackURL},
+    qobuz::{
+        album::Album,
+        client::Client,
+        track::{PlaylistTrack, Track},
+        TrackURL,
+    },
     state::{
         app::{AppState, PlayerKey, StateKey},
         AudioQuality, ClockValue, FloatValue, PlaylistValue, StatusValue,
@@ -56,27 +61,17 @@ pub struct Player {
     /// Qobuz client
     client: Client,
     controls: Controls,
+    is_buffering: bool,
 }
 
 pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
     let controls = Controls::new(app_state.clone());
-    let mut playlist = Arc::new(RwLock::new(PlaylistValue::new()));
-    let mut playlist_previous = Arc::new(RwLock::new(PlaylistValue::new()));
+    let playlist = Arc::new(RwLock::new(PlaylistValue::new()));
+    let playlist_previous = Arc::new(RwLock::new(PlaylistValue::new()));
 
     mpris::init(controls.clone()).await;
-
-    if resume {
-        let tree = &app_state.player;
-        if let Some(p) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
-            playlist = Arc::new(RwLock::new(p));
-        }
-
-        if let Some(pp) = get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue) {
-            playlist_previous = Arc::new(RwLock::new(pp));
-        }
-    }
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -102,21 +97,26 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
         None
     });
 
-    let player = Player {
+    let mut player = Player {
         client,
         playbin,
         playlist,
         playlist_previous,
         app_state,
         controls,
+        is_buffering: false,
     };
+
+    if resume {
+        player.resume().await.expect("failed to resume");
+    }
 
     let p = player.clone();
     tokio::spawn(async move {
         p.clock_loop().await;
     });
 
-    let p = player.clone();
+    let mut p = player.clone();
     tokio::spawn(async move {
         p.player_loop(resume, about_to_finish_rx, next_track_tx)
             .await;
@@ -221,6 +221,32 @@ impl Player {
                 error!("{}", error.message);
                 Err(Error::Seek)
             }
+        }
+    }
+    pub async fn resume(&mut self) -> Result<()> {
+        let tree = self.app_state.player.clone();
+
+        if let (Some(playlist), Some(next_up)) = (
+            get_player!(PlayerKey::Playlist, tree, PlaylistValue),
+            get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
+        ) {
+            let next_track = self.attach_track_url(next_up).await?;
+
+            if let Some(track_url) = next_track.track_url {
+                self.set_playlist(playlist);
+                self.set_uri(track_url);
+
+                if let Some(prev_playlist) =
+                    get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+                {
+                    self.set_prev_playlist(prev_playlist);
+
+                    self.pause();
+                }
+            }
+            Ok(())
+        } else {
+            Err(Error::Session)
         }
     }
     /// Retreive controls for the player.
@@ -469,8 +495,8 @@ impl Player {
     }
     /// Handles messages from the player and takes necessary action.
     async fn player_loop<'p>(
-        &self,
-        mut resume: bool,
+        &mut self,
+        resume: bool,
         about_to_finish_rx: Receiver<bool>,
         next_track_tx: Sender<String>,
     ) {
@@ -479,6 +505,7 @@ impl Player {
         let mut quitter = self.app_state.quitter();
         let mut actions = action_rx.stream();
         let mut about_to_finish = about_to_finish_rx.stream();
+        let mut resume = resume;
 
         loop {
             select! {
@@ -510,17 +537,12 @@ impl Player {
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward(),
                         Action::Clear => {
-                            if self.is_playing() {
-                                self.stop();
-                            }
-
                             self.playlist.write().await.clear();
                             self.playlist_previous.write().await.clear();
                             self.app_state.player.clear();
                         }
                         Action::PlayAlbum { album } => {
-                            let default_quality = self.client.default_quality.clone();
-
+                            let default_quality = self.client.quality();
                             let client = self.client.clone();
 
                             let mut album = *album;
@@ -540,13 +562,17 @@ impl Player {
                             break;
                         },
                         MessageView::StreamStart(_) => {
-                            let tree = &self.app_state.player;
 
-                            // When a stream starts, add the new track duration
-                            // from the player to the state.
-                            if let Some(next_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-                               self.app_state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),ClockTime::from_seconds(next_track.track.duration.try_into().unwrap()).into());
+                        }
+                        MessageView::DurationChanged(_) => {
+                            if let Some(duration) = self.duration() {
+                                self.app_state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),duration);
                             }
+
+                        }
+                        MessageView::Buffering(_) => {
+                            debug!("buffering");
+                            self.is_buffering = true;
                         }
                         MessageView::AsyncDone(_) => {
                             // If the player is resuming from a previous session,
@@ -577,14 +603,17 @@ impl Player {
                                 match current_state {
                                     GstState::Playing => {
                                         debug!("player state changed to Playing");
+                                        self.is_buffering = false;
                                         self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
                                     }
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
+                                        self.is_buffering = false;
                                         self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
                                     }
                                     GstState::Ready => {
                                         debug!("player state changed to Ready");
+                                        self.is_buffering = false;
                                         self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
                                     }
                                     _ => (),
@@ -723,7 +752,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(1);
+        let (action_tx, action_rx) = flume::bounded::<Action>(2);
 
         Controls {
             action_rx,
