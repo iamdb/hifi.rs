@@ -2,6 +2,7 @@ pub mod components;
 pub mod nowplaying;
 pub mod search;
 
+use crate::qobuz::search_results::SearchResults;
 use crate::{
     get_app,
     player::Controls,
@@ -11,10 +12,7 @@ use crate::{
         ActiveScreen,
     },
     switch_screen,
-    ui::{
-        nowplaying::NowPlayingScreen,
-        search::{SearchResults, SearchScreen},
-    },
+    ui::{nowplaying::NowPlayingScreen, search::SearchScreen},
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
@@ -99,7 +97,7 @@ pub fn new(
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::bounded(2);
+    let (tx, rx) = flume::unbounded();
 
     #[macro_export]
     macro_rules! switch_screen {

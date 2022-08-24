@@ -94,17 +94,18 @@ pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, area: Rect)
 where
     B: Backend,
 {
-    let rows = table.term_rows(f.size().width);
+    let (rows, widths, header) = table.term_table(f.size().width);
+
     let term_table = TermTable::new(rows)
         .header(
-            TermRow::new(table.header.clone()).style(
+            TermRow::new(header).style(
                 Style::default()
                     .bg(Color::Indexed(236))
                     .fg(Color::Indexed(81)),
             ),
         )
-        .widths(table.widths.as_slice())
         .block(Block::default())
+        .widths(widths.as_slice())
         .style(Style::default().fg(Color::Indexed(250)))
         .highlight_style(
             Style::default()
@@ -300,23 +301,67 @@ impl<'t> List<'t> {
 #[derive(Debug, Clone)]
 pub struct Row {
     columns: Vec<String>,
+    widths: Vec<ColumnWidth>,
 }
 
 impl Row {
-    pub fn new(columns: Vec<String>) -> Row {
-        Row { columns }
+    pub fn new(columns: Vec<String>, widths: Vec<ColumnWidth>) -> Row {
+        Row { columns, widths }
+    }
+
+    pub fn term_row(&self, size: u16) -> TermRow<'_> {
+        let column_widths = self
+            .widths
+            .iter()
+            .map(|w| (size as f64 * (w.column_size as f64 * 0.01)).floor() as u16)
+            .collect::<Vec<u16>>();
+
+        let formatted = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let width = column_widths.get(i).unwrap_or(&1);
+
+                fill(c, *width as usize)
+            })
+            .collect::<Vec<String>>();
+
+        // TODO: FIX HEIGHT
+        let height = formatted
+            .iter()
+            .map(|f| {
+                let count = f.matches('\n').count();
+
+                if count == 0 {
+                    1
+                } else {
+                    count + 1
+                }
+            })
+            .max()
+            .unwrap_or(1);
+
+        TermRow::new(formatted)
+            .style(Style::default())
+            .height(height as u16)
     }
 }
 
-impl From<TermRow<'_>> for Row {
-    fn from(row: TermRow) -> Self {
-        row.into()
-    }
+#[derive(Debug, Clone)]
+pub struct ColumnWidth {
+    /// Table column size in percent
+    column_size: u16,
+    constraint: Constraint,
 }
 
-impl From<Row> for TermRow<'_> {
-    fn from(row: Row) -> Self {
-        TermRow::new(row.columns).style(Style::default())
+impl ColumnWidth {
+    /// Column sizes are in percent.
+    pub fn new(column_size: u16) -> Self {
+        ColumnWidth {
+            column_size,
+            constraint: Constraint::Percentage(column_size),
+        }
     }
 }
 
@@ -325,26 +370,30 @@ pub struct Table {
     rows: Vec<Row>,
     header: Vec<String>,
     state: TableState,
-    widths: Vec<Constraint>,
+    widths: Vec<ColumnWidth>,
 }
 
 pub trait TableRows {
     fn rows(&self) -> Vec<Row>;
 }
 
+pub trait TableRow {
+    fn row(&self) -> Row;
+}
+
 pub trait TableHeaders {
-    fn headers(&self) -> Vec<String>;
+    fn headers() -> Vec<String>;
 }
 
 pub trait TableWidths {
-    fn widths(&self, size: u16) -> Vec<Constraint>;
+    fn widths() -> Vec<ColumnWidth>;
 }
 
 impl Table {
     pub fn new(
         header: Option<Vec<String>>,
         items: Option<Vec<Row>>,
-        widths: Option<Vec<Constraint>>,
+        widths: Option<Vec<ColumnWidth>>,
     ) -> Table {
         if let (Some(i), Some(header), Some(widths)) = (items, header, widths) {
             Table {
@@ -362,38 +411,35 @@ impl Table {
             }
         }
     }
-    fn term_rows(&self, screen_width: u16) -> Vec<TermRow> {
+
+    fn term_table(&self, size: u16) -> (Vec<TermRow>, Vec<Constraint>, Vec<String>) {
+        let rows = self.term_rows(size);
+        let widths = self
+            .widths
+            .iter()
+            .map(|w| w.constraint)
+            .collect::<Vec<Constraint>>();
+        let header = self.header.clone();
+
+        (rows, widths, header)
+    }
+
+    fn term_rows(&self, size: u16) -> Vec<TermRow> {
         self.rows
             .iter()
-            .map(move |r| {
-                let mut height = 1;
-
-                let formatted = r
-                    .columns
-                    .iter()
-                    .map(|c| {
-                        if c.len() as u16 >= screen_width / 2 {
-                            height = 2;
-                            fill(c, screen_width as usize / 2)
-                        } else {
-                            c.clone()
-                        }
-                    })
-                    .collect::<Vec<String>>();
-
-                TermRow::new(formatted)
-                    .style(Style::default())
-                    .height(height)
-            })
+            .map(move |r| r.term_row(size))
             .collect::<Vec<TermRow>>()
     }
+
     pub fn set_header(&mut self, header: Vec<String>) {
         self.header = header;
     }
+
     pub fn set_rows(&mut self, rows: Vec<Row>) {
         self.rows = rows;
     }
-    pub fn set_widths(&mut self, widths: Vec<Constraint>) {
+
+    pub fn set_widths(&mut self, widths: Vec<ColumnWidth>) {
         self.widths = widths;
     }
 

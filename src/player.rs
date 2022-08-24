@@ -757,7 +757,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(1);
+        let (action_tx, action_rx) = flume::bounded::<Action>(2);
 
         Controls {
             action_rx,

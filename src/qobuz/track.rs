@@ -1,7 +1,7 @@
 use crate::{
     qobuz::{album::Album, TrackURL},
     state::{AudioQuality, Bytes},
-    ui::components::Row,
+    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,12 @@ pub struct Tracks {
     pub limit: i64,
     pub total: i64,
     pub items: Vec<Track>,
+}
+
+impl TableRows for Tracks {
+    fn rows(&self) -> Vec<Row> {
+        self.items.iter().map(|i| i.row()).collect::<Vec<Row>>()
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,23 +52,33 @@ pub struct Track {
     pub hires_streamable: bool,
 }
 
+impl Track {
+    fn columns(&self) -> Vec<String> {
+        vec![self.title.clone(), self.performer.name.clone()]
+    }
+}
+
+impl TableHeaders for Track {
+    fn headers() -> Vec<String> {
+        vec!["Title".to_string(), "Artist".to_string()]
+    }
+}
+
+impl TableWidths for Track {
+    fn widths() -> Vec<ColumnWidth> {
+        vec![ColumnWidth::new(50), ColumnWidth::new(50)]
+    }
+}
+
 impl From<Track> for Vec<u8> {
     fn from(track: Track) -> Self {
         bincode::serialize(&track).expect("failed to serialize track")
     }
 }
 
-impl From<&Track> for Row {
-    fn from(track: &Track) -> Self {
-        let strings: Vec<String> = track.into();
-
-        Row::new(strings)
-    }
-}
-
-impl From<&Track> for Vec<String> {
-    fn from(track: &Track) -> Self {
-        vec![track.title.clone(), track.performer.name.clone()]
+impl TableRow for Track {
+    fn row(&self) -> Row {
+        Row::new(self.columns(), Track::widths())
     }
 }
 

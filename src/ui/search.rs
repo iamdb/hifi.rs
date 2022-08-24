@@ -5,59 +5,18 @@ use tui::layout::{Constraint, Direction, Layout};
 use crate::{
     player::Controls,
     qobuz::{
-        album::AlbumSearchResults,
-        artist::ArtistSearchResults,
+        album::{Album, AlbumSearchResults},
         client::Client,
-        playlist::{Playlist, UserPlaylistsResult},
+        search_results::SearchResults,
+        track::Track,
     },
     state::app::AppState,
     switch_screen,
     ui::{
-        components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
+        components::{self, ColumnWidth, Table, TableHeaders, TableRows, TableWidths},
         AppKey, Console, Screen, StateKey,
     },
 };
-
-#[derive(Clone, Debug)]
-pub enum SearchResults {
-    Albums(AlbumSearchResults),
-    Artists(ArtistSearchResults),
-    UserPlaylists(UserPlaylistsResult),
-    Playlist(Box<Playlist>),
-}
-
-impl TableRows for SearchResults {
-    fn rows(&self) -> Vec<Row> {
-        match self {
-            SearchResults::Albums(r) => r.albums.rows(),
-            SearchResults::Artists(r) => r.artists.rows(),
-            SearchResults::UserPlaylists(r) => r.playlists.rows(),
-            SearchResults::Playlist(r) => r.rows(),
-        }
-    }
-}
-
-impl TableHeaders for SearchResults {
-    fn headers(&self) -> Vec<String> {
-        match self {
-            SearchResults::Albums(r) => r.albums.headers(),
-            SearchResults::Artists(r) => r.artists.headers(),
-            SearchResults::UserPlaylists(r) => r.headers(),
-            SearchResults::Playlist(r) => r.headers(),
-        }
-    }
-}
-
-impl TableWidths for SearchResults {
-    fn widths(&self, size: u16) -> Vec<Constraint> {
-        match self {
-            SearchResults::Albums(r) => r.albums.widths(size),
-            SearchResults::Artists(r) => r.artists.widths(size),
-            SearchResults::UserPlaylists(r) => r.playlists.widths(size),
-            SearchResults::Playlist(r) => r.widths(size),
-        }
-    }
-}
 
 pub struct SearchScreen {
     client: Client,
@@ -82,11 +41,7 @@ impl SearchScreen {
         let enter_search = false;
 
         let results_table = if let Some(search_results) = search_results.clone() {
-            let mut table = Table::new(
-                Some(search_results.headers()),
-                Some(search_results.rows()),
-                Some(search_results.widths(screen_width)),
-            );
+            let mut table: Table = search_results.into();
             table.select(0);
 
             table
@@ -114,6 +69,7 @@ impl SearchScreen {
 
     fn handle_selection(&mut self, results: &SearchResults, selected: usize) -> bool {
         match results {
+            // An album has been selected, play it.
             SearchResults::Albums(results) => {
                 if let Some(album) = results.albums.items.get(selected) {
                     executor::block_on(self.controls.clear());
@@ -122,6 +78,7 @@ impl SearchScreen {
                     return true;
                 };
             }
+            // An artist has been selected, load the albums into the list.
             SearchResults::Artists(results) => {
                 if let Some(artist) = results.artists.items.get(selected) {
                     if let Ok(artist_info) =
@@ -129,9 +86,8 @@ impl SearchScreen {
                     {
                         if let Some(albums) = artist_info.albums {
                             self.results_table.set_rows(albums.rows());
-                            self.results_table.set_header(albums.headers());
-                            self.results_table
-                                .set_widths(albums.widths(self.screen_width));
+                            self.results_table.set_header(Album::headers());
+                            self.results_table.set_widths(Album::widths());
                             self.results_table.select(0);
 
                             self.search_results = Some(SearchResults::Albums(AlbumSearchResults {
@@ -142,15 +98,16 @@ impl SearchScreen {
                     }
                 };
             }
+            // A playlist has been selected from the user's collection,
+            // load the tracks into the list.
             SearchResults::UserPlaylists(results) => {
                 if let Some(playlist) = results.playlists.items.get(selected) {
                     if let Ok(playlist_info) =
                         executor::block_on(self.client.playlist(playlist.id.to_string()))
                     {
                         self.results_table.set_rows(playlist_info.rows());
-                        self.results_table.set_header(playlist_info.headers());
-                        self.results_table
-                            .set_widths(playlist_info.widths(self.screen_width));
+                        self.results_table.set_header(Track::headers());
+                        self.results_table.set_widths(Track::widths());
                         self.results_table.select(0);
 
                         self.search_results =
@@ -161,6 +118,8 @@ impl SearchScreen {
             SearchResults::Playlist(results) => {
                 debug!("{:?}", results);
             }
+            SearchResults::Album(_) => todo!(),
+            SearchResults::Artist(_) => todo!(),
         }
 
         false
@@ -197,9 +156,9 @@ impl Screen for SearchScreen {
                 }
 
                 let widths = if let Some(results) = &self.search_results {
-                    results.widths(f.size().width)
+                    results.widths()
                 } else {
-                    vec![Constraint::Min(1)]
+                    vec![ColumnWidth::new(1)]
                 };
 
                 self.results_table.set_widths(widths);
@@ -238,9 +197,9 @@ impl Screen for SearchScreen {
                         if let Ok(results) =
                             executor::block_on(self.client.search_artists(query, Some(100)))
                         {
-                            self.search_results = Some(SearchResults::Artists(results.clone()));
-                            self.results_table.set_header(results.artists.headers());
-                            self.results_table.set_rows(results.artists.rows());
+                            let search_results = SearchResults::Artists(results);
+                            self.search_results = Some(search_results.clone());
+                            self.results_table = search_results.into();
                             self.results_table.select(0);
                             self.enter_search = false;
                         }

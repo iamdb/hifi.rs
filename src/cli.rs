@@ -1,16 +1,15 @@
 use crate::{
     player,
-    qobuz::client::{self, output, Credentials, OutputFormat},
+    qobuz::{
+        client::{self, output, Credentials, OutputFormat},
+        search_results::SearchResults,
+    },
     state::{
         self,
         app::{ClientKey, StateKey},
         AudioQuality, StringValue,
     },
-    ui::{
-        self,
-        {components::TableHeaders, search::SearchResults},
-    },
-    wait, REFRESH_RESOLUTION,
+    ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -230,7 +229,7 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_albums(query.clone(), limit).await?;
+            let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
                 output!(results, output_format);
@@ -244,7 +243,7 @@ pub async fn run() -> Result<(), Error> {
                         app_state,
                         player.controls(),
                         client,
-                        Some(SearchResults::Albums(results)),
+                        Some(results),
                         Some(query),
                     )?;
                     tui.event_loop().await?;
@@ -255,7 +254,7 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::GetAlbum { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.album(id).await?;
+            let results = SearchResults::Album(Box::new(client.album(id).await?));
 
             output!(results, output_format);
             Ok(())
@@ -267,7 +266,8 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.search_artists(query.clone(), limit).await?;
+            let results =
+                SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
 
             if no_tui {
                 output!(results, output_format);
@@ -281,7 +281,7 @@ pub async fn run() -> Result<(), Error> {
                         app_state,
                         player.controls(),
                         client,
-                        Some(SearchResults::Artists(results)),
+                        Some(results),
                         Some(query),
                     )?;
                     tui.event_loop().await?;
@@ -292,7 +292,7 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::GetArtist { id, output_format } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.artist(id, None).await?;
+            let results = SearchResults::Artist(client.artist(id, None).await?);
 
             output!(results, output_format);
             Ok(())
@@ -312,9 +312,7 @@ pub async fn run() -> Result<(), Error> {
             output_format,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = client.user_playlists().await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
+            let results = SearchResults::UserPlaylists(client.user_playlists().await?);
 
             if no_tui {
                 output!(results, output_format);
@@ -324,13 +322,8 @@ pub async fn run() -> Result<(), Error> {
                 if no_tui {
                     wait!(app_state);
                 } else {
-                    let mut tui = ui::new(
-                        app_state,
-                        player.controls(),
-                        client,
-                        Some(SearchResults::UserPlaylists(results)),
-                        None,
-                    )?;
+                    let mut tui =
+                        ui::new(app_state, player.controls(), client, Some(results), None)?;
                     tui.event_loop().await?;
                 }
             }

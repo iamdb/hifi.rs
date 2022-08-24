@@ -1,6 +1,6 @@
+use crate::ui::components::{ColumnWidth, TableRow};
 use serde::{Deserialize, Serialize};
 use sled::IVec;
-use tui::layout::Constraint;
 
 use crate::{
     qobuz::{
@@ -17,7 +17,7 @@ pub struct UserPlaylistsResult {
 }
 
 impl TableHeaders for UserPlaylistsResult {
-    fn headers(&self) -> Vec<String> {
+    fn headers() -> Vec<String> {
         vec!["Title".to_string()]
     }
 }
@@ -97,18 +97,14 @@ impl TableRows for Playlists {
     }
 }
 
-impl TableHeaders for Playlists {
-    fn headers(&self) -> Vec<String> {
-        if let Some(first) = self.items.first() {
-            first.headers()
-        } else {
-            vec![]
-        }
+impl From<Playlist> for Vec<String> {
+    fn from(playlist: Playlist) -> Self {
+        vec![playlist.name]
     }
 }
 
-impl From<Playlist> for Vec<String> {
-    fn from(playlist: Playlist) -> Self {
+impl From<Box<Playlist>> for Vec<String> {
+    fn from(playlist: Box<Playlist>) -> Self {
         vec![playlist.name]
     }
 }
@@ -119,8 +115,8 @@ impl From<&Playlist> for Vec<String> {
     }
 }
 
-impl From<Playlist> for Vec<Vec<String>> {
-    fn from(playlist: Playlist) -> Self {
+impl From<Box<Playlist>> for Vec<Vec<String>> {
+    fn from(playlist: Box<Playlist>) -> Self {
         vec![playlist.into()]
     }
 }
@@ -129,20 +125,20 @@ impl From<&Playlist> for Row {
     fn from(playlist: &Playlist) -> Self {
         let strings: Vec<String> = playlist.into();
 
-        Row::new(strings)
+        Row::new(strings, Playlist::widths())
     }
 }
 
 impl TableHeaders for Playlist {
-    fn headers(&self) -> Vec<String> {
-        vec!["Title".to_string(), "Artist".to_string()]
+    fn headers() -> Vec<String> {
+        vec!["Title".to_string()]
     }
 }
 
 impl TableRows for Playlist {
     fn rows(&self) -> Vec<Row> {
         if let Some(tracks) = &self.tracks {
-            tracks.items.iter().map(|i| i.into()).collect::<Vec<Row>>()
+            tracks.items.iter().map(|i| i.row()).collect::<Vec<Row>>()
         } else {
             vec![]
         }
@@ -150,21 +146,8 @@ impl TableRows for Playlist {
 }
 
 impl TableWidths for Playlist {
-    fn widths(&self, size: u16) -> Vec<Constraint> {
-        vec![
-            Constraint::Length((size as f64 * 0.5) as u16),
-            Constraint::Length((size as f64 * 0.5) as u16),
-        ]
-    }
-}
-
-impl TableWidths for Playlists {
-    fn widths(&self, size: u16) -> Vec<Constraint> {
-        if let Some(first) = self.items.first() {
-            first.widths(size)
-        } else {
-            vec![Constraint::Min(1)]
-        }
+    fn widths() -> Vec<ColumnWidth> {
+        vec![ColumnWidth::new(50), ColumnWidth::new(50)]
     }
 }
 

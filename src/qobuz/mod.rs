@@ -4,6 +4,7 @@ pub mod album;
 pub mod artist;
 pub mod client;
 pub mod playlist;
+pub mod search_results;
 pub mod track;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

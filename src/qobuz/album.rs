@@ -6,12 +6,10 @@ use crate::{
         Composer, Image,
     },
     state::AudioQuality,
-    ui::components::{Item, Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{ColumnWidth, Item, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
-use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 use tui::{
-    layout::Constraint,
     style::{Color, Modifier, Style},
     text::Text,
     widgets::ListItem,
@@ -74,12 +72,28 @@ pub struct Album {
     pub version: Option<String>,
 }
 
+impl TableWidths for Album {
+    fn widths() -> Vec<ColumnWidth> {
+        vec![
+            ColumnWidth::new(48),
+            ColumnWidth::new(48),
+            ColumnWidth::new(4),
+        ]
+    }
+}
+
 impl TableHeaders for Album {
-    fn headers(&self) -> Vec<String> {
+    fn headers() -> Vec<String> {
         vec!["Title", "Artist", "Date"]
-            .iter()
+            .into_iter()
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
+    }
+}
+
+impl TableRow for Album {
+    fn row(&self) -> Row {
+        Row::new(self.columns(), Album::widths())
     }
 }
 
@@ -97,67 +111,19 @@ impl Album {
             self.tracks = album.tracks;
         }
     }
-}
 
-impl From<&Album> for Vec<String> {
-    fn from(album: &Album) -> Self {
-        let mut fields = vec![
-            album.title.clone(),
-            album.artist.name.clone(),
-            album.release_date_original.clone(),
-        ];
-
-        if let Some(duration) = album.duration {
-            fields.push(
-                ClockTime::from_seconds(duration as u64)
-                    .to_string()
-                    .as_str()[2..7]
-                    .to_string(),
-            );
-        }
-
-        fields.push(album.id.clone());
-
-        fields
+    fn columns(&self) -> Vec<String> {
+        vec![
+            self.title.clone(),
+            self.artist.name.clone(),
+            self.release_date_original.clone(),
+        ]
     }
 }
 
-impl From<Album> for Vec<String> {
-    fn from(album: Album) -> Self {
-        let mut fields = vec![album.title, album.artist.name, album.release_date_original];
-
-        if let Some(duration) = album.duration {
-            fields.push(
-                ClockTime::from_seconds(duration as u64)
-                    .to_string()
-                    .as_str()[2..7]
-                    .to_string(),
-            );
-        }
-
-        fields.push(album.id);
-
-        fields
-    }
-}
-
-impl From<Album> for Vec<Vec<String>> {
-    fn from(album: Album) -> Self {
-        vec![album.into()]
-    }
-}
-
-impl From<&Album> for Vec<Vec<String>> {
-    fn from(album: &Album) -> Self {
-        vec![album.into()]
-    }
-}
-
-impl From<&Album> for Row {
-    fn from(album: &Album) -> Self {
-        let strings: Vec<String> = album.into();
-
-        Row::new(strings)
+impl From<Box<Album>> for Vec<Vec<String>> {
+    fn from(album: Box<Album>) -> Self {
+        vec![album.columns()]
     }
 }
 
@@ -165,12 +131,6 @@ impl From<&Album> for Row {
 pub struct AlbumSearchResults {
     pub query: String,
     pub albums: Albums,
-}
-
-impl TableHeaders for AlbumSearchResults {
-    fn headers(&self) -> Vec<String> {
-        self.albums.headers()
-    }
 }
 
 impl From<AlbumSearchResults> for Vec<Vec<String>> {
@@ -189,30 +149,7 @@ pub struct Albums {
 
 impl TableRows for Albums {
     fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|t| t.into()).collect::<Vec<Row>>()
-    }
-}
-
-impl TableHeaders for Albums {
-    fn headers(&self) -> Vec<String> {
-        if let Some(first) = self.items.first() {
-            first.headers()
-        } else {
-            vec![]
-        }
-    }
-}
-
-impl TableWidths for Albums {
-    fn widths(&self, size: u16) -> Vec<Constraint> {
-        let date_size = self.items.first().unwrap().release_date_original.len();
-        let date_percent = ((date_size as f64 / size as f64) * 100.).ceil() as u16;
-
-        vec![
-            Constraint::Percentage(48 - (date_percent / 2)),
-            Constraint::Percentage(48 - (date_percent / 2)),
-            Constraint::Percentage(date_percent),
-        ]
+        self.items.iter().map(|t| t.row()).collect::<Vec<Row>>()
     }
 }
 
@@ -257,7 +194,7 @@ impl From<Albums> for Vec<Vec<String>> {
         albums
             .items
             .into_iter()
-            .map(|album| album.into())
+            .map(|album| album.columns())
             .collect::<Vec<Vec<String>>>()
     }
 }
