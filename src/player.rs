@@ -444,18 +444,28 @@ impl Player {
     }
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: AudioQuality) {
+        if self.is_playing() {
+            self.stop();
+        }
+
         let playlist_track = PlaylistTrack::new(track, Some(quality.clone()), None);
         self.playlist.write().await.push_back(playlist_track);
+
+        self.app_state.player.clear();
         self.start(quality).await;
     }
     /// Plays a full album.
     pub async fn play_album(&self, album: Album, quality: AudioQuality) {
+        if self.is_playing() {
+            self.stop();
+        }
         if let Some(tracklist) = album.to_playlist_tracklist(quality.clone()) {
             debug!("creating playlist");
             for playlist_track in tracklist {
                 self.playlist.write().await.push_back(playlist_track);
             }
 
+            self.app_state.player.clear();
             self.start(quality).await;
         }
     }
