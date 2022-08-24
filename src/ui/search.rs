@@ -1,7 +1,3 @@
-use futures::executor;
-use termion::event::{Key, MouseButton, MouseEvent};
-use tui::layout::{Constraint, Direction, Layout};
-
 use crate::{
     player::Controls,
     qobuz::{
@@ -17,6 +13,9 @@ use crate::{
         AppKey, Console, Screen, StateKey,
     },
 };
+use futures::executor;
+use termion::event::{Key, MouseButton, MouseEvent};
+use tui::layout::{Constraint, Direction, Layout};
 
 pub struct SearchScreen {
     client: Client,

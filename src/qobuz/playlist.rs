@@ -1,14 +1,12 @@
-use crate::ui::components::{ColumnWidth, TableRow};
-use serde::{Deserialize, Serialize};
-use sled::IVec;
-
 use crate::{
     qobuz::{
         track::{PlaylistTrack, Tracks},
         User,
     },
-    ui::components::{Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
+use serde::{Deserialize, Serialize};
+use sled::IVec;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserPlaylistsResult {

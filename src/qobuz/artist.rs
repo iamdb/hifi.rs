@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
-
 use crate::{
     qobuz::{album::Albums, Image},
     ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtistSearchResults {

@@ -2,11 +2,10 @@ pub mod components;
 pub mod nowplaying;
 pub mod search;
 
-use crate::qobuz::search_results::SearchResults;
 use crate::{
     get_app,
     player::Controls,
-    qobuz::client::Client,
+    qobuz::{client::Client, search_results::SearchResults},
     state::{
         app::{AppKey, AppState, StateKey},
         ActiveScreen,
