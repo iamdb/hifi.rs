@@ -1,6 +1,3 @@
-use enum_as_inner::EnumAsInner;
-use serde::{Deserialize, Serialize};
-
 use crate::{
     qobuz::{
         album::{Album, AlbumSearchResults},
@@ -10,6 +7,8 @@ use crate::{
     },
     ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
 };
+use enum_as_inner::EnumAsInner;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize, EnumAsInner)]
 pub enum SearchResults {

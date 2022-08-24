@@ -1,14 +1,12 @@
-use crate::ui::components::{ColumnWidth, TableRow};
-use serde::{Deserialize, Serialize};
-use sled::IVec;
-
 use crate::{
     qobuz::{
         track::{PlaylistTrack, Tracks},
         User,
     },
-    ui::components::{Row, TableHeaders, TableRows, TableWidths},
+    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
+use serde::{Deserialize, Serialize};
+use sled::IVec;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserPlaylistsResult {
@@ -71,6 +69,14 @@ pub struct Playlist {
     #[serde(default)]
     pub stores: Vec<String>,
     pub tracks: Option<Tracks>,
+}
+
+impl Playlist {
+    pub fn reverse(&mut self) {
+        if let Some(tracks) = &mut self.tracks {
+            tracks.items.reverse();
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
