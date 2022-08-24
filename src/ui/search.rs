@@ -84,7 +84,8 @@ impl SearchScreen {
                     if let Ok(artist_info) =
                         executor::block_on(self.client.artist(artist.id.try_into().unwrap(), None))
                     {
-                        if let Some(albums) = artist_info.albums {
+                        if let Some(mut albums) = artist_info.albums {
+                            albums.sort_by_date();
                             self.results_table.set_rows(albums.rows());
                             self.results_table.set_header(Album::headers());
                             self.results_table.set_widths(Album::widths());
@@ -102,9 +103,10 @@ impl SearchScreen {
             // load the tracks into the list.
             SearchResults::UserPlaylists(results) => {
                 if let Some(playlist) = results.playlists.items.get(selected) {
-                    if let Ok(playlist_info) =
+                    if let Ok(mut playlist_info) =
                         executor::block_on(self.client.playlist(playlist.id.to_string()))
                     {
+                        playlist_info.reverse();
                         self.results_table.set_rows(playlist_info.rows());
                         self.results_table.set_header(Track::headers());
                         self.results_table.set_widths(Track::widths());

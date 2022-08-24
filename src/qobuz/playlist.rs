@@ -73,6 +73,14 @@ pub struct Playlist {
     pub tracks: Option<Tracks>,
 }
 
+impl Playlist {
+    pub fn reverse(&mut self) {
+        if let Some(tracks) = &mut self.tracks {
+            tracks.items.reverse();
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Playlists {
     pub offset: i64,
