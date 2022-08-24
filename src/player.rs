@@ -537,17 +537,12 @@ impl Player {
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward(),
                         Action::Clear => {
-                            if self.is_playing() {
-                                self.stop();
-                            }
-
                             self.playlist.write().await.clear();
                             self.playlist_previous.write().await.clear();
                             self.app_state.player.clear();
                         }
                         Action::PlayAlbum { album } => {
-                            let default_quality = self.client.default_quality.clone();
-
+                            let default_quality = self.client.quality();
                             let client = self.client.clone();
 
                             let mut album = *album;

@@ -97,7 +97,7 @@ pub struct Client {
     password: Option<StringValue>,
     base_url: String,
     client: reqwest::Client,
-    pub default_quality: AudioQuality,
+    default_quality: AudioQuality,
     user_token: Option<StringValue>,
     bundle_regex: regex::Regex,
     app_id_regex: regex::Regex,

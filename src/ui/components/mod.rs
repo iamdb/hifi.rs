@@ -321,13 +321,12 @@ impl Row {
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                let width = column_widths.get(i).unwrap_or(&1);
+                let width = column_widths.get(i).unwrap();
 
                 fill(c, *width as usize)
             })
             .collect::<Vec<String>>();
 
-        // TODO: FIX HEIGHT
         let height = formatted
             .iter()
             .map(|f| {

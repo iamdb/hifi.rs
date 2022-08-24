@@ -75,16 +75,16 @@ pub struct Album {
 impl TableWidths for Album {
     fn widths() -> Vec<ColumnWidth> {
         vec![
-            ColumnWidth::new(48),
-            ColumnWidth::new(48),
-            ColumnWidth::new(4),
+            ColumnWidth::new(44),
+            ColumnWidth::new(44),
+            ColumnWidth::new(12),
         ]
     }
 }
 
 impl TableHeaders for Album {
     fn headers() -> Vec<String> {
-        vec!["Title", "Artist", "Date"]
+        vec!["Title", "Artist", "Year"]
             .into_iter()
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
@@ -116,7 +116,7 @@ impl Album {
         vec![
             self.title.clone(),
             self.artist.name.clone(),
-            self.release_date_original.clone(),
+            self.release_date_original.as_str()[0..4].to_string(),
         ]
     }
 }
