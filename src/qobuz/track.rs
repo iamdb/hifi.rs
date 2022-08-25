@@ -54,7 +54,12 @@ pub struct Track {
 
 impl Track {
     fn columns(&self) -> Vec<String> {
-        vec![self.title.clone(), self.performer.name.clone()]
+        let icon = if self.hires_streamable { "*" } else { "" };
+
+        vec![
+            format!("{} {}", self.title, icon),
+            self.performer.name.clone(),
+        ]
     }
 }
 

@@ -459,13 +459,15 @@ impl Player {
         if self.is_playing() {
             self.stop();
         }
+
+        self.app_state.player.clear();
+
         if let Some(tracklist) = album.to_playlist_tracklist(quality.clone()) {
             debug!("creating playlist");
             for playlist_track in tracklist {
                 self.playlist.write().await.push_back(playlist_track);
             }
 
-            self.app_state.player.clear();
             self.start(quality).await;
         }
     }
@@ -762,7 +764,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(2);
+        let (action_tx, action_rx) = flume::bounded::<Action>(1);
 
         Controls {
             action_rx,
