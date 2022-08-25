@@ -56,13 +56,6 @@ enum Commands {
         #[clap(long, short)]
         limit: Option<i32>,
     },
-    /// Get information for a specific album.
-    GetAlbum {
-        #[clap(value_parser)]
-        id: String,
-        #[clap(short, long = "output", value_enum)]
-        output_format: Option<OutputFormat>,
-    },
     /// Search for artists in the Qobuz database
     SearchArtists {
         #[clap(value_parser)]
@@ -73,20 +66,6 @@ enum Commands {
         no_tui: bool,
         #[clap(long, short)]
         limit: Option<i32>,
-    },
-    /// Get information for a specific artist.
-    GetArtist {
-        #[clap(value_parser)]
-        id: i32,
-        #[clap(short, long = "output", value_enum)]
-        output_format: Option<OutputFormat>,
-    },
-    /// Get information for a specific track.
-    GetTrack {
-        #[clap(value_parser)]
-        id: i32,
-        #[clap(short, long = "output", value_enum)]
-        output_format: Option<OutputFormat>,
     },
     /// Stream an individual track by its ID.
     StreamTrack {
@@ -252,13 +231,6 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::GetAlbum { id, output_format } => {
-            let client = client::new(app_state.clone(), creds).await?;
-            let results = SearchResults::Album(Box::new(client.album(id).await?));
-
-            output!(results, output_format);
-            Ok(())
-        }
         Commands::SearchArtists {
             query,
             limit,
@@ -288,23 +260,6 @@ pub async fn run() -> Result<(), Error> {
                 }
             }
 
-            Ok(())
-        }
-        Commands::GetArtist { id, output_format } => {
-            let client = client::new(app_state.clone(), creds).await?;
-            let results = SearchResults::Artist(client.artist(id, None).await?);
-
-            output!(results, output_format);
-            Ok(())
-        }
-        Commands::GetTrack { id, output_format } => {
-            let client = client::new(app_state.clone(), creds).await?;
-            let results = client.track(id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
-
-            // TODO: Finish implementing table headers
-            print!("{}", json);
             Ok(())
         }
         Commands::MyPlaylists {

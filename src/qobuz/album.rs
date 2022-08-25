@@ -113,8 +113,10 @@ impl Album {
     }
 
     fn columns(&self) -> Vec<String> {
+        let hires_icon = if self.hires_streamable { "*" } else { "" };
+
         vec![
-            self.title.clone(),
+            format!("{} {}", self.title, hires_icon),
             self.artist.name.clone(),
             self.release_date_original.as_str()[0..4].to_string(),
         ]

@@ -96,7 +96,7 @@ pub fn new(
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::bounded(1);
 
     #[macro_export]
     macro_rules! switch_screen {
@@ -107,6 +107,10 @@ pub fn new(
                 .app
                 .insert::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen), $screen);
         };
+    }
+
+    if search_results.is_some() {
+        switch_screen!(app_state, ActiveScreen::Search);
     }
 
     let mut screens = HashMap::new();
