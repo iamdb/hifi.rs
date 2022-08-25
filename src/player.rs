@@ -41,6 +41,7 @@ pub enum Action {
     Previous,
     Stop,
     SkipTo { num: usize },
+    SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
     PlayAlbum { album: Box<Album> },
@@ -255,24 +256,25 @@ impl Player {
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub fn jump_forward(&self) {
-        if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
-            if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
-                let ten_seconds = ClockTime::from_seconds(10);
-                let next_position = current_position + ten_seconds;
+        if let (Some(current_position), Some(duration)) = (
+            self.playbin.query_position::<ClockTime>(),
+            self.playbin.query_duration::<ClockTime>(),
+        ) {
+            let ten_seconds = ClockTime::from_seconds(10);
+            let next_position = current_position + ten_seconds;
 
-                if next_position < duration {
-                    match self.seek(next_position.into(), None) {
-                        Ok(_) => (),
-                        Err(error) => {
-                            error!("{:?}", error);
-                        }
+            if next_position < duration {
+                match self.seek(next_position.into(), None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        error!("{:?}", error);
                     }
-                } else {
-                    match self.seek(duration.into(), None) {
-                        Ok(_) => (),
-                        Err(error) => {
-                            error!("{:?}", error);
-                        }
+                }
+            } else {
+                match self.seek(duration.into(), None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        error!("{:?}", error);
                     }
                 }
             }
@@ -442,6 +444,12 @@ impl Player {
             self.skip_backward(Some(track_number)).await
         }
     }
+    pub async fn skip_to_by_id(&self, track_id: usize) -> Result<()> {
+        let playlist = self.playlist.read().await;
+        let index = playlist.track_index(track_id);
+
+        self.skip_to(index).await
+    }
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: AudioQuality) {
         if self.is_playing() {
@@ -546,6 +554,7 @@ impl Player {
                             self.app_state.quit();
                         },
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
+                        Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward(),
                         Action::Clear => {
@@ -764,7 +773,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(1);
+        let (action_tx, action_rx) = flume::unbounded::<Action>();
 
         Controls {
             action_rx,
@@ -795,6 +804,9 @@ impl Controls {
     }
     pub async fn skip_to(&self, num: usize) {
         action!(self, Action::SkipTo { num });
+    }
+    pub async fn skip_to_by_id(&self, track_id: usize) {
+        action!(self, Action::SkipToById { track_id })
     }
     pub async fn jump_forward(&self) {
         action!(self, Action::JumpForward);
@@ -827,6 +839,12 @@ impl Controls {
         let tree = &self.state.player;
 
         get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
+    }
+
+    pub async fn remaining_tracks(&self) -> Option<PlaylistValue> {
+        let tree = &self.state.player;
+
+        get_player!(PlayerKey::Playlist, tree, PlaylistValue)
     }
 }
 

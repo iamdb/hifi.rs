@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::player::Controls;
+use crate::{player::Controls, qobuz::track::PlaylistTrack};
+use gstreamer::ClockTime;
 use zbus::{dbus_interface, fdo::Result, zvariant, ConnectionBuilder};
 
 #[derive(Debug)]
@@ -12,7 +13,10 @@ pub async fn init(controls: Controls) {
     let mpris = Mpris {
         controls: controls.clone(),
     };
-    let mpris_player = MprisPlayer { controls };
+    let mpris_player = MprisPlayer {
+        controls: controls.clone(),
+    };
+    let mpris_tracklist = MprisTrackList { controls };
 
     if let Err(err) = ConnectionBuilder::session()
         .unwrap()
@@ -21,6 +25,8 @@ pub async fn init(controls: Controls) {
         .serve_at("/org/mpris/MediaPlayer2", mpris)
         .unwrap()
         .serve_at("/org/mpris/MediaPlayer2", mpris_player)
+        .unwrap()
+        .serve_at("/org/mpris/MediaPlayer2", mpris_tracklist)
         .unwrap()
         .build()
         .await
@@ -108,35 +114,11 @@ impl MprisPlayer {
     }
     #[dbus_interface(property)]
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
-        let mut meta = HashMap::new();
-
         if let Some(next_up) = self.controls.currently_playing_track().await {
-            meta.insert(
-                "mpris:trackid",
-                zvariant::Value::new(format!("/org/hifirs/Player/TrackList/{}", next_up.track.id)),
-            );
-            meta.insert("xesam:title", zvariant::Value::new(next_up.track.title));
-            meta.insert(
-                "xesam:trackNumber",
-                zvariant::Value::new(next_up.track.track_number),
-            );
-
-            meta.insert("mpris:length", zvariant::Value::new(next_up.track.duration));
-
-            if let Some(album) = next_up.album {
-                if let Some(thumb) = album.image.thumbnail {
-                    meta.insert("mpris:artUrl", zvariant::Value::new(thumb));
-                }
-                meta.insert("xesam:album", zvariant::Value::new(album.title));
-                meta.insert(
-                    "xesam:albumArtist",
-                    zvariant::Value::new(album.artist.name.clone()),
-                );
-                meta.insert("xesam:artist", zvariant::Value::new(album.artist.name));
-            }
+            track_to_meta(next_up)
+        } else {
+            HashMap::new()
         }
-
-        meta
     }
     #[dbus_interface(property)]
     fn volume(&self) -> f64 {
@@ -186,4 +168,95 @@ impl MprisPlayer {
     fn can_control(&self) -> bool {
         true
     }
+}
+
+#[derive(Debug)]
+pub struct MprisTrackList {
+    controls: Controls,
+}
+
+#[dbus_interface(name = "org.mpris.MediaPlayer2.TrackList")]
+impl MprisTrackList {
+    async fn get_tracks_metadata(
+        &self,
+        tracks: Vec<String>,
+    ) -> Vec<HashMap<&'static str, zvariant::Value>> {
+        if let Some(playlist) = self.controls.remaining_tracks().await {
+            playlist
+                .vec()
+                .iter()
+                .filter_map(|i| {
+                    if tracks.contains(&i.track.id.to_string()) {
+                        Some(track_to_meta(i.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
+        } else {
+            vec![]
+        }
+    }
+    async fn go_to(&self, track_id: String) {
+        if let Ok(id) = track_id.parse::<usize>() {
+            self.controls.skip_to_by_id(id).await;
+        }
+    }
+    #[dbus_interface(property)]
+    async fn tracks(&self) -> Vec<String> {
+        if let Some(playlist) = self.controls.remaining_tracks().await {
+            playlist
+                .vec()
+                .iter()
+                .map(|i| i.track.id.to_string())
+                .collect::<Vec<String>>()
+        } else {
+            vec![]
+        }
+    }
+    #[dbus_interface(property)]
+    async fn can_edit_tracks(&self) -> bool {
+        false
+    }
+}
+
+fn track_to_meta(playlist_track: PlaylistTrack) -> HashMap<&'static str, zvariant::Value<'static>> {
+    let mut meta = HashMap::new();
+
+    meta.insert(
+        "mpris:trackid",
+        zvariant::Value::new(format!(
+            "/org/hifirs/Player/TrackList/{}",
+            playlist_track.track.id
+        )),
+    );
+    meta.insert(
+        "xesam:title",
+        zvariant::Value::new(playlist_track.track.title),
+    );
+    meta.insert(
+        "xesam:trackNumber",
+        zvariant::Value::new(playlist_track.track.track_number),
+    );
+
+    meta.insert(
+        "mpris:length",
+        zvariant::Value::new(
+            ClockTime::from_seconds(playlist_track.track.duration as u64).useconds() as i64,
+        ),
+    );
+
+    if let Some(album) = playlist_track.album {
+        if let Some(thumb) = album.image.thumbnail {
+            meta.insert("mpris:artUrl", zvariant::Value::new(thumb));
+        }
+        meta.insert("xesam:album", zvariant::Value::new(album.title));
+        meta.insert(
+            "xesam:albumArtist",
+            zvariant::Value::new(album.artist.name.clone()),
+        );
+        meta.insert("xesam:artist", zvariant::Value::new(album.artist.name));
+    }
+
+    meta
 }
