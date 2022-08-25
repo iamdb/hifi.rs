@@ -304,7 +304,6 @@ pub async fn run() -> Result<(), Error> {
 
             let track = client.track(track_id).await?;
 
-            app_state.player.clear();
             player.play_track(track, quality.unwrap()).await;
 
             if no_tui {
@@ -327,8 +326,6 @@ pub async fn run() -> Result<(), Error> {
 
             let player = player::new(app_state.clone(), client.clone(), false).await;
             let album = client.album(album_id).await?;
-
-            app_state.player.clear();
 
             let quality = if let Some(q) = quality {
                 q

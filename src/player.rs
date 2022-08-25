@@ -98,7 +98,7 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
         None
     });
 
-    let mut player = Player {
+    let player = Player {
         client,
         playbin,
         playlist,
@@ -107,10 +107,6 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
         controls,
         is_buffering: false,
     };
-
-    if resume {
-        player.resume().await.expect("failed to resume");
-    }
 
     let p = player.clone();
     tokio::spawn(async move {
@@ -527,6 +523,10 @@ impl Player {
         about_to_finish_rx: Receiver<bool>,
         next_track_tx: Sender<String>,
     ) {
+        if resume {
+            self.resume().await.expect("failed to resume");
+        }
+
         let action_rx = self.controls.action_receiver();
         let mut messages = self.message_stream().await;
         let mut quitter = self.app_state.quitter();
