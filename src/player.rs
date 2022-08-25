@@ -434,21 +434,28 @@ impl Player {
 
         Ok(())
     }
-    /// Skip to a specific track number in the current playlist.
-    pub async fn skip_to(&self, track_number: usize) -> Result<()> {
-        if track_number < self.playlist().read().await.len() {
-            debug!("skipping forward to track number {}", track_number);
-            self.skip_forward(Some(track_number)).await
+    /// Skip to a specific track in the current playlist
+    /// by its index in the list.
+    pub async fn skip_to(&self, index: usize) -> Result<()> {
+        if index < self.playlist().read().await.len() {
+            debug!("skipping forward to track number {}", index);
+            self.skip_forward(Some(index)).await
         } else {
-            debug!("skipping backward to track number {}", track_number);
-            self.skip_backward(Some(track_number)).await
+            debug!("skipping backward to track number {}", index);
+            self.skip_backward(Some(index)).await
         }
     }
+    /// Skip to a specific track in the current playlist, by the
+    /// track id.
     pub async fn skip_to_by_id(&self, track_id: usize) -> Result<()> {
-        let playlist = self.playlist.read().await;
-        let index = playlist.track_index(track_id);
-
-        self.skip_to(index).await
+        if let Some(track_number) = self.playlist.read().await.track_index(track_id) {
+            self.skip_to(track_number).await
+        } else if let Some(track_number) = self.playlist_previous.read().await.track_index(track_id)
+        {
+            self.skip_to(track_number).await
+        } else {
+            Ok(())
+        }
     }
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: AudioQuality) {

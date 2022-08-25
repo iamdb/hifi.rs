@@ -380,12 +380,19 @@ impl PlaylistValue {
         self.0.clear();
     }
 
-    pub fn track_index(&self, track_id: usize) -> usize {
-        let mut index = 0;
+    pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {
+        self.0
+            .iter()
+            .find(|t| t.track.id as usize == track_id)
+            .cloned()
+    }
+
+    pub fn track_index(&self, track_id: usize) -> Option<usize> {
+        let mut index: Option<usize> = None;
 
         self.0.iter().enumerate().for_each(|(i, t)| {
             if t.track.id as usize == track_id {
-                index = i;
+                index = Some(i);
             }
         });
 
