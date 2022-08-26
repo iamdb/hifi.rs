@@ -49,11 +49,11 @@ impl<'l> Screen for NowPlayingScreen<'l> {
                     ])
                     .margin(0);
 
+                let split_layout = layout.split(f.size());
+
                 if let Some(items) = self.app_state.player.item_list(f.size().width as usize - 2) {
                     self.track_list.set_items(items);
                 }
-
-                let split_layout = layout.split(f.size());
 
                 components::player(f, split_layout[0], self.app_state.clone());
                 components::list(f, &mut self.track_list, split_layout[1]);

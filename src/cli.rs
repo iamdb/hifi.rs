@@ -94,6 +94,8 @@ enum Commands {
     },
     /// Retreive information about a specific playlist.
     Playlist { playlist_id: String },
+    /// Reset the player state
+    Reset,
     /// Set configuration options
     Config {
         #[clap(subcommand)]
@@ -324,7 +326,7 @@ pub async fn run() -> Result<(), Error> {
                 .await
                 .expect("failed to create client");
 
-            let player = player::new(app_state.clone(), client.clone(), false).await;
+            let mut player = player::new(app_state.clone(), client.clone(), false).await;
             let album = client.album(album_id).await?;
 
             let quality = if let Some(q) = quality {
@@ -342,6 +344,11 @@ pub async fn run() -> Result<(), Error> {
                 tui.event_loop().await?;
             }
 
+            Ok(())
+        }
+        Commands::Reset => {
+            app_state.player.clear();
+            app_state.player.flush();
             Ok(())
         }
         Commands::Config { command } => match command {

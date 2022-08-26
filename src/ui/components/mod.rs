@@ -10,7 +10,7 @@ use crate::{
 use textwrap::fill;
 use tui::{
     backend::Backend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols::bar,
     text::{Span, Spans, Text},
@@ -26,29 +26,42 @@ where
     B: Backend,
 {
     let tree = state.player;
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Max(5), Constraint::Length(1)])
-        .margin(0)
-        .split(rect);
 
     if let Some(track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
         if let Some(status) = get_player!(PlayerKey::Status, tree, StatusValue) {
-            player::current_track(track, status, f, layout[0]);
-        }
-    }
+            let layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Max(5), Constraint::Length(1)])
+                .margin(0)
+                .split(rect);
 
-    if let (Some(position), Some(duration), Some(prog)) = (
-        get_player!(PlayerKey::Position, tree, ClockValue),
-        get_player!(PlayerKey::Duration, tree, ClockValue),
-        get_player!(PlayerKey::Progress, tree, FloatValue),
-    ) {
-        player::progress(position, duration, prog, f, layout[1]);
+            player::current_track(track, status, f, layout[0]);
+
+            if let (Some(position), Some(duration), Some(prog)) = (
+                get_player!(PlayerKey::Position, tree, ClockValue),
+                get_player!(PlayerKey::Duration, tree, ClockValue),
+                get_player!(PlayerKey::Progress, tree, FloatValue),
+            ) {
+                player::progress(position, duration, prog, f, layout[1]);
+            }
+        }
     } else {
-        f.render_widget(
-            Block::default().style(Style::default().bg(Color::Indexed(236))),
-            layout[1],
-        )
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(100)])
+            .split(rect);
+
+        let p = Paragraph::new("\nempty\n:(")
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::Indexed(81)))
+            .block(
+                Block::default()
+                    .style(Style::default())
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Indexed(234))),
+            );
+
+        f.render_widget(p, layout[0]);
     }
 }
 

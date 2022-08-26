@@ -71,7 +71,6 @@ impl SearchScreen {
             // An album has been selected, play it.
             SearchResults::Albums(results) => {
                 if let Some(album) = results.albums.items.get(selected) {
-                    executor::block_on(self.controls.clear());
                     executor::block_on(self.controls.play_album(album.clone()));
                     switch_screen!(self.app_state, ActiveScreen::NowPlaying);
                     return true;

@@ -43,6 +43,9 @@ impl StateTree {
     pub fn clear(&self) {
         self.db.clear().expect("failed to clear tree");
     }
+    pub fn flush(&self) {
+        self.db.flush().expect("failed to flush db");
+    }
     pub fn insert<K, T>(&self, key: StateKey, value: T)
     where
         K: FromStr,
