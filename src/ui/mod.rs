@@ -96,7 +96,7 @@ pub fn new(
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::bounded(1);
+    let (tx, rx) = flume::unbounded();
 
     #[macro_export]
     macro_rules! switch_screen {
@@ -203,7 +203,10 @@ impl Tui {
                 }
             }
             if let Err(err) = event_sender.send(Event::Tick) {
-                error!("error sending tick: {}", err.to_string());
+                debug!(
+                    "error sending tick, app is probably just closing. err: {}",
+                    err.to_string()
+                );
             }
             std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         });

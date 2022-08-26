@@ -43,6 +43,9 @@ impl StateTree {
     pub fn clear(&self) {
         self.db.clear().expect("failed to clear tree");
     }
+    pub fn flush(&self) {
+        self.db.flush().expect("failed to flush db");
+    }
     pub fn insert<K, T>(&self, key: StateKey, value: T)
     where
         K: FromStr,
@@ -371,16 +374,6 @@ impl From<PlaylistValue> for Bytes {
     }
 }
 
-impl IntoIterator for PlaylistValue {
-    type Item = PlaylistTrack;
-
-    type IntoIter = std::collections::vec_deque::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
 impl PlaylistValue {
     pub fn new() -> PlaylistValue {
         PlaylistValue(VecDeque::new())
@@ -390,8 +383,28 @@ impl PlaylistValue {
         self.0.clear();
     }
 
+    pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {
+        self.0
+            .iter()
+            .find(|t| t.track.id as usize == track_id)
+            .cloned()
+    }
+
+    pub fn track_index(&self, track_id: usize) -> Option<usize> {
+        let mut index: Option<usize> = None;
+
+        self.0.iter().enumerate().for_each(|(i, t)| {
+            if t.track.id as usize == track_id {
+                index = Some(i);
+            }
+        });
+
+        index
+    }
+
     pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
-        self.into_iter()
+        self.0
+            .into_iter()
             .map(|t| {
                 let title = textwrap::wrap(
                     format!("{:02} {}", t.track.track_number, t.track.title).as_str(),

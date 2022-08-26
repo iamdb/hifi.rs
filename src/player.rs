@@ -17,8 +17,8 @@ use futures::prelude::*;
 use gst::{bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
 use snafu::prelude::*;
-use std::{collections::VecDeque, sync::Arc, time::Duration};
-use tokio::{select, sync::RwLock};
+use std::{collections::VecDeque, time::Duration};
+use tokio::select;
 
 #[derive(Snafu, Debug)]
 pub enum Error {
@@ -41,10 +41,10 @@ pub enum Action {
     Previous,
     Stop,
     SkipTo { num: usize },
+    SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
     PlayAlbum { album: Box<Album> },
-    Clear,
 }
 
 /// A player handles playing media to a device.
@@ -53,9 +53,9 @@ pub struct Player {
     /// Used to broadcast the player state out to other components.
     playbin: Element,
     /// List of tracks that will play.
-    playlist: Arc<RwLock<PlaylistValue>>,
+    playlist: PlaylistValue,
     /// List of tracks that have played.
-    playlist_previous: Arc<RwLock<PlaylistValue>>,
+    playlist_previous: PlaylistValue,
     /// The app state to save player inforamtion into.
     app_state: AppState,
     /// Qobuz client
@@ -68,8 +68,8 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
     let controls = Controls::new(app_state.clone());
-    let playlist = Arc::new(RwLock::new(PlaylistValue::new()));
-    let playlist_previous = Arc::new(RwLock::new(PlaylistValue::new()));
+    let playlist = PlaylistValue::new();
+    let playlist_previous = PlaylistValue::new();
 
     mpris::init(controls.clone()).await;
 
@@ -130,17 +130,13 @@ impl Player {
     pub fn app_state(&self) -> &AppState {
         &self.app_state
     }
-    /// Retreive the active playlist.
-    pub fn playlist(&self) -> Arc<RwLock<PlaylistValue>> {
-        self.playlist.clone()
-    }
     /// Set the active playlist.
     pub fn set_playlist(&mut self, playlist: PlaylistValue) {
-        self.playlist = Arc::new(RwLock::new(playlist));
+        self.playlist = playlist;
     }
     /// Set the previous playlist.
     pub fn set_prev_playlist(&mut self, playlist: PlaylistValue) {
-        self.playlist_previous = Arc::new(RwLock::new(playlist));
+        self.playlist_previous = playlist;
     }
     /// Play the player.
     pub fn play(&self) {
@@ -246,33 +242,41 @@ impl Player {
             }
             Ok(())
         } else {
-            Err(Error::Session)
+            debug!("nothing to resume");
+            Ok(())
         }
     }
     /// Retreive controls for the player.
     pub fn controls(&self) -> Controls {
         self.controls.clone()
     }
+    pub async fn clear(&mut self) {
+        self.playlist.clear();
+        self.playlist_previous.clear();
+        self.app_state.player.clear();
+        self.app_state.player.flush();
+    }
     /// Jump forward in the currently playing track +10 seconds.
     pub fn jump_forward(&self) {
-        if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
-            if let Some(duration) = self.playbin.query_duration::<ClockTime>() {
-                let ten_seconds = ClockTime::from_seconds(10);
-                let next_position = current_position + ten_seconds;
+        if let (Some(current_position), Some(duration)) = (
+            self.playbin.query_position::<ClockTime>(),
+            self.playbin.query_duration::<ClockTime>(),
+        ) {
+            let ten_seconds = ClockTime::from_seconds(10);
+            let next_position = current_position + ten_seconds;
 
-                if next_position < duration {
-                    match self.seek(next_position.into(), None) {
-                        Ok(_) => (),
-                        Err(error) => {
-                            error!("{:?}", error);
-                        }
+            if next_position < duration {
+                match self.seek(next_position.into(), None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        error!("{:?}", error);
                     }
-                } else {
-                    match self.seek(duration.into(), None) {
-                        Ok(_) => (),
-                        Err(error) => {
-                            error!("{:?}", error);
-                        }
+                }
+            } else {
+                match self.seek(duration.into(), None) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        error!("{:?}", error);
                     }
                 }
             }
@@ -298,6 +302,7 @@ impl Player {
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
+
                 match self.seek(seek_position.into(), None) {
                     Ok(_) => self.app_state().player.insert::<String, ClockValue>(
                         StateKey::Player(PlayerKey::Position),
@@ -315,26 +320,23 @@ impl Player {
         }
     }
     /// Skip forward to the next track in the playlist.
-    pub async fn skip_forward(&self, num: Option<usize>) -> Result<()> {
+    pub async fn skip_forward(&mut self, num: Option<usize>) -> Result<()> {
         let tree = self.app_state.player.clone();
 
-        let mut playlist = self.playlist.write().await;
-        let mut prev_playlist = self.playlist_previous.write().await;
-
         if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-            prev_playlist.push_back(previous_track);
+            self.playlist_previous.push_back(previous_track);
         }
 
         if let Some(number) = num {
             // Grab all of the tracks, up to the next one to play.
-            prev_playlist.append(
-                playlist
+            self.playlist_previous.append(
+                self.playlist
                     .drain(..number)
                     .collect::<VecDeque<PlaylistTrack>>(),
             );
         }
 
-        if let Some(mut next_track_to_play) = playlist.pop_front() {
+        if let Some(mut next_track_to_play) = self.playlist.pop_front() {
             debug!("fetching url for next track");
 
             next_track_to_play = self.attach_track_url(next_track_to_play).await?;
@@ -350,12 +352,12 @@ impl Player {
 
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
+                    self.playlist.clone(),
                 );
 
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
+                    self.playlist_previous.clone(),
                 );
 
                 self.playbin.set_property("uri", Some(track_url.url));
@@ -365,7 +367,7 @@ impl Player {
         Ok(())
     }
     /// Skip backwards by playing the first track in previous track playlist.
-    pub async fn skip_backward(&self, num: Option<usize>) -> Result<()> {
+    pub async fn skip_backward(&mut self, num: Option<usize>) -> Result<()> {
         // If the track is greater than 1 second into playing,
         // then we just want to go back to the beginning.
         // If triggered again within a second after playing,
@@ -382,29 +384,28 @@ impl Player {
             }
         }
 
-        let mut prev_playlist = self.playlist_previous.write().await;
-        let mut playlist = self.playlist.write().await;
         let tree = &self.app_state.player;
 
         if let Some(previously_played_track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
-            playlist.push_front(previously_played_track);
+            self.playlist.push_front(previously_played_track);
         }
 
         if let Some(number) = num {
             // Grab all of the tracks, up to the next one to play,
             // inlcuding the currently playing track from above.
-            let diff = number + 1 - playlist.len();
-            let skipped_tracks = prev_playlist
+            let diff = number + 1 - self.playlist.len();
+            let skipped_tracks = self
+                .playlist_previous
                 .drain(diff + 1..)
                 .rev()
                 .collect::<VecDeque<PlaylistTrack>>();
 
             for track in skipped_tracks {
-                playlist.push_front(track);
+                self.playlist.push_front(track);
             }
         }
 
-        if let Some(mut next_track_to_play) = prev_playlist.pop_back() {
+        if let Some(mut next_track_to_play) = self.playlist_previous.pop_back() {
             next_track_to_play = self.attach_track_url(next_track_to_play).await?;
 
             if let Some(track_url) = next_track_to_play.clone().track_url {
@@ -418,11 +419,11 @@ impl Player {
 
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
+                    self.playlist.clone(),
                 );
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
+                    self.playlist_previous.clone(),
                 );
 
                 self.playbin.set_property("uri", Some(track_url.url));
@@ -432,48 +433,62 @@ impl Player {
 
         Ok(())
     }
-    /// Skip to a specific track number in the current playlist.
-    pub async fn skip_to(&self, track_number: usize) -> Result<()> {
-        if track_number < self.playlist().read().await.len() {
-            debug!("skipping forward to track number {}", track_number);
-            self.skip_forward(Some(track_number)).await
+    /// Skip to a specific track in the current playlist
+    /// by its index in the list.
+    pub async fn skip_to(&mut self, index: usize) -> Result<()> {
+        if index < self.playlist.len() {
+            debug!("skipping forward to track number {}", index);
+            self.skip_forward(Some(index)).await?;
         } else {
-            debug!("skipping backward to track number {}", track_number);
-            self.skip_backward(Some(track_number)).await
+            debug!("skipping backward to track number {}", index);
+            self.skip_backward(Some(index)).await?;
         }
+
+        Ok(())
+    }
+    /// Skip to a specific track in the current playlist, by the
+    /// track id.
+    pub async fn skip_to_by_id(&mut self, track_id: usize) -> Result<()> {
+        if let Some(track_number) = self.playlist.track_index(track_id) {
+            self.skip_to(track_number).await?;
+        } else if let Some(track_number) = self.playlist_previous.track_index(track_id) {
+            self.skip_to(track_number).await?;
+        }
+
+        Ok(())
     }
     /// Plays a single track.
-    pub async fn play_track(&self, track: Track, quality: AudioQuality) {
+    pub async fn play_track(&mut self, track: Track, quality: AudioQuality) {
         if self.is_playing() {
             self.stop();
         }
 
         let playlist_track = PlaylistTrack::new(track, Some(quality.clone()), None);
-        self.playlist.write().await.push_back(playlist_track);
+        self.playlist.push_back(playlist_track);
 
         self.app_state.player.clear();
         self.start(quality).await;
     }
     /// Plays a full album.
-    pub async fn play_album(&self, album: Album, quality: AudioQuality) {
+    pub async fn play_album(&mut self, album: Album, quality: AudioQuality) {
         if self.is_playing() {
             self.stop();
         }
 
-        self.app_state.player.clear();
+        self.clear().await;
 
         if let Some(tracklist) = album.to_playlist_tracklist(quality.clone()) {
             debug!("creating playlist");
             for playlist_track in tracklist {
-                self.playlist.write().await.push_back(playlist_track);
+                self.playlist.push_back(playlist_track);
             }
 
             self.start(quality).await;
         }
     }
     /// Stats the player.
-    async fn start(&self, quality: AudioQuality) {
-        let mut next_track = match self.playlist.write().await.pop_front() {
+    async fn start(&mut self, quality: AudioQuality) {
+        let mut next_track = match self.playlist.pop_front() {
             Some(it) => it,
             _ => return,
         };
@@ -494,7 +509,7 @@ impl Player {
 
             self.app_state.player.insert::<String, PlaylistValue>(
                 StateKey::Player(PlayerKey::Playlist),
-                self.playlist.read().await.clone(),
+                self.playlist.clone(),
             );
 
             self.play();
@@ -546,13 +561,9 @@ impl Player {
                             self.app_state.quit();
                         },
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
+                        Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward(),
-                        Action::Clear => {
-                            self.playlist.write().await.clear();
-                            self.playlist_previous.write().await.clear();
-                            self.app_state.player.clear();
-                        }
                         Action::PlayAlbum { album } => {
                             let default_quality = self.client.quality();
                             let client = self.client.clone();
@@ -697,11 +708,8 @@ impl Player {
         }
     }
     /// Sets up basic functionality for the player.
-    async fn prep_next_track(&self) -> Option<String> {
-        let mut playlist = self.playlist.write().await;
-        let mut prev_playlist = self.playlist_previous.write().await;
-
-        if let Some(mut next_track) = playlist.pop_front() {
+    async fn prep_next_track(&mut self) -> Option<String> {
+        if let Some(mut next_track) = self.playlist.pop_front() {
             debug!("received new track, adding to player");
             if let Ok(next_playlist_track_url) =
                 self.client.track_url(next_track.track.id, None, None).await
@@ -710,7 +718,7 @@ impl Player {
                 if let Some(previous_track) =
                     get_player!(PlayerKey::NextUp, player_tree, PlaylistTrack)
                 {
-                    prev_playlist.push_back(previous_track);
+                    self.playlist_previous.push_back(previous_track);
                 }
 
                 next_track.set_track_url(next_playlist_track_url.clone());
@@ -722,12 +730,12 @@ impl Player {
 
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
+                    self.playlist.clone(),
                 );
 
                 self.app_state.player.insert::<String, PlaylistValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
+                    self.playlist_previous.clone(),
                 );
 
                 Some(next_playlist_track_url.url)
@@ -764,7 +772,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(1);
+        let (action_tx, action_rx) = flume::unbounded::<Action>();
 
         Controls {
             action_rx,
@@ -796,6 +804,9 @@ impl Controls {
     pub async fn skip_to(&self, num: usize) {
         action!(self, Action::SkipTo { num });
     }
+    pub async fn skip_to_by_id(&self, track_id: usize) {
+        action!(self, Action::SkipToById { track_id })
+    }
     pub async fn jump_forward(&self) {
         action!(self, Action::JumpForward);
     }
@@ -809,9 +820,6 @@ impl Controls {
                 album: Box::new(album)
             }
         );
-    }
-    pub async fn clear(&self) {
-        action!(self, Action::Clear);
     }
     pub async fn position(&self) -> Option<ClockValue> {
         let tree = &self.state.player;
@@ -827,6 +835,12 @@ impl Controls {
         let tree = &self.state.player;
 
         get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
+    }
+
+    pub async fn remaining_tracks(&self) -> Option<PlaylistValue> {
+        let tree = &self.state.player;
+
+        get_player!(PlayerKey::Playlist, tree, PlaylistValue)
     }
 }
 
