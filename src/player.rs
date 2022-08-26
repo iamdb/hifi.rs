@@ -471,7 +471,7 @@ impl Player {
     }
     /// Plays a full album.
     pub async fn play_album(&mut self, album: Album, quality: AudioQuality) {
-        if self.is_playing() {
+        if self.is_playing() || self.is_paused() {
             self.stop();
         }
 
