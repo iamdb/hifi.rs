@@ -1,5 +1,6 @@
 use crate::{
-    action, get_player, mpris,
+    action, get_player,
+    mpris::{self, MprisPlayer},
     qobuz::{
         album::Album,
         client::Client,
@@ -19,6 +20,7 @@ use gstreamer::{self as gst, prelude::*};
 use snafu::prelude::*;
 use std::{collections::VecDeque, time::Duration};
 use tokio::select;
+use zbus::Connection;
 
 #[derive(Snafu, Debug)]
 pub enum Error {
@@ -61,6 +63,7 @@ pub struct Player {
     /// Qobuz client
     client: Client,
     controls: Controls,
+    connection: Connection,
     is_buffering: bool,
 }
 
@@ -71,7 +74,7 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     let playlist = PlaylistValue::new();
     let playlist_previous = PlaylistValue::new();
 
-    mpris::init(controls.clone()).await;
+    let connection = mpris::init(controls.clone()).await;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -98,6 +101,7 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     });
 
     let mut player = Player {
+        connection,
         client,
         playbin,
         playlist,
@@ -362,6 +366,14 @@ impl Player {
 
                 self.playbin.set_property("uri", Some(track_url.url));
                 self.play();
+
+                let iface_ref = self.player_iface().await;
+                let iface = iface_ref.get_mut().await;
+
+                iface
+                    .metadata_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
             }
         }
         Ok(())
@@ -428,6 +440,14 @@ impl Player {
 
                 self.playbin.set_property("uri", Some(track_url.url));
                 self.play();
+
+                let iface_ref = self.player_iface().await;
+                let iface = iface_ref.get_mut().await;
+
+                iface
+                    .metadata_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
             }
         }
 
@@ -628,11 +648,28 @@ impl Player {
                                         debug!("player state changed to Playing");
                                         self.is_buffering = false;
                                         self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
+
+                                        let iface_ref = self.player_iface().await;
+                                        let iface = iface_ref.get_mut().await;
+
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
+
                                     }
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
                                         self.is_buffering = false;
                                         self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
+
+                                        let iface_ref = self.player_iface().await;
+                                        let iface = iface_ref.get_mut().await;
+
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
                                     }
                                     GstState::Ready => {
                                         debug!("player state changed to Ready");
@@ -700,12 +737,29 @@ impl Player {
                             StateKey::Player(PlayerKey::DurationRemaining),
                             remaining.into(),
                         );
+
+                        if self.is_playing() {
+                            let iface_ref = self.player_iface().await;
+                            let iface = iface_ref.get_mut().await;
+                            iface
+                                .position_changed(iface_ref.signal_context())
+                                .await
+                                .expect("failed");
+                        }
                     }
                 }
 
                 std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
         }
+    }
+    async fn player_iface(&self) -> zbus::InterfaceRef<MprisPlayer> {
+        let object_server = self.connection.object_server();
+
+        object_server
+            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+            .await
+            .expect("failed to get object server")
     }
     /// Sets up basic functionality for the player.
     async fn prep_next_track(&mut self) -> Option<String> {
@@ -737,6 +791,14 @@ impl Player {
                     StateKey::Player(PlayerKey::PreviousPlaylist),
                     self.playlist_previous.clone(),
                 );
+
+                let iface_ref = self.player_iface().await;
+                let iface = iface_ref.get_mut().await;
+
+                iface
+                    .metadata_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
 
                 Some(next_playlist_track_url.url)
             } else {
