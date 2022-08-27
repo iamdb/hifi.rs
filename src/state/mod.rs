@@ -355,7 +355,9 @@ impl From<AudioQuality> for Bytes {
 
 /// A playlist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct PlaylistValue(VecDeque<PlaylistTrack>);
+pub struct PlaylistValue {
+    queue: VecDeque<PlaylistTrack>,
+}
 
 impl From<Bytes> for PlaylistValue {
     fn from(bytes: Bytes) -> Self {
@@ -376,15 +378,17 @@ impl From<PlaylistValue> for Bytes {
 
 impl PlaylistValue {
     pub fn new() -> PlaylistValue {
-        PlaylistValue(VecDeque::new())
+        PlaylistValue {
+            queue: VecDeque::new(),
+        }
     }
 
     pub fn clear(&mut self) {
-        self.0.clear();
+        self.queue.clear();
     }
 
     pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {
-        self.0
+        self.queue
             .iter()
             .find(|t| t.track.id as usize == track_id)
             .cloned()
@@ -393,7 +397,7 @@ impl PlaylistValue {
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         let mut index: Option<usize> = None;
 
-        self.0.iter().enumerate().for_each(|(i, t)| {
+        self.queue.iter().enumerate().for_each(|(i, t)| {
             if t.track.id as usize == track_id {
                 index = Some(i);
             }
@@ -403,7 +407,7 @@ impl PlaylistValue {
     }
 
     pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
-        self.0
+        self.queue
             .into_iter()
             .map(|t| {
                 let title = textwrap::wrap(
@@ -424,49 +428,49 @@ impl PlaylistValue {
     }
 
     pub fn vec(&self) -> VecDeque<PlaylistTrack> {
-        self.0.clone()
+        self.queue.clone()
     }
 
     pub fn drain<R>(&mut self, range: R) -> Drain<PlaylistTrack>
     where
         R: RangeBounds<usize>,
     {
-        self.0.drain(range)
+        self.queue.drain(range)
     }
 
     pub fn append(&mut self, mut items: VecDeque<PlaylistTrack>) {
-        self.0.append(&mut items)
+        self.queue.append(&mut items)
     }
 
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.queue.len()
     }
 
     pub fn front(&self) -> Option<&PlaylistTrack> {
-        self.0.front()
+        self.queue.front()
     }
 
     pub fn back(&self) -> Option<&PlaylistTrack> {
-        self.0.back()
+        self.queue.back()
     }
 
     pub fn pop_front(&mut self) -> Option<PlaylistTrack> {
-        self.0.pop_front()
+        self.queue.pop_front()
     }
 
     pub fn pop_back(&mut self) -> Option<PlaylistTrack> {
-        self.0.pop_back()
+        self.queue.pop_back()
     }
 
     pub fn push_front(&mut self, track: PlaylistTrack) {
-        self.0.push_front(track)
+        self.queue.push_front(track);
     }
 
     pub fn push_back(&mut self, track: PlaylistTrack) {
-        self.0.push_back(track)
+        self.queue.push_back(track);
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.queue.is_empty()
     }
 }
