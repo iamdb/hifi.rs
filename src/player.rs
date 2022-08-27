@@ -497,12 +497,22 @@ impl Player {
         self.start(quality).await;
     }
     /// Plays a full album.
-    pub async fn play_album(&mut self, album: Album, quality: AudioQuality) {
+    pub async fn play_album(&mut self, mut album: Album, quality: Option<AudioQuality>) {
         if self.is_playing() || self.is_paused() {
             self.stop();
         }
 
         self.clear().await;
+
+        if album.tracks.is_none() {
+            album.attach_tracks(self.client.clone()).await;
+        }
+
+        let quality = if let Some(quality) = quality {
+            quality
+        } else {
+            self.client.quality()
+        };
 
         if let Some(tracklist) = album.to_playlist_tracklist(quality.clone()) {
             debug!("creating playlist");
@@ -594,13 +604,7 @@ impl Player {
                         Action::JumpForward => self.jump_forward(),
                         Action::JumpBackward => self.jump_backward(),
                         Action::PlayAlbum { album } => {
-                            let default_quality = self.client.quality();
-                            let client = self.client.clone();
-
-                            let mut album = *album;
-                            album.attach_tracks(client).await;
-
-                            self.play_album(album, default_quality).await;
+                            self.play_album(*album, None).await;
                         }
                     }
                 }

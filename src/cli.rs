@@ -202,7 +202,7 @@ pub async fn run() -> Result<(), Error> {
                 match url {
                     qobuz::UrlType::Album { id } => {
                         if let Ok(album) = client.album(id).await {
-                            player.play_album(album, client.quality()).await;
+                            player.play_album(album, Some(client.quality())).await;
                         }
                     }
                     qobuz::UrlType::Playlist { id } => {
@@ -374,7 +374,7 @@ pub async fn run() -> Result<(), Error> {
             };
 
             let mut player = player::new(app_state.clone(), client.clone(), false).await;
-            player.play_album(album, quality).await;
+            player.play_album(album, Some(quality)).await;
 
             if no_tui {
                 wait!(app_state);
