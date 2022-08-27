@@ -130,10 +130,6 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
 }
 
 impl Player {
-    /// Retreive the current app state from the player.
-    pub fn app_state(&self) -> &AppState {
-        &self.app_state
-    }
     /// Set the active playlist.
     pub fn set_playlist(&mut self, playlist: PlaylistValue) {
         self.playlist = Arc::new(Mutex::new(playlist));
@@ -202,7 +198,7 @@ impl Player {
             .map(|duration| duration.into())
     }
     /// Seek to a specified time in the current track.
-    pub fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
+    pub async fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
         let flags = if let Some(flags) = flags {
             flags
         } else {
@@ -211,9 +207,12 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
-                self.app_state
-                    .player
-                    .insert::<String, ClockValue>(StateKey::Player(PlayerKey::Position), time);
+                self.app_state.player.insert::<String, ClockValue>(
+                    StateKey::Player(PlayerKey::Position),
+                    time.clone(),
+                );
+
+                self.dbus_seeked_signal(time).await;
 
                 Ok(())
             }
@@ -260,7 +259,7 @@ impl Player {
         self.app_state.player.clear();
     }
     /// Jump forward in the currently playing track +10 seconds.
-    pub fn jump_forward(&self) {
+    pub async fn jump_forward(&self) {
         if let (Some(current_position), Some(duration)) = (
             self.playbin.query_position::<ClockTime>(),
             self.playbin.query_duration::<ClockTime>(),
@@ -269,14 +268,14 @@ impl Player {
             let next_position = current_position + ten_seconds;
 
             if next_position < duration {
-                match self.seek(next_position.into(), None) {
+                match self.seek(next_position.into(), None).await {
                     Ok(_) => (),
                     Err(error) => {
                         error!("{:?}", error);
                     }
                 }
             } else {
-                match self.seek(duration.into(), None) {
+                match self.seek(duration.into(), None).await {
                     Ok(_) => (),
                     Err(error) => {
                         error!("{:?}", error);
@@ -286,39 +285,21 @@ impl Player {
         }
     }
     /// Jump forward in the currently playing track -10 seconds.
-    pub fn jump_backward(&self) {
+    pub async fn jump_backward(&self) {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
-                match self.seek(ClockTime::default().into(), None) {
-                    Ok(_) => self.app_state().player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Position),
-                        ClockTime::default().into(),
-                    ),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        self.app_state().player.insert::<String, ClockValue>(
-                            StateKey::Player(PlayerKey::Position),
-                            current_position.into(),
-                        )
-                    }
-                }
+                self.seek(ClockTime::default().into(), None)
+                    .await
+                    .expect("failed to jump backward");
+
+                self.dbus_seeked_signal(ClockValue::default()).await;
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
 
-                match self.seek(seek_position.into(), None) {
-                    Ok(_) => self.app_state().player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Position),
-                        seek_position.into(),
-                    ),
-                    Err(error) => {
-                        error!("{:?}", error);
-                        self.app_state().player.insert::<String, ClockValue>(
-                            StateKey::Player(PlayerKey::Position),
-                            current_position.into(),
-                        )
-                    }
-                }
+                self.seek(seek_position.into(), None)
+                    .await
+                    .expect("failed to jump backward");
             }
         }
     }
@@ -369,13 +350,8 @@ impl Player {
                 self.playbin.set_property("uri", Some(track_url.url));
                 self.play();
 
-                let iface_ref = self.player_iface().await;
-                let iface = iface_ref.get_mut().await;
-
-                iface
-                    .metadata_changed(iface_ref.signal_context())
-                    .await
-                    .expect("failed to signal metadata change");
+                self.dbus_seeked_signal(ClockValue::default()).await;
+                self.dbus_metadata_changed().await;
             }
         }
         Ok(())
@@ -392,7 +368,11 @@ impl Player {
             if current_position > one_second && num.is_none() {
                 debug!("current track position >1s, seeking to start of track");
                 self.seek(ClockTime::default().into(), None)
+                    .await
                     .expect("failed to seek");
+
+                self.dbus_seeked_signal(ClockValue::default()).await;
+                self.dbus_metadata_changed().await;
 
                 return Ok(());
             }
@@ -442,16 +422,11 @@ impl Player {
                     prev_playlist.clone(),
                 );
 
+                self.dbus_seeked_signal(ClockValue::default()).await;
+                self.dbus_metadata_changed().await;
+
                 self.playbin.set_property("uri", Some(track_url.url));
                 self.play();
-
-                let iface_ref = self.player_iface().await;
-                let iface = iface_ref.get_mut().await;
-
-                iface
-                    .metadata_changed(iface_ref.signal_context())
-                    .await
-                    .expect("failed to signal metadata change");
             }
         }
 
@@ -595,17 +570,12 @@ impl Player {
                         Action::PlayPause => self.play_pause(),
                         Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
                         Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
-                        Action::Stop => {
-                            self.stop();
-                            self.app_state.quit();
-                        },
+                        Action::Stop => self.stop(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
-                        Action::JumpForward => self.jump_forward(),
-                        Action::JumpBackward => self.jump_backward(),
-                        Action::PlayAlbum { album } => {
-                            self.play_album(*album, None).await;
-                        }
+                        Action::JumpForward => self.jump_forward().await,
+                        Action::JumpBackward => self.jump_backward().await,
+                        Action::PlayAlbum { album } => self.play_album(*album, None).await
                     }
                 }
                 Some(msg) = messages.next() => {
@@ -618,7 +588,6 @@ impl Player {
                             break;
                         },
                         MessageView::StreamStart(_) => {
-
                         }
                         MessageView::DurationChanged(_) => {
                             if let Some(duration) = self.duration() {
@@ -638,8 +607,7 @@ impl Player {
 
                                 if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
                                     resume = false;
-                                    self.seek(position, None).expect("seek failure");
-
+                                    self.seek(position, None).await.expect("seek failure");
                                 }
                             }
 
@@ -765,6 +733,31 @@ impl Player {
             .await
             .expect("failed to get object server")
     }
+    async fn dbus_seeked_signal(&self, position: ClockValue) {
+        let object_server = self.connection.object_server();
+
+        let iface_ref = object_server
+            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+            .await
+            .expect("failed to get object server");
+
+        mpris::MprisPlayer::seeked(
+            iface_ref.signal_context(),
+            position.inner_clocktime().useconds() as i64,
+        )
+        .await
+        .expect("failed to send seeked signal");
+    }
+
+    async fn dbus_metadata_changed(&self) {
+        let iface_ref = self.player_iface().await;
+        let iface = iface_ref.get_mut().await;
+
+        iface
+            .metadata_changed(iface_ref.signal_context())
+            .await
+            .expect("failed to signal metadata change");
+    }
     /// Sets up basic functionality for the player.
     async fn prep_next_track(&mut self) -> Option<String> {
         let mut playlist = self.playlist.lock().await;
@@ -799,13 +792,7 @@ impl Player {
                     prev_playlist.clone(),
                 );
 
-                let iface_ref = self.player_iface().await;
-                let iface = iface_ref.get_mut().await;
-
-                iface
-                    .metadata_changed(iface_ref.signal_context())
-                    .await
-                    .expect("failed to signal metadata change");
+                self.dbus_metadata_changed().await;
 
                 Some(next_playlist_track_url.url)
             } else {

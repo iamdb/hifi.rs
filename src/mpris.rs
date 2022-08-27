@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{player::Controls, qobuz::track::PlaylistTrack};
 use gstreamer::ClockTime;
-use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder};
+use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
 pub struct Mpris {
@@ -135,6 +135,8 @@ impl MprisPlayer {
             0
         }
     }
+    #[dbus_interface(signal, name = "Seeked")]
+    pub async fn seeked(ctxt: &SignalContext<'_>, message: i64) -> zbus::Result<()>;
     // #[dbus_interface(property)]
     // fn set_position(&self) {
     //     self.player.seek();
