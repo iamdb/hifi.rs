@@ -177,11 +177,10 @@ pub async fn run() -> Result<(), Error> {
     };
 
     // CLI COMMANDS
-    #[allow(unused)]
     match cli.command {
         Commands::Resume { no_tui } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let mut player = player::new(app_state.clone(), client.clone(), true).await;
+            let player = player::new(app_state.clone(), client.clone(), true).await;
 
             player.play();
 
@@ -207,7 +206,7 @@ pub async fn run() -> Result<(), Error> {
                         }
                     }
                     qobuz::UrlType::Playlist { id } => {
-                        debug!("can't play a playlist yet");
+                        debug!("can't play a playlist yet, {}", id);
                         app_state.quit();
                         quit = true;
                     }
@@ -226,6 +225,7 @@ pub async fn run() -> Result<(), Error> {
                 Ok(())
             }
         }
+        #[allow(unused)]
         Commands::Search {
             query,
             limit,
@@ -254,7 +254,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
@@ -285,7 +285,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
@@ -313,7 +313,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
@@ -365,7 +365,6 @@ pub async fn run() -> Result<(), Error> {
                 .await
                 .expect("failed to create client");
 
-            let mut player = player::new(app_state.clone(), client.clone(), false).await;
             let album = client.album(album_id).await?;
 
             let quality = if let Some(q) = quality {
@@ -374,6 +373,7 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
+            let mut player = player::new(app_state.clone(), client.clone(), false).await;
             player.play_album(album, quality).await;
 
             if no_tui {
