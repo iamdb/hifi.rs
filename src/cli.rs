@@ -1,15 +1,16 @@
 use crate::{
     player,
     qobuz::{
+        self,
         client::{self, output, Credentials, OutputFormat},
         search_results::SearchResults,
     },
     state::{
         self,
-        app::{ClientKey, StateKey},
+        app::{AppKey, ClientKey, StateKey},
         AudioQuality, StringValue,
     },
-    ui, wait, REFRESH_RESOLUTION,
+    switch_screen, ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -35,6 +36,12 @@ enum Commands {
     Resume {
         #[clap(long, short)]
         no_tui: bool,
+    },
+    Play {
+        #[clap(long, short)]
+        no_tui: bool,
+        #[clap(long, short)]
+        url: String,
     },
     /// Search for tracks, albums, artists and playlists
     Search {
@@ -187,6 +194,38 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
+        Commands::Play { url, no_tui } => {
+            let client = client::new(app_state.clone(), creds).await?;
+            let mut player = player::new(app_state.clone(), client.clone(), true).await;
+            let mut quit = false;
+
+            if let Some(url) = qobuz::parse_url(url.as_str()) {
+                match url {
+                    qobuz::UrlType::Album { id } => {
+                        if let Ok(album) = client.album(id).await {
+                            player.play_album(album, client.quality()).await;
+                        }
+                    }
+                    qobuz::UrlType::Playlist { id } => {
+                        debug!("can't play a playlist yet");
+                        app_state.quit();
+                        quit = true;
+                    }
+                }
+            }
+
+            if quit {
+                Ok(())
+            } else {
+                if no_tui {
+                    wait!(app_state);
+                } else {
+                    let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                    tui.event_loop().await?;
+                }
+                Ok(())
+            }
+        }
         Commands::Search {
             query,
             limit,
@@ -274,7 +313,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(app_state.clone(), client.clone(), false).await;
+                let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
                 if no_tui {
                     wait!(app_state);
@@ -340,7 +379,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(app_state);
             } else {
-                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(app_state.clone(), player.controls(), client, None, None)?;
+                switch_screen!(app_state, ActiveScreen::NowPlaying);
                 tui.event_loop().await?;
             }
 

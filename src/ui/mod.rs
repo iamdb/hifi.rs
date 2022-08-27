@@ -27,6 +27,17 @@ use tokio::select;
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
 
+#[macro_export]
+macro_rules! switch_screen {
+    ($app_state:expr, $screen:path) => {
+        use $crate::state::ActiveScreen;
+
+        $app_state
+            .app
+            .insert::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen), $screen);
+    };
+}
+
 pub trait Screen {
     fn render(&mut self, terminal: &mut Console);
     fn key_events(&mut self, key: Key) -> bool;
@@ -97,17 +108,6 @@ pub fn new(
     let terminal = Terminal::new(backend).unwrap();
 
     let (tx, rx) = flume::unbounded();
-
-    #[macro_export]
-    macro_rules! switch_screen {
-        ($app_state:expr, $screen:path) => {
-            use $crate::state::ActiveScreen;
-
-            $app_state
-                .app
-                .insert::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen), $screen);
-        };
-    }
 
     if search_results.is_some() {
         switch_screen!(app_state, ActiveScreen::Search);

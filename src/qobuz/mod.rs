@@ -40,3 +40,44 @@ pub struct User {
     pub id: i64,
     pub login: String,
 }
+
+pub enum UrlType {
+    Album { id: String },
+    Playlist { id: String },
+}
+
+pub fn parse_url(string_url: &str) -> Option<UrlType> {
+    if let Ok(url) = url::Url::parse(string_url) {
+        if let (Some(host), Some(mut path)) = (url.host_str(), url.path_segments()) {
+            if host == "play.qobuz.com" {
+                debug!("got a qobuz url");
+
+                match path.next() {
+                    Some("album") => {
+                        debug!("this is an album");
+                        let id = path.next().unwrap().to_string();
+
+                        Some(UrlType::Album { id })
+                    }
+                    Some("playlist") => {
+                        debug!("this is a playlist");
+                        let id = path.next().unwrap().to_string();
+
+                        Some(UrlType::Playlist { id })
+                    }
+                    None => {
+                        debug!("no path, cannot use path");
+                        None
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}

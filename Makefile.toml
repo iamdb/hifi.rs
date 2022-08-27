@@ -3,3 +3,7 @@ CARGO_MAKE_CLIPPY_ARGS = "--all-features -- -D warnings"
 
 [tasks.build]
 args = ["build", "--all-features", "--release"]
+
+[tasks.install]
+command = "cargo"
+args = ["install", "--path", "."]

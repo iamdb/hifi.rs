@@ -737,15 +737,6 @@ impl Player {
                             StateKey::Player(PlayerKey::DurationRemaining),
                             remaining.into(),
                         );
-
-                        if self.is_playing() {
-                            let iface_ref = self.player_iface().await;
-                            let iface = iface_ref.get_mut().await;
-                            iface
-                                .position_changed(iface_ref.signal_context())
-                                .await
-                                .expect("failed");
-                        }
                     }
                 }
 
