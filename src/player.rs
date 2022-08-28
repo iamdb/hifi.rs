@@ -291,8 +291,6 @@ impl Player {
                 self.seek(ClockTime::default().into(), None)
                     .await
                     .expect("failed to jump backward");
-
-                self.dbus_seeked_signal(ClockValue::default()).await;
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
@@ -593,17 +591,17 @@ impl Player {
                 }
                 Some(action) = actions.next() => {
                     match action {
-                        Action::Play => self.play(),
-                        Action::Pause => self.pause(),
-                        Action::PlayPause => self.play_pause(),
+                        Action::JumpBackward => self.jump_backward().await,
+                        Action::JumpForward => self.jump_forward().await,
                         Action::Next => self.skip_forward(None).await.expect("failed to skip forward"),
+                        Action::Pause => self.pause(),
+                        Action::Play => self.play(),
+                        Action::PlayPause => self.play_pause(),
                         Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
                         Action::Stop => self.stop(),
+                        Action::PlayAlbum { album } => self.play_album(*album, None).await,
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
-                        Action::JumpForward => self.jump_forward().await,
-                        Action::JumpBackward => self.jump_backward().await,
-                        Action::PlayAlbum { album } => self.play_album(*album, None).await
                     }
                 }
                 Some(msg) = messages.next() => {
