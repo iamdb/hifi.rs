@@ -207,6 +207,12 @@ impl MprisTrackList {
             self.controls.skip_to_by_id(id).await;
         }
     }
+    #[dbus_interface(signal, name = "Seeked")]
+    pub async fn track_list_replaced(
+        ctxt: &SignalContext<'_>,
+        tracks: Vec<String>,
+        current: String,
+    ) -> zbus::Result<()>;
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
         if let Some(playlist) = self.controls.remaining_tracks().await {
