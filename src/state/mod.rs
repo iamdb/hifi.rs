@@ -1,10 +1,9 @@
 pub mod app;
 
 use crate::{
-    get_player,
     qobuz::track::PlaylistTrack,
-    state::app::{PlayerKey, StateKey},
-    ui::components::Item,
+    state::app::StateKey,
+    ui::components::{Item, Row, TableRow, TableRows},
 };
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
@@ -71,23 +70,6 @@ impl StateTree {
 
                 bytes.into()
             })
-        } else {
-            None
-        }
-    }
-    pub fn item_list(&self, max_width: usize) -> Option<Vec<Item<'static>>> {
-        if let Some(playlist) = get_player!(PlayerKey::Playlist, self, PlaylistValue) {
-            let mut items = playlist.item_list(max_width, false);
-
-            if let Some(prev_playlist) =
-                get_player!(PlayerKey::PreviousPlaylist, self, PlaylistValue)
-            {
-                let mut prev_items = prev_playlist.item_list(max_width, true);
-
-                items.append(&mut prev_items);
-            }
-
-            Some(items)
         } else {
             None
         }
@@ -378,6 +360,15 @@ impl From<PlaylistValue> for Bytes {
         bincode::serialize(&playlist)
             .expect("failed to serialize playlist")
             .into()
+    }
+}
+
+impl TableRows for PlaylistValue {
+    fn rows(&self) -> Vec<Row> {
+        self.queue
+            .iter()
+            .map(|i| i.track.row())
+            .collect::<Vec<Row>>()
     }
 }
 

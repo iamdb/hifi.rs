@@ -107,7 +107,7 @@ pub fn new(
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::bounded(1);
+    let (tx, rx) = flume::unbounded();
 
     if search_results.is_some() {
         switch_screen!(app_state, ActiveScreen::Search);
@@ -130,7 +130,6 @@ pub fn new(
         Rc::new(RefCell::new(NowPlayingScreen::new(
             app_state.clone(),
             controls.clone(),
-            None,
         ))) as Rc<RefCell<dyn Screen>>,
     );
 

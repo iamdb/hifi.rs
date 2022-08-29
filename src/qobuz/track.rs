@@ -54,10 +54,9 @@ pub struct Track {
 
 impl Track {
     fn columns(&self) -> Vec<String> {
-        let icon = if self.hires_streamable { "*" } else { "" };
-
         vec![
-            format!("{} {}", self.title, icon),
+            self.track_number.to_string(),
+            self.title.clone(),
             self.performer.name.clone(),
         ]
     }
@@ -65,13 +64,17 @@ impl Track {
 
 impl TableHeaders for Track {
     fn headers() -> Vec<String> {
-        vec!["Title".to_string(), "Artist".to_string()]
+        vec!["#".to_string(), "Title".to_string(), "Artist".to_string()]
     }
 }
 
 impl TableWidths for Track {
     fn widths() -> Vec<ColumnWidth> {
-        vec![ColumnWidth::new(50), ColumnWidth::new(50)]
+        vec![
+            ColumnWidth::new(8),
+            ColumnWidth::new(52),
+            ColumnWidth::new(40),
+        ]
     }
 }
 
