@@ -107,7 +107,7 @@ pub fn new(
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::bounded(1);
 
     if search_results.is_some() {
         switch_screen!(app_state, ActiveScreen::Search);
@@ -254,7 +254,8 @@ impl Tui {
                     }
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
-                    self.controls.stop().await;
+                    self.controls.pause().await;
+                    std::thread::sleep(Duration::from_millis(500));
                     self.app_state.quit();
                 }
                 _ => {

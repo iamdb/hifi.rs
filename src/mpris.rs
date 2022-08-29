@@ -138,8 +138,10 @@ impl MprisPlayer {
     #[dbus_interface(signal, name = "Seeked")]
     pub async fn seeked(ctxt: &SignalContext<'_>, message: i64) -> zbus::Result<()>;
     // #[dbus_interface(property)]
-    // fn set_position(&self) {
-    //     self.player.seek();
+    // async fn set_position(&self, current: String, position: i64) {
+    //     if let Some(next_up) = self.controls.currently_playing_track().await {
+    //         self.player.seek();
+    //     }
     // }
     #[dbus_interface(property, name = "MinimumRate")]
     fn minimum_rate(&self) -> f64 {

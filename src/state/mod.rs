@@ -1,22 +1,27 @@
 pub mod app;
 
-use crate::qobuz::track::PlaylistTrack;
-use crate::state::app::{PlayerKey, StateKey};
-use crate::ui::components::Item;
-
+use crate::{
+    get_player,
+    qobuz::track::PlaylistTrack,
+    state::app::{PlayerKey, StateKey},
+    ui::components::Item,
+};
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Tree};
-use std::collections::vec_deque::Drain;
-use std::collections::VecDeque;
-use std::fmt::Display;
-use std::ops::RangeBounds;
-use std::str::FromStr;
-use tui::style::{Color, Modifier, Style};
-use tui::text::Text;
-use tui::widgets::ListItem;
+use std::{
+    collections::{vec_deque::Drain, VecDeque},
+    fmt::Display,
+    ops::RangeBounds,
+    str::FromStr,
+};
+use tui::{
+    style::{Color, Modifier, Style},
+    text::Text,
+    widgets::ListItem,
+};
 
 #[derive(Debug, Clone)]
 pub struct HifiDB(sled::Db);
@@ -71,11 +76,11 @@ impl StateTree {
         }
     }
     pub fn item_list(&self, max_width: usize) -> Option<Vec<Item<'static>>> {
-        if let Some(playlist) = crate::get_player!(PlayerKey::Playlist, self, PlaylistValue) {
+        if let Some(playlist) = get_player!(PlayerKey::Playlist, self, PlaylistValue) {
             let mut items = playlist.item_list(max_width, false);
 
             if let Some(prev_playlist) =
-                crate::get_player!(PlayerKey::PreviousPlaylist, self, PlaylistValue)
+                get_player!(PlayerKey::PreviousPlaylist, self, PlaylistValue)
             {
                 let mut prev_items = prev_playlist.item_list(max_width, true);
 
