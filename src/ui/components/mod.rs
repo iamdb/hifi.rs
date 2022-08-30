@@ -83,6 +83,7 @@ where
     f.render_widget(p, area);
 }
 
+#[allow(unused)]
 pub fn list<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, area: Rect)
 where
     B: Backend,
@@ -236,6 +237,7 @@ pub struct List<'t> {
     state: ListState,
 }
 
+#[allow(unused)]
 impl<'t> List<'t> {
     pub fn new(items: Option<Vec<Item<'t>>>) -> List<'t> {
         if let Some(i) = items {

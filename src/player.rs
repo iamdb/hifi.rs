@@ -553,11 +553,6 @@ impl Player {
             );
 
             self.play();
-
-            self.app_state.player.insert::<String, StatusValue>(
-                StateKey::Player(PlayerKey::Status),
-                gst::State::Playing.into(),
-            );
         }
     }
     /// Handles messages from the player and takes necessary action.
@@ -887,7 +882,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::unbounded::<Action>();
+        let (action_tx, action_rx) = flume::bounded::<Action>(1);
 
         Controls {
             action_rx,

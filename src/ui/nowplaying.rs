@@ -1,32 +1,28 @@
 use crate::{
     player::Controls,
-    state::app::AppState,
+    qobuz::track::Track,
+    state::{
+        app::{AppState, PlayerKey},
+        PlaylistValue,
+    },
     ui::{
-        components::{self, Item, List},
-        Console, Screen,
+        components::{self, Table, TableHeaders, TableRows, TableWidths},
+        Console, Screen, StateKey,
     },
 };
 use futures::executor;
 use termion::event::{Key, MouseEvent};
 use tui::layout::{Constraint, Direction, Layout};
 
-pub struct NowPlayingScreen<'l> {
-    track_list: List<'l>,
+pub struct NowPlayingScreen {
+    track_list: Table,
     app_state: AppState,
     controls: Controls,
 }
 
-impl<'l> NowPlayingScreen<'l> {
-    pub fn new(
-        app_state: AppState,
-        controls: Controls,
-        list_items: Option<Vec<Item<'_>>>,
-    ) -> NowPlayingScreen {
-        let track_list = if let Some(items) = list_items {
-            List::new(Some(items))
-        } else {
-            List::new(None)
-        };
+impl NowPlayingScreen {
+    pub fn new(app_state: AppState, controls: Controls) -> NowPlayingScreen {
+        let track_list = Table::new(None, None, None);
 
         NowPlayingScreen {
             track_list,
@@ -36,7 +32,7 @@ impl<'l> NowPlayingScreen<'l> {
     }
 }
 
-impl<'l> Screen for NowPlayingScreen<'l> {
+impl Screen for NowPlayingScreen {
     fn render(&mut self, terminal: &mut Console) {
         terminal
             .draw(|f| {
@@ -51,12 +47,17 @@ impl<'l> Screen for NowPlayingScreen<'l> {
 
                 let split_layout = layout.split(f.size());
 
-                if let Some(items) = self.app_state.player.item_list(f.size().width as usize - 2) {
-                    self.track_list.set_items(items);
+                components::player(f, split_layout[0], self.app_state.clone());
+
+                let tree = self.app_state.player.clone();
+
+                if let Some(playlist) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
+                    self.track_list.set_rows(playlist.rows());
+                    self.track_list.set_header(Track::headers());
+                    self.track_list.set_widths(Track::widths());
                 }
 
-                components::player(f, split_layout[0], self.app_state.clone());
-                components::list(f, &mut self.track_list, split_layout[1]);
+                components::table(f, &mut self.track_list, split_layout[1]);
                 components::tabs(0, f, split_layout[2]);
             })
             .expect("failed to draw screen");

@@ -3,6 +3,7 @@ use crate::{
     state::{AudioQuality, Bytes},
     ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
+use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -54,24 +55,39 @@ pub struct Track {
 
 impl Track {
     fn columns(&self) -> Vec<String> {
-        let icon = if self.hires_streamable { "*" } else { "" };
+        let duration = ClockTime::from_seconds(self.duration as u64)
+            .to_string()
+            .as_str()[3..7]
+            .to_string();
 
         vec![
-            format!("{} {}", self.title, icon),
+            self.track_number.to_string(),
+            self.title.clone(),
             self.performer.name.clone(),
+            duration,
         ]
     }
 }
 
 impl TableHeaders for Track {
     fn headers() -> Vec<String> {
-        vec!["Title".to_string(), "Artist".to_string()]
+        vec![
+            "#".to_string(),
+            "Title".to_string(),
+            "Artist".to_string(),
+            "Len".to_string(),
+        ]
     }
 }
 
 impl TableWidths for Track {
     fn widths() -> Vec<ColumnWidth> {
-        vec![ColumnWidth::new(50), ColumnWidth::new(50)]
+        vec![
+            ColumnWidth::new(4),
+            ColumnWidth::new(46),
+            ColumnWidth::new(36),
+            ColumnWidth::new(14),
+        ]
     }
 }
 

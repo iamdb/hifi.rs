@@ -130,7 +130,6 @@ pub fn new(
         Rc::new(RefCell::new(NowPlayingScreen::new(
             app_state.clone(),
             controls.clone(),
-            None,
         ))) as Rc<RefCell<dyn Screen>>,
     );
 
@@ -254,7 +253,8 @@ impl Tui {
                     }
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
-                    self.controls.stop().await;
+                    self.controls.pause().await;
+                    std::thread::sleep(Duration::from_millis(500));
                     self.app_state.quit();
                 }
                 _ => {
