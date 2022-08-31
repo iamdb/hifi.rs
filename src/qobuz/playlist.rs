@@ -28,7 +28,12 @@ impl From<UserPlaylistsResult> for Vec<Vec<String>> {
 
 impl From<UserPlaylistsResult> for Vec<String> {
     fn from(playlist: UserPlaylistsResult) -> Self {
-        playlist.into()
+        playlist
+            .playlists
+            .items
+            .iter()
+            .map(|i| i.name.to_string())
+            .collect::<Vec<String>>()
     }
 }
 

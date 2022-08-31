@@ -102,6 +102,7 @@ macro_rules! get_app {
 pub enum ActiveScreen {
     NowPlaying,
     Search,
+    Playlists,
 }
 
 impl ActiveScreen {
@@ -109,6 +110,7 @@ impl ActiveScreen {
         match self {
             ActiveScreen::NowPlaying => "now_playing",
             ActiveScreen::Search => "search",
+            ActiveScreen::Playlists => "playlists",
         }
     }
 }
