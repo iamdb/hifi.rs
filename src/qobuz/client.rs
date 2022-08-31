@@ -509,6 +509,7 @@ impl Client {
             );
         }
 
+        debug!("calling {} endpoint", endpoint);
         let request = self.client.request(Method::GET, endpoint).headers(headers);
 
         if let Some(p) = params {

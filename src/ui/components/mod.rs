@@ -134,9 +134,9 @@ pub fn tabs<B>(num: usize, f: &mut Frame<B>, rect: Rect)
 where
     B: Backend,
 {
-    let padding = (rect.width as usize / 2) - 4;
+    let padding = (rect.width as usize / 3) - 2;
 
-    let titles = ["Now Playing", "Search Results"]
+    let titles = ["Now Playing", "Search", "My Playlists"]
         .iter()
         .cloned()
         .map(|t| {
@@ -357,7 +357,7 @@ impl Row {
             .unwrap_or(1);
 
         TermRow::new(formatted)
-            .style(Style::default())
+            .style(Style::default().fg(Color::White))
             .height(height as u16)
     }
 }

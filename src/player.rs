@@ -65,6 +65,7 @@ pub struct Player {
     controls: Controls,
     connection: Connection,
     is_buffering: bool,
+    resume: bool,
 }
 
 pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
@@ -87,15 +88,13 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
             .send(true)
             .expect("failed to send about to finish message");
 
-        let next_track_url = next_track_rx
-            .recv()
-            .expect("failed to receive next track url");
+        if let Ok(next_track_url) = next_track_rx.recv_timeout(Duration::from_secs(15)) {
+            let playbin = values[0]
+                .get::<glib::Object>()
+                .expect("playbin \"about-to-finish\" signal values[0]");
 
-        let playbin = values[0]
-            .get::<glib::Object>()
-            .expect("playbin \"about-to-finish\" signal values[0]");
-
-        playbin.set_property("uri", Some(next_track_url));
+            playbin.set_property("uri", Some(next_track_url));
+        }
 
         None
     });
@@ -109,6 +108,7 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
         app_state,
         controls,
         is_buffering: false,
+        resume,
     };
 
     if resume {
@@ -122,8 +122,7 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
 
     let mut p = player.clone();
     tokio::spawn(async move {
-        p.player_loop(resume, about_to_finish_rx, next_track_tx)
-            .await;
+        p.player_loop(about_to_finish_rx, next_track_tx).await;
     });
 
     player
@@ -246,6 +245,7 @@ impl Player {
             Ok(())
         } else {
             debug!("nothing to resume");
+            self.resume = false;
             Ok(())
         }
     }
@@ -524,7 +524,7 @@ impl Player {
             self.start(quality).await;
         }
     }
-    /// Stats the player.
+    /// Starts the player.
     async fn start(&mut self, quality: AudioQuality) {
         let mut playlist = self.playlist.lock().await;
 
@@ -558,7 +558,6 @@ impl Player {
     /// Handles messages from the player and takes necessary action.
     async fn player_loop(
         &mut self,
-        resume: bool,
         about_to_finish_rx: Receiver<bool>,
         next_track_tx: Sender<String>,
     ) {
@@ -567,14 +566,21 @@ impl Player {
         let mut quitter = self.app_state.quitter();
         let mut actions = action_rx.stream();
         let mut about_to_finish = about_to_finish_rx.stream();
-        let mut resume = resume;
 
         loop {
             select! {
-                Ok(quit) = quitter.recv() => {
-                    if quit {
-                        debug!("quitting");
-                        break;
+                quit = quitter.recv() => {
+                    match quit {
+                        Ok(quit) => {
+                            if quit {
+                                debug!("quitting");
+                                break;
+                            }
+                        },
+                        Err(_) => {
+                            debug!("quitting, with error");
+                            break;
+                        },
                     }
                 }
                 Some(almost_done) = about_to_finish.next() => {
@@ -624,11 +630,11 @@ impl Player {
                         MessageView::AsyncDone(_) => {
                             // If the player is resuming from a previous session,
                             // seek to the last position saved to the state.
-                            if resume {
+                            if self.resume {
                                 let tree = &self.app_state.player;
 
                                 if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
-                                    resume = false;
+                                    self.resume = false;
                                     self.seek(position, None).await.expect("seek failure");
                                 }
                             }
@@ -882,7 +888,7 @@ pub struct Controls {
 
 impl Controls {
     fn new(state: AppState) -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(1);
+        let (action_tx, action_rx) = flume::bounded::<Action>(10);
 
         Controls {
             action_rx,

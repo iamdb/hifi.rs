@@ -1,5 +1,6 @@
 pub mod components;
 pub mod nowplaying;
+pub mod playlists;
 pub mod search;
 
 use crate::{
@@ -11,10 +12,11 @@ use crate::{
         ActiveScreen,
     },
     switch_screen,
-    ui::{nowplaying::NowPlayingScreen, search::SearchScreen},
+    ui::{nowplaying::NowPlayingScreen, playlists::MyPlaylistsScreen, search::SearchScreen},
     REFRESH_RESOLUTION,
 };
 use flume::{Receiver, Sender};
+use gstreamer::State as GstState;
 use snafu::prelude::*;
 use std::{cell::RefCell, collections::HashMap, io::Stdout, rc::Rc, thread, time::Duration};
 use termion::{
@@ -119,7 +121,7 @@ pub fn new(
         Rc::new(RefCell::new(SearchScreen::new(
             app_state.clone(),
             controls.clone(),
-            client,
+            client.clone(),
             search_results,
             query,
             terminal.size().unwrap().width,
@@ -129,6 +131,15 @@ pub fn new(
         ActiveScreen::NowPlaying,
         Rc::new(RefCell::new(NowPlayingScreen::new(
             app_state.clone(),
+            controls.clone(),
+        ))) as Rc<RefCell<dyn Screen>>,
+    );
+
+    screens.insert(
+        ActiveScreen::Playlists,
+        Rc::new(RefCell::new(MyPlaylistsScreen::new(
+            app_state.clone(),
+            client,
             controls.clone(),
         ))) as Rc<RefCell<dyn Screen>>,
     );
@@ -158,17 +169,8 @@ impl Tui {
                 ActiveScreen::NowPlaying
             };
 
-        match screen {
-            ActiveScreen::NowPlaying => {
-                if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
-                    screen.borrow_mut().render(&mut self.terminal);
-                }
-            }
-            ActiveScreen::Search => {
-                if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
-                    screen.borrow_mut().render(&mut self.terminal);
-                }
-            }
+        if let Some(screen) = self.screens.get(&screen) {
+            screen.borrow_mut().render(&mut self.terminal);
         }
     }
     pub async fn event_loop<'c>(&mut self) -> Result<()> {
@@ -246,6 +248,10 @@ impl Tui {
                                 self.tick().await;
                             }
                             ActiveScreen::Search => {
+                                switch_screen!(self.app_state, ActiveScreen::Playlists);
+                                self.tick().await;
+                            }
+                            ActiveScreen::Playlists => {
                                 switch_screen!(self.app_state, ActiveScreen::NowPlaying);
                                 self.tick().await;
                             }
@@ -253,29 +259,25 @@ impl Tui {
                     }
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
-                    self.controls.pause().await;
-                    std::thread::sleep(Duration::from_millis(500));
-                    self.app_state.quit();
+                    if let Some(status) = self.controls.status().await {
+                        if status == GstState::Playing.into() {
+                            self.controls.pause().await;
+                            self.controls.stop().await;
+                            self.app_state.quit();
+                        } else {
+                            self.controls.stop().await;
+                            self.app_state.quit();
+                        }
+                    }
                 }
                 _ => {
                     let app_tree = &self.app_state.app;
                     if let Some(active_screen) =
                         get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
                     {
-                        match active_screen {
-                            ActiveScreen::NowPlaying => {
-                                if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
-                                    if screen.borrow_mut().key_events(key) {
-                                        self.tick().await;
-                                    }
-                                }
-                            }
-                            ActiveScreen::Search => {
-                                if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
-                                    if screen.borrow_mut().key_events(key) {
-                                        self.tick().await;
-                                    }
-                                }
+                        if let Some(screen) = self.screens.get(&active_screen) {
+                            if screen.borrow_mut().key_events(key) {
+                                self.tick().await;
                             }
                         }
                     };
@@ -285,20 +287,9 @@ impl Tui {
                 let app_tree = &self.app_state.app;
                 if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
                 {
-                    match active_screen {
-                        ActiveScreen::NowPlaying => {
-                            if let Some(screen) = self.screens.get(&ActiveScreen::NowPlaying) {
-                                if screen.borrow_mut().mouse_events(m) {
-                                    self.tick().await;
-                                }
-                            }
-                        }
-                        ActiveScreen::Search => {
-                            if let Some(screen) = self.screens.get(&ActiveScreen::Search) {
-                                if screen.borrow_mut().mouse_events(m) {
-                                    self.tick().await;
-                                }
-                            }
+                    if let Some(screen) = self.screens.get(&active_screen) {
+                        if screen.borrow_mut().mouse_events(m) {
+                            self.tick().await;
                         }
                     }
                 }
