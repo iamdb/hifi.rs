@@ -7,7 +7,7 @@ use crate::{
     },
     state::{
         self,
-        app::{AppKey, ClientKey, StateKey},
+        app::{ClientKey, StateKey},
         AudioQuality, StringValue,
     },
     switch_screen, ui, wait, REFRESH_RESOLUTION,
@@ -303,15 +303,15 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
+        #[allow(unused_variables)]
         Commands::MyPlaylists {
             no_tui,
             output_format,
         } => {
             let client = client::new(app_state.clone(), creds).await?;
-            let results = SearchResults::UserPlaylists(client.user_playlists().await?);
 
             if no_tui {
-                output!(results, output_format);
+                println!("nothing to show");
             } else {
                 let player = player::new(app_state.clone(), client.clone(), true).await;
 
@@ -319,7 +319,8 @@ pub async fn run() -> Result<(), Error> {
                     wait!(app_state);
                 } else {
                     let mut tui =
-                        ui::new(app_state, player.controls(), client, Some(results), None)?;
+                        ui::new(app_state.clone(), player.controls(), client, None, None)?;
+                    switch_screen!(app_state, ActiveScreen::Playlists);
                     tui.event_loop().await?;
                 }
             }
@@ -345,7 +346,7 @@ pub async fn run() -> Result<(), Error> {
 
             let track = client.track(track_id).await?;
 
-            player.play_track(track, quality.unwrap()).await;
+            player.play_track(track, Some(quality.unwrap())).await;
 
             if no_tui {
                 wait!(app_state);

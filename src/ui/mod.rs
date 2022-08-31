@@ -32,6 +32,8 @@ use tui::{backend::TermionBackend, Terminal};
 #[macro_export]
 macro_rules! switch_screen {
     ($app_state:expr, $screen:path) => {
+        use $crate::state::app::AppKey;
+        use $crate::state::app::StateKey;
         use $crate::state::ActiveScreen;
 
         $app_state
@@ -111,8 +113,15 @@ pub fn new(
 
     let (tx, rx) = flume::unbounded();
 
-    if search_results.is_some() {
-        switch_screen!(app_state, ActiveScreen::Search);
+    if let Some(search_results) = &search_results {
+        match search_results {
+            SearchResults::UserPlaylists(_) => {
+                switch_screen!(app_state, ActiveScreen::Playlists);
+            }
+            _ => {
+                switch_screen!(app_state, ActiveScreen::Search);
+            }
+        }
     }
 
     let mut screens = HashMap::new();
@@ -262,12 +271,16 @@ impl Tui {
                     if let Some(status) = self.controls.status().await {
                         if status == GstState::Playing.into() {
                             self.controls.pause().await;
+                            std::thread::sleep(Duration::from_secs(1));
                             self.controls.stop().await;
                             self.app_state.quit();
                         } else {
                             self.controls.stop().await;
                             self.app_state.quit();
                         }
+                    } else {
+                        self.controls.stop().await;
+                        self.app_state.quit();
                     }
                 }
                 _ => {

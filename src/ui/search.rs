@@ -4,13 +4,12 @@ use crate::{
         album::{Album, AlbumSearchResults},
         client::Client,
         search_results::SearchResults,
-        track::Track,
     },
     state::app::AppState,
     switch_screen,
     ui::{
         components::{self, ColumnWidth, Table, TableHeaders, TableRows, TableWidths},
-        AppKey, Console, Screen, StateKey,
+        Console, Screen,
     },
 };
 use futures::executor;
@@ -97,29 +96,7 @@ impl SearchScreen {
                     }
                 };
             }
-            // A playlist has been selected from the user's collection,
-            // load the tracks into the list.
-            SearchResults::UserPlaylists(results) => {
-                if let Some(playlist) = results.playlists.items.get(selected) {
-                    if let Ok(mut playlist_info) =
-                        executor::block_on(self.client.playlist(playlist.id.to_string()))
-                    {
-                        playlist_info.reverse();
-                        self.results_table.set_rows(playlist_info.rows());
-                        self.results_table.set_header(Track::headers());
-                        self.results_table.set_widths(Track::widths());
-                        self.results_table.select(0);
-
-                        self.search_results =
-                            Some(SearchResults::Playlist(Box::new(playlist_info)));
-                    }
-                }
-            }
-            SearchResults::Playlist(results) => {
-                debug!("{:?}", results);
-            }
-            SearchResults::Album(_) => todo!(),
-            SearchResults::Artist(_) => todo!(),
+            _ => (),
         }
 
         false

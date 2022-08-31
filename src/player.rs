@@ -47,6 +47,7 @@ pub enum Action {
     JumpForward,
     JumpBackward,
     PlayAlbum { album: Box<Album> },
+    PlayTrack { track: Box<Track> },
 }
 
 /// A player handles playing media to a device.
@@ -472,10 +473,16 @@ impl Player {
         Ok(())
     }
     /// Plays a single track.
-    pub async fn play_track(&mut self, track: Track, quality: AudioQuality) {
+    pub async fn play_track(&mut self, track: Track, quality: Option<AudioQuality>) {
         if self.is_playing() {
             self.stop();
         }
+
+        let quality = if let Some(quality) = quality {
+            quality
+        } else {
+            self.client.quality()
+        };
 
         let playlist_track = PlaylistTrack::new(track, Some(quality.clone()), None);
         self.playlist.lock().await.push_back(playlist_track);
@@ -601,6 +608,7 @@ impl Player {
                         Action::Previous => self.skip_backward(None).await.expect("failed to skip forward"),
                         Action::Stop => self.stop(),
                         Action::PlayAlbum { album } => self.play_album(*album, None).await,
+                        Action::PlayTrack { track } => self.play_track(*track, None).await,
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                     }
@@ -859,6 +867,7 @@ impl Player {
                 None
             }
         } else {
+            debug!("no more tracks left");
             None
         }
     }
@@ -934,6 +943,14 @@ impl Controls {
             self,
             Action::PlayAlbum {
                 album: Box::new(album)
+            }
+        );
+    }
+    pub async fn play_track(&self, track: Track) {
+        action!(
+            self,
+            Action::PlayTrack {
+                track: Box::new(track)
             }
         );
     }

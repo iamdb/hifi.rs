@@ -13,10 +13,10 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols::bar,
-    text::{Span, Spans, Text},
+    text::{Span, Spans},
     widgets::{
         Block, BorderType, Borders, Clear, List as TermList, ListItem, ListState, Paragraph,
-        Row as TermRow, Table as TermTable, TableState, Tabs,
+        Row as TermRow, Table as TermTable, TableState, Tabs, Widget,
     },
     Frame,
 };
@@ -162,30 +162,15 @@ where
 
     f.render_widget(tabs, rect);
 }
-#[allow(unused)]
-fn search_popup<B>(f: &mut Frame<B>, search_query: Vec<char>)
+pub fn popup<B, W>(f: &mut Frame<B>, widget: W, x: u16, y: u16)
 where
     B: Backend,
+    W: Widget,
 {
-    let block = Block::default()
-        .title("Enter query")
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Indexed(250)));
-
-    let p = Paragraph::new(Text::from(Spans::from(
-        search_query
-            .iter()
-            .map(|c| Span::from(c.to_string()))
-            .collect::<Vec<Span>>(),
-    )))
-    .block(block);
-
-    let area = centered_rect(60, 10, f.size());
+    let area = centered_rect(x, y, f.size());
 
     f.render_widget(Clear, area);
-    f.render_widget(p, area);
-    f.set_cursor(area.x + 1 + search_query.len() as u16, area.y + 1);
+    f.render_widget(widget, area);
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
@@ -237,7 +222,6 @@ pub struct List<'t> {
     state: ListState,
 }
 
-#[allow(unused)]
 impl<'t> List<'t> {
     pub fn new(items: Option<Vec<Item<'t>>>) -> List<'t> {
         if let Some(i) = items {
@@ -307,9 +291,12 @@ impl<'t> List<'t> {
         self.state.selected()
     }
 
-    #[allow(unused)]
     pub fn select(&mut self, num: usize) {
         self.state.select(Some(num));
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
     }
 }
 
@@ -317,11 +304,20 @@ impl<'t> List<'t> {
 pub struct Row {
     columns: Vec<String>,
     widths: Vec<ColumnWidth>,
+    dim: bool,
 }
 
 impl Row {
     pub fn new(columns: Vec<String>, widths: Vec<ColumnWidth>) -> Row {
-        Row { columns, widths }
+        Row {
+            columns,
+            widths,
+            dim: false,
+        }
+    }
+
+    pub fn set_dim(&mut self, dim: bool) {
+        self.dim = dim;
     }
 
     pub fn term_row(&self, size: u16) -> TermRow<'_> {
@@ -356,8 +352,14 @@ impl Row {
             .max()
             .unwrap_or(1);
 
+        let row_style = Style::default().fg(Color::White);
+
+        if self.dim {
+            row_style.add_modifier(Modifier::DIM);
+        }
+
         TermRow::new(formatted)
-            .style(Style::default().fg(Color::White))
+            .style(row_style)
             .height(height as u16)
     }
 }
@@ -491,8 +493,11 @@ impl Table {
         self.state.selected()
     }
 
-    #[allow(unused)]
     pub fn select(&mut self, num: usize) {
         self.state.select(Some(num));
+    }
+
+    pub fn len(&self) -> usize {
+        self.rows.len()
     }
 }
