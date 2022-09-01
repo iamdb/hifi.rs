@@ -2,8 +2,10 @@ use crate::{
     action, get_player,
     mpris::{self, MprisPlayer, MprisTrackList},
     qobuz::{
+        self,
         album::Album,
         client::Client,
+        playlist::Playlist,
         track::{PlaylistTrack, Track},
         TrackURL,
     },
@@ -42,12 +44,14 @@ pub enum Action {
     Next,
     Previous,
     Stop,
+    Quit,
     SkipTo { num: usize },
     SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
     PlayAlbum { album: Box<Album> },
     PlayTrack { track: Box<Track> },
+    PlayUri { uri: String },
 }
 
 /// A player handles playing media to a device.
@@ -531,6 +535,65 @@ impl Player {
             self.start(quality).await;
         }
     }
+    /// Play an item from Qobuz web uri
+    pub async fn play_uri(&mut self, uri: String, quality: Option<AudioQuality>) {
+        let quality = if let Some(quality) = quality {
+            quality
+        } else {
+            self.client.quality()
+        };
+
+        if let Some(url) = qobuz::parse_url(uri.as_str()) {
+            match url {
+                qobuz::UrlType::Album { id } => {
+                    if let Ok(album) = self.client.album(id).await {
+                        self.play_album(album, Some(quality)).await;
+                    }
+                }
+                qobuz::UrlType::Playlist { id } => {
+                    if let Ok(playlist) = self.client.playlist(id).await {
+                        self.play_playlist(playlist, Some(quality)).await;
+                    }
+                }
+            }
+        }
+    }
+    pub async fn play_playlist(&mut self, mut playlist: Playlist, quality: Option<AudioQuality>) {
+        if self.is_playing() || self.is_paused() {
+            self.stop();
+        }
+
+        self.clear().await;
+
+        let tracklist = playlist.playlist_tracks(None);
+
+        debug!("creating playlist");
+        for playlist_track in tracklist {
+            self.playlist.lock().await.push_back(playlist_track);
+        }
+
+        let quality = if let Some(quality) = quality {
+            quality
+        } else {
+            self.client.quality()
+        };
+
+        if let Some(tracks) = playlist.tracks {
+            let tracks = tracks
+                .items
+                .iter()
+                .map(|t| t.id.to_string())
+                .collect::<Vec<String>>();
+
+            let current = tracks.first().cloned().unwrap();
+
+            self.dbus_track_list_replaced_signal(tracks, current).await;
+        }
+
+        self.dbus_metadata_changed().await;
+
+        self.start(quality).await;
+    }
     /// Starts the player.
     async fn start(&mut self, quality: AudioQuality) {
         let mut playlist = self.playlist.lock().await;
@@ -609,6 +672,8 @@ impl Player {
                         Action::Stop => self.stop(),
                         Action::PlayAlbum { album } => self.play_album(*album, None).await,
                         Action::PlayTrack { track } => self.play_track(*track, None).await,
+                        Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await,
+                        Action::Quit => self.app_state.quit(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                     }
@@ -920,6 +985,9 @@ impl Controls {
     pub async fn stop(&self) {
         action!(self, Action::Stop);
     }
+    pub async fn quit(&self) {
+        action!(self, Action::Quit)
+    }
     pub async fn next(&self) {
         action!(self, Action::Next);
     }
@@ -945,6 +1013,9 @@ impl Controls {
                 album: Box::new(album)
             }
         );
+    }
+    pub async fn play_uri(&self, uri: String) {
+        action!(self, Action::PlayUri { uri });
     }
     pub async fn play_track(&self, track: Track) {
         action!(

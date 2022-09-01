@@ -36,7 +36,7 @@ pub async fn init(controls: Controls) -> Connection {
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
 impl Mpris {
     async fn quit(&self) -> Result<()> {
-        self.controls.stop().await;
+        self.controls.quit().await;
         Ok(())
     }
 
@@ -77,6 +77,9 @@ pub struct MprisPlayer {
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
+    async fn open_uri(&self, uri: String) {
+        self.controls.play_uri(uri).await;
+    }
     async fn play(&self) {
         self.controls.play().await;
     }
