@@ -2,6 +2,7 @@ use crate::{
     action, get_player,
     mpris::{self, MprisPlayer, MprisTrackList},
     qobuz::{
+        self,
         album::Album,
         client::Client,
         track::{PlaylistTrack, Track},
@@ -42,12 +43,14 @@ pub enum Action {
     Next,
     Previous,
     Stop,
+    Quit,
     SkipTo { num: usize },
     SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
     PlayAlbum { album: Box<Album> },
     PlayTrack { track: Box<Track> },
+    PlayUri { uri: String },
 }
 
 /// A player handles playing media to a device.
@@ -531,6 +534,21 @@ impl Player {
             self.start(quality).await;
         }
     }
+    pub async fn play_uri(&mut self, uri: String) {
+        if let Some(url) = qobuz::parse_url(uri.as_str()) {
+            match url {
+                qobuz::UrlType::Album { id } => {
+                    if let Ok(album) = self.client.album(id).await {
+                        self.play_album(album, Some(self.client.quality())).await;
+                    }
+                }
+                qobuz::UrlType::Playlist { id } => {
+                    debug!("can't play a playlist yet, {}", id);
+                    self.app_state.quit();
+                }
+            }
+        }
+    }
     /// Starts the player.
     async fn start(&mut self, quality: AudioQuality) {
         let mut playlist = self.playlist.lock().await;
@@ -609,6 +627,8 @@ impl Player {
                         Action::Stop => self.stop(),
                         Action::PlayAlbum { album } => self.play_album(*album, None).await,
                         Action::PlayTrack { track } => self.play_track(*track, None).await,
+                        Action::PlayUri { uri } => self.play_uri(uri).await,
+                        Action::Quit => self.app_state.quit(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                     }
@@ -920,6 +940,9 @@ impl Controls {
     pub async fn stop(&self) {
         action!(self, Action::Stop);
     }
+    pub async fn quit(&self) {
+        action!(self, Action::Quit)
+    }
     pub async fn next(&self) {
         action!(self, Action::Next);
     }
@@ -945,6 +968,9 @@ impl Controls {
                 album: Box::new(album)
             }
         );
+    }
+    pub async fn play_uri(&self, uri: String) {
+        action!(self, Action::PlayUri { uri });
     }
     pub async fn play_track(&self, track: Track) {
         action!(

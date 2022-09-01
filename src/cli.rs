@@ -1,7 +1,6 @@
 use crate::{
     player,
     qobuz::{
-        self,
         client::{self, output, Credentials, OutputFormat},
         search_results::SearchResults,
     },
@@ -41,7 +40,7 @@ enum Commands {
         #[clap(long, short)]
         no_tui: bool,
         #[clap(long, short)]
-        url: String,
+        uri: String,
     },
     /// Search for tracks, albums, artists and playlists
     Search {
@@ -193,37 +192,19 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::Play { url, no_tui } => {
+        Commands::Play { uri, no_tui } => {
             let client = client::new(app_state.clone(), creds).await?;
             let mut player = player::new(app_state.clone(), client.clone(), true).await;
-            let mut quit = false;
 
-            if let Some(url) = qobuz::parse_url(url.as_str()) {
-                match url {
-                    qobuz::UrlType::Album { id } => {
-                        if let Ok(album) = client.album(id).await {
-                            player.play_album(album, Some(client.quality())).await;
-                        }
-                    }
-                    qobuz::UrlType::Playlist { id } => {
-                        debug!("can't play a playlist yet, {}", id);
-                        app_state.quit();
-                        quit = true;
-                    }
-                }
-            }
+            player.play_uri(uri).await;
 
-            if quit {
-                Ok(())
+            if no_tui {
+                wait!(app_state);
             } else {
-                if no_tui {
-                    wait!(app_state);
-                } else {
-                    let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
-                    tui.event_loop().await?;
-                }
-                Ok(())
+                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                tui.event_loop().await?;
             }
+            Ok(())
         }
         #[allow(unused)]
         Commands::Search {
