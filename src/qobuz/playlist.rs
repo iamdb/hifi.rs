@@ -3,6 +3,7 @@ use crate::{
         track::{PlaylistTrack, Tracks},
         User,
     },
+    state::AudioQuality,
     ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,24 @@ impl Playlist {
     pub fn reverse(&mut self) {
         if let Some(tracks) = &mut self.tracks {
             tracks.items.reverse();
+        }
+    }
+
+    pub fn playlist_tracks(&mut self, quality: Option<AudioQuality>) -> Vec<PlaylistTrack> {
+        if let Some(tracks) = &self.tracks {
+            tracks
+                .items
+                .iter()
+                .cloned()
+                .map(|i| PlaylistTrack {
+                    track: i,
+                    quality: quality.clone(),
+                    track_url: None,
+                    album: None,
+                })
+                .collect::<Vec<PlaylistTrack>>()
+        } else {
+            vec![]
         }
     }
 }

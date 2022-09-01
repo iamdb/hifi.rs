@@ -196,7 +196,7 @@ pub async fn run() -> Result<(), Error> {
             let client = client::new(app_state.clone(), creds).await?;
             let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
-            player.play_uri(uri).await;
+            player.play_uri(uri, Some(client.quality())).await;
 
             if no_tui {
                 wait!(app_state);
