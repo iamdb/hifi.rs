@@ -1,4 +1,3 @@
-use clap::ValueEnum;
 use hifi_rs::state::app::{ClientKey, StateKey};
 use hifi_rs::{
     get_client,
@@ -635,57 +634,15 @@ impl Client {
     }
 }
 
-macro_rules! _output {
-    ($results:ident, $output_format:expr) => {
-        match $output_format {
-            Some(OutputFormat::Json) => {
-                let json =
-                    serde_json::to_string(&$results).expect("failed to convert results to string");
-
-                print!("{}", json);
-            }
-            Some(OutputFormat::Tsv) => {
-                let formatted_results: Vec<Vec<String>> = $results.into();
-
-                let rows = formatted_results
-                    .iter()
-                    .map(|row| {
-                        let tabbed = row.join("\t");
-
-                        tabbed
-                    })
-                    .collect::<Vec<String>>();
-
-                print!("{}", rows.join("\n"));
-            }
-            None => {
-                let mut table = Table::new();
-                table.load_preset(UTF8_FULL);
-                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-                table.set_header($results.headers());
-
-                let table_rows: Vec<Vec<String>> = $results.into();
-
-                for row in table_rows {
-                    table.add_row(row);
-                }
-
-                print!("{}", table);
-            }
-        }
-    };
-}
-
 use crate::client::album::{Album, AlbumSearchResults};
 use crate::client::artist::{Artist, ArtistSearchResults};
 use crate::client::playlist::{Playlist, UserPlaylistsResult};
 use crate::client::track::Track;
 use crate::client::TrackURL;
 
-#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OutputFormat {
     Json,
-    #[clap(name = "tabs")]
     Tsv,
 }
 
