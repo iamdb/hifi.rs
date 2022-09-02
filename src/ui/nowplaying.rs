@@ -6,7 +6,7 @@ use crate::{
         PlaylistValue,
     },
     ui::{
-        components::{self, Table, TableHeaders, TableRows, TableWidths},
+        components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
         Console, Screen, StateKey,
     },
 };
@@ -52,7 +52,24 @@ impl Screen for NowPlayingScreen {
                 let tree = self.app_state.player.clone();
 
                 if let Some(playlist) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
-                    self.track_list.set_rows(playlist.rows());
+                    let mut rows = playlist.rows();
+
+                    if let Some(prev_playlist) =
+                        get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+                    {
+                        let prev_rows = prev_playlist.rows();
+                        rows.append(
+                            &mut prev_rows
+                                .into_iter()
+                                .map(|mut r| {
+                                    r.set_dim(true);
+                                    r
+                                })
+                                .collect::<Vec<Row>>(),
+                        )
+                    }
+
+                    self.track_list.set_rows(rows);
                     self.track_list.set_header(Track::headers());
                     self.track_list.set_widths(Track::widths());
                 }

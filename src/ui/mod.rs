@@ -271,17 +271,12 @@ impl Tui {
                     if let Some(status) = self.controls.status().await {
                         if status == GstState::Playing.into() {
                             self.controls.pause().await;
-                            std::thread::sleep(Duration::from_secs(1));
-                            self.controls.stop().await;
-                            self.app_state.quit();
-                        } else {
-                            self.controls.stop().await;
-                            self.app_state.quit();
+                            std::thread::sleep(Duration::from_millis(500));
                         }
-                    } else {
-                        self.controls.stop().await;
-                        self.app_state.quit();
                     }
+                    self.controls.stop().await;
+                    std::thread::sleep(Duration::from_millis(500));
+                    self.app_state.quit();
                 }
                 _ => {
                     let app_tree = &self.app_state.app;
