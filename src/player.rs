@@ -11,7 +11,7 @@ use crate::{
     },
     state::{
         app::{AppState, PlayerKey, StateKey},
-        AudioQuality, ClockValue, FloatValue, PlaylistValue, StatusValue,
+        AudioQuality, ClockValue, FloatValue, StatusValue, TrackListValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -60,9 +60,9 @@ pub struct Player {
     /// Used to broadcast the player state out to other components.
     playbin: Element,
     /// List of tracks that will play.
-    playlist: Arc<Mutex<PlaylistValue>>,
+    playlist: Arc<Mutex<TrackListValue>>,
     /// List of tracks that have played.
-    playlist_previous: Arc<Mutex<PlaylistValue>>,
+    playlist_previous: Arc<Mutex<TrackListValue>>,
     /// The app state to save player inforamtion into.
     app_state: AppState,
     /// Qobuz client
@@ -77,8 +77,8 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
     let controls = Controls::new(app_state.clone());
-    let playlist = Arc::new(Mutex::new(PlaylistValue::new()));
-    let playlist_previous = Arc::new(Mutex::new(PlaylistValue::new()));
+    let playlist = Arc::new(Mutex::new(TrackListValue::new()));
+    let playlist_previous = Arc::new(Mutex::new(TrackListValue::new()));
 
     let connection = mpris::init(controls.clone()).await;
 
@@ -135,11 +135,11 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
 
 impl Player {
     /// Set the active playlist.
-    pub fn set_playlist(&mut self, playlist: PlaylistValue) {
+    pub fn set_playlist(&mut self, playlist: TrackListValue) {
         self.playlist = Arc::new(Mutex::new(playlist));
     }
     /// Set the previous playlist.
-    pub fn set_prev_playlist(&mut self, playlist: PlaylistValue) {
+    pub fn set_prev_playlist(&mut self, playlist: TrackListValue) {
         self.playlist_previous = Arc::new(Mutex::new(playlist));
     }
     /// Play the player.
@@ -230,7 +230,7 @@ impl Player {
         let tree = self.app_state.player.clone();
 
         if let (Some(playlist), Some(next_up)) = (
-            get_player!(PlayerKey::Playlist, tree, PlaylistValue),
+            get_player!(PlayerKey::Playlist, tree, TrackListValue),
             get_player!(PlayerKey::NextUp, tree, PlaylistTrack),
         ) {
             let next_track = self.attach_track_url(next_up).await?;
@@ -240,7 +240,7 @@ impl Player {
                 self.set_uri(track_url);
 
                 if let Some(prev_playlist) =
-                    get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+                    get_player!(PlayerKey::PreviousPlaylist, tree, TrackListValue)
                 {
                     self.set_prev_playlist(prev_playlist);
 
@@ -347,12 +347,12 @@ impl Player {
                     next_track_to_play,
                 );
 
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
 
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
@@ -430,11 +430,11 @@ impl Player {
                     next_track_to_play,
                 );
 
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
@@ -518,6 +518,8 @@ impl Player {
                 self.playlist.lock().await.push_back(playlist_track);
             }
 
+            self.playlist.lock().await.set_album(album.clone());
+
             if let Some(tracks) = album.tracks {
                 let tracks = tracks
                     .items
@@ -578,6 +580,8 @@ impl Player {
             self.client.quality()
         };
 
+        self.playlist.lock().await.set_playlist(playlist.clone());
+
         if let Some(tracks) = playlist.tracks {
             let tracks = tracks
                 .items
@@ -617,7 +621,7 @@ impl Player {
                 next_track.clone(),
             );
 
-            self.app_state.player.insert::<String, PlaylistValue>(
+            self.app_state.player.insert::<String, TrackListValue>(
                 StateKey::Player(PlayerKey::Playlist),
                 playlist.clone(),
             );
@@ -915,12 +919,12 @@ impl Player {
                     next_track,
                 );
 
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::Playlist),
                     playlist.clone(),
                 );
 
-                self.app_state.player.insert::<String, PlaylistValue>(
+                self.app_state.player.insert::<String, TrackListValue>(
                     StateKey::Player(PlayerKey::PreviousPlaylist),
                     prev_playlist.clone(),
                 );
@@ -1041,10 +1045,10 @@ impl Controls {
         get_player!(PlayerKey::NextUp, tree, PlaylistTrack)
     }
 
-    pub async fn remaining_tracks(&self) -> Option<PlaylistValue> {
+    pub async fn remaining_tracks(&self) -> Option<TrackListValue> {
         let tree = &self.state.player;
 
-        get_player!(PlayerKey::Playlist, tree, PlaylistValue)
+        get_player!(PlayerKey::Playlist, tree, TrackListValue)
     }
 }
 

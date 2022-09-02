@@ -123,7 +123,7 @@ impl Screen for SearchScreen {
                 components::player(f, layout[0], self.app_state.clone());
 
                 let text = String::from_iter(&self.search_query);
-                components::text_box(f, text, Some("Search"), layout[1]);
+                components::text_box(f, text, Some("Search Artists"), layout[1]);
 
                 if self.enter_search {
                     f.set_cursor(
@@ -140,7 +140,7 @@ impl Screen for SearchScreen {
 
                 self.results_table.set_widths(widths);
 
-                components::table(f, &mut self.results_table, layout[2]);
+                components::table(f, &mut self.results_table, "Search Results", layout[2]);
                 components::tabs(1, f, layout[3]);
             })
             .expect("failed to draw screen");

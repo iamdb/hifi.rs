@@ -84,7 +84,7 @@ where
 }
 
 #[allow(unused)]
-pub fn list<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, area: Rect)
+pub fn list<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, title: &str, area: Rect)
 where
     B: Backend,
 {
@@ -94,6 +94,7 @@ where
         .split(area);
 
     let term_list = TermList::new(list.list_items())
+        .block(Block::default().borders(Borders::ALL).title(title))
         .highlight_style(
             Style::default()
                 .fg(Color::Indexed(81))
@@ -104,7 +105,7 @@ where
     f.render_stateful_widget(term_list, layout[0], &mut list.state);
 }
 
-pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, area: Rect)
+pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, title: &str, area: Rect)
 where
     B: Backend,
 {
@@ -118,7 +119,7 @@ where
                     .fg(Color::Indexed(81)),
             ),
         )
-        .block(Block::default())
+        .block(Block::default().borders(Borders::ALL).title(title))
         .widths(widths.as_slice())
         .style(Style::default().fg(Color::Indexed(250)))
         .highlight_style(

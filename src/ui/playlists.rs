@@ -88,9 +88,18 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                 components::player(f, layout[0], self.app_state.clone());
 
                 if self.show_selected_playlist {
-                    components::table(f, &mut self.selected_playlist_table, layout[1]);
+                    components::table(
+                        f,
+                        &mut self.selected_playlist_table,
+                        format!(
+                            "Browsing playlist: {}",
+                            &self.selected_playlist_result.clone().unwrap().name
+                        )
+                        .as_str(),
+                        layout[1],
+                    );
                 } else {
-                    components::list(f, &mut self.mylists, layout[1]);
+                    components::list(f, &mut self.mylists, "Your Playlists", layout[1]);
                 }
 
                 if self.show_popup {
