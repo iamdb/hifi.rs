@@ -1,4 +1,4 @@
 /target
 /db
 .envrc
-tests/.tests-passed.sentinel
+out
