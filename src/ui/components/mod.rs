@@ -352,10 +352,10 @@ impl Row {
             .max()
             .unwrap_or(1);
 
-        let row_style = Style::default().fg(Color::White);
+        let mut row_style = Style::default().fg(Color::White);
 
         if self.dim {
-            row_style.add_modifier(Modifier::DIM);
+            row_style = Style::default().fg(Color::Indexed(244));
         }
 
         TermRow::new(formatted)
