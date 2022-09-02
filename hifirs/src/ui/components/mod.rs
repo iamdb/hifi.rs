@@ -299,6 +299,10 @@ impl<'t> List<'t> {
     pub fn len(&self) -> usize {
         self.items.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -500,5 +504,9 @@ impl Table {
 
     pub fn len(&self) -> usize {
         self.rows.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty()
     }
 }

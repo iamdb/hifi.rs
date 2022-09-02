@@ -9,10 +9,10 @@ mod mpris;
 mod player;
 mod qobuz;
 #[macro_use]
-mod state;
+pub mod state;
 #[macro_use]
-mod ui;
-mod util;
+pub mod ui;
+pub mod util;
 
 const REFRESH_RESOLUTION: u64 = 500;
 pub const TEST_TEMP_PATH: &str = "/tmp/hifirs_test";
