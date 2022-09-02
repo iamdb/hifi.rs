@@ -1,7 +1,7 @@
 pub mod app;
 
 use crate::{
-    qobuz::track::PlaylistTrack,
+    qobuz::{album::Album, playlist::Playlist, track::PlaylistTrack},
     state::app::StateKey,
     ui::components::{Item, Row, TableRow, TableRows},
 };
@@ -344,28 +344,30 @@ impl From<AudioQuality> for Bytes {
 
 /// A playlist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct PlaylistValue {
+pub struct TrackListValue {
     queue: VecDeque<PlaylistTrack>,
+    album: Option<Album>,
+    playlist: Option<Playlist>,
 }
 
-impl From<Bytes> for PlaylistValue {
+impl From<Bytes> for TrackListValue {
     fn from(bytes: Bytes) -> Self {
-        let deserialized: PlaylistValue =
+        let deserialized: TrackListValue =
             bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
 
         deserialized
     }
 }
 
-impl From<PlaylistValue> for Bytes {
-    fn from(playlist: PlaylistValue) -> Self {
+impl From<TrackListValue> for Bytes {
+    fn from(playlist: TrackListValue) -> Self {
         bincode::serialize(&playlist)
             .expect("failed to serialize playlist")
             .into()
     }
 }
 
-impl TableRows for PlaylistValue {
+impl TableRows for TrackListValue {
     fn rows(&self) -> Vec<Row> {
         self.queue
             .iter()
@@ -374,15 +376,33 @@ impl TableRows for PlaylistValue {
     }
 }
 
-impl PlaylistValue {
-    pub fn new() -> PlaylistValue {
-        PlaylistValue {
+impl TrackListValue {
+    pub fn new() -> TrackListValue {
+        TrackListValue {
             queue: VecDeque::new(),
+            album: None,
+            playlist: None,
         }
     }
 
     pub fn clear(&mut self) {
         self.queue.clear();
+    }
+
+    pub fn set_album(&mut self, album: Album) {
+        self.album = Some(album);
+    }
+
+    pub fn get_album(&self) -> Option<&Album> {
+        self.album.as_ref()
+    }
+
+    pub fn set_playlist(&mut self, playlist: Playlist) {
+        self.playlist = Some(playlist);
+    }
+
+    pub fn get_playlist(&self) -> Option<&Playlist> {
+        self.playlist.as_ref()
     }
 
     pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {

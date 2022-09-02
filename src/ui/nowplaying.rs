@@ -3,7 +3,7 @@ use crate::{
     qobuz::track::Track,
     state::{
         app::{AppState, PlayerKey},
-        PlaylistValue,
+        TrackListValue,
     },
     ui::{
         components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
@@ -50,12 +50,13 @@ impl Screen for NowPlayingScreen {
                 components::player(f, split_layout[0], self.app_state.clone());
 
                 let tree = self.app_state.player.clone();
+                let mut title = "Now Playing".to_string();
 
-                if let Some(playlist) = get_player!(PlayerKey::Playlist, tree, PlaylistValue) {
-                    let mut rows = playlist.rows();
+                if let Some(tracklist) = get_player!(PlayerKey::Playlist, tree, TrackListValue) {
+                    let mut rows = tracklist.rows();
 
                     if let Some(prev_playlist) =
-                        get_player!(PlayerKey::PreviousPlaylist, tree, PlaylistValue)
+                        get_player!(PlayerKey::PreviousPlaylist, tree, TrackListValue)
                     {
                         let prev_rows = prev_playlist.rows();
                         rows.append(
@@ -72,9 +73,17 @@ impl Screen for NowPlayingScreen {
                     self.track_list.set_rows(rows);
                     self.track_list.set_header(Track::headers());
                     self.track_list.set_widths(Track::widths());
+
+                    title = if let Some(album) = tracklist.get_album() {
+                        format!("Now Playing: {}", album.title)
+                    } else if let Some(playlist) = tracklist.get_playlist() {
+                        format!("Now Playing: {}", playlist.name)
+                    } else {
+                        "Now Playing".to_string()
+                    };
                 }
 
-                components::table(f, &mut self.track_list, split_layout[1]);
+                components::table(f, &mut self.track_list, title.as_str(), split_layout[1]);
                 components::tabs(0, f, split_layout[2]);
             })
             .expect("failed to draw screen");
