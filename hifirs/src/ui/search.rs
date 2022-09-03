@@ -1,10 +1,5 @@
 use crate::{
     player::Controls,
-    qobuz::{
-        album::{Album, AlbumSearchResults},
-        client::Client,
-        search_results::SearchResults,
-    },
     state::app::AppState,
     switch_screen,
     ui::{
@@ -13,6 +8,11 @@ use crate::{
     },
 };
 use futures::executor;
+use qobuz_client::client::{
+    album::{Album, AlbumSearchResults},
+    api::Client,
+    search_results::SearchResults,
+};
 use termion::event::{Key, MouseButton, MouseEvent};
 use tui::layout::{Constraint, Direction, Layout};
 

@@ -1,4 +1,3 @@
-use hifi_rs::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
 use serde::{Deserialize, Serialize};
 
 use crate::client::{album::Albums, Image};
@@ -23,12 +22,6 @@ pub struct Artists {
     pub items: Vec<Artist>,
 }
 
-impl TableRows for Artists {
-    fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|t| t.row()).collect::<Vec<Row>>()
-    }
-}
-
 impl From<Artists> for Vec<Vec<String>> {
     fn from(artists: Artists) -> Self {
         artists
@@ -50,26 +43,8 @@ pub struct Artist {
 }
 
 impl Artist {
-    fn columns(&self) -> Vec<String> {
+    pub fn columns(&self) -> Vec<String> {
         vec![self.name.clone()]
-    }
-}
-
-impl TableWidths for Artist {
-    fn widths() -> Vec<ColumnWidth> {
-        vec![ColumnWidth::new(100)]
-    }
-}
-
-impl TableRow for Artist {
-    fn row(&self) -> Row {
-        Row::new(self.columns(), Artist::widths())
-    }
-}
-
-impl TableHeaders for Artist {
-    fn headers() -> Vec<String> {
-        vec!["Name".to_string()]
     }
 }
 

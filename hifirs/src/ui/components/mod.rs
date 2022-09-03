@@ -1,12 +1,10 @@
 mod player;
 
-use crate::{
-    qobuz::track::PlaylistTrack,
-    state::{
-        app::{AppState, PlayerKey, StateKey},
-        ClockValue, FloatValue, StatusValue,
-    },
+use crate::state::{
+    app::{AppState, PlayerKey, StateKey},
+    ClockValue, FloatValue, StatusValue,
 };
+use qobuz_client::client::track::PlaylistTrack;
 use textwrap::fill;
 use tui::{
     backend::Backend,

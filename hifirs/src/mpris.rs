@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{player::Controls, qobuz::track::PlaylistTrack};
+use crate::player::Controls;
 use gstreamer::ClockTime;
+use qobuz_client::client::track::PlaylistTrack;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]

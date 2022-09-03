@@ -1,9 +1,13 @@
 use crate::{
-    qobuz::{playlist::Playlist, track::Track},
     switch_screen,
     ui::components::{Table, TableHeaders, TableRows, TableWidths},
 };
 use futures::executor;
+use qobuz_client::client::{
+    api::Client,
+    playlist::{Playlist, UserPlaylistsResult},
+    track::Track,
+};
 use termion::event::{Key, MouseEvent};
 use tui::{
     layout::{Constraint, Direction, Layout},
@@ -14,7 +18,6 @@ use tui::{
 
 use crate::{
     player::Controls,
-    qobuz::{client::Client, playlist::UserPlaylistsResult},
     state::app::AppState,
     ui::{
         components::{self, Item, List},

@@ -1,8 +1,3 @@
-use hifi_rs::state::app::{ClientKey, StateKey};
-use hifi_rs::{
-    get_client,
-    state::{app::AppState, AudioQuality, StringValue},
-};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method, Response, StatusCode,
@@ -80,21 +75,25 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Debug, Clone)]
 pub struct Client {
     secrets: HashMap<String, String>,
-    active_secret: Option<StringValue>,
-    app_id: Option<StringValue>,
-    username: Option<StringValue>,
-    password: Option<StringValue>,
+    active_secret: Option<String>,
+    app_id: Option<String>,
+    credentials: Option<Credentials>,
     base_url: String,
     client: reqwest::Client,
     default_quality: AudioQuality,
-    user_token: Option<StringValue>,
+    user_token: Option<String>,
     bundle_regex: regex::Regex,
     app_id_regex: regex::Regex,
     seed_regex: regex::Regex,
-    state: AppState,
 }
 
-pub async fn new(state: AppState, creds: Credentials) -> Result<Client> {
+pub async fn new(
+    credentials: Option<Credentials>,
+    active_secret: Option<String>,
+    app_id: Option<String>,
+    audio_quality: Option<AudioQuality>,
+    user_token: Option<String>,
+) -> Result<Client> {
     let mut headers = HeaderMap::new();
     headers.insert(
             "User-Agent",
@@ -110,30 +109,26 @@ pub async fn new(state: AppState, creds: Credentials) -> Result<Client> {
         .build()
         .unwrap();
 
-    let tree = state.config.clone();
-    let default_quality =
-        if let Some(quality) = get_client!(ClientKey::DefaultQuality, tree, AudioQuality) {
-            quality
-        } else {
-            AudioQuality::Mp3
-        };
+    let default_quality = if let Some(quality) = audio_quality {
+        quality
+    } else {
+        AudioQuality::Mp3
+    };
 
     Client {
         client,
         secrets: HashMap::new(),
-        active_secret: None,
-        user_token: None,
-        app_id: None,
-        username: None,
-        state,
-        password: None,
+        active_secret,
+        user_token,
+        credentials,
+        app_id,
         default_quality,
         base_url: "https://www.qobuz.com/api.json/0.2/".to_string(),
         bundle_regex: regex::Regex::new(BUNDLE_REGEX).unwrap(),
         app_id_regex: regex::Regex::new(APP_REGEX).unwrap(),
         seed_regex: regex::Regex::new(SEED_REGEX).unwrap(),
     }
-    .setup(creds)
+    .setup()
     .await
 }
 
@@ -188,27 +183,14 @@ impl Client {
     pub fn quality(&self) -> AudioQuality {
         self.default_quality.clone()
     }
+
     /// Setup app_id, secret and user credentials for authentication
-    pub async fn setup(&mut self, creds: Credentials) -> Result<Self> {
+    pub async fn setup(&mut self) -> Result<Self> {
         info!("setting up the api client");
 
         let mut refresh_config = false;
-        let tree = self.state.config.clone();
 
-        if let Some(app_id) = get_client!(ClientKey::AppID, tree, StringValue) {
-            info!("using app_id from cache: {}", app_id);
-            self.set_app_id(Some(app_id));
-        } else {
-            self.set_app_id(None);
-            refresh_config = true;
-        }
-
-        if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
-            info!("using app_secret from cache: {}", active_secret);
-            self.set_active_secret(Some(active_secret));
-        } else {
-            self.set_active_secret(None);
-            self.set_app_id(None);
+        if self.app_id.is_none() || self.active_secret.is_none() {
             refresh_config = true;
         }
 
@@ -217,42 +199,7 @@ impl Client {
             self.test_secrets().await.expect("failed to get secrets");
         }
 
-        if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
-            info!("using token from cache");
-            self.set_token(token);
-
-            Ok(self.clone())
-        } else {
-            if let Some(u) = creds.username {
-                debug!("using username from cli argument: {}", u);
-                self.set_username(u.into());
-            } else if let Some(u) = get_client!(ClientKey::Username, tree, StringValue) {
-                debug!("using username stored in database: {}", u);
-                self.set_username(u);
-            } else {
-                return Err(Error::NoUsername);
-            }
-
-            if let Some(p) = creds.password {
-                debug!("using password from cli argument: {}", p);
-                self.set_password(p.into());
-            } else if let Some(p) = get_client!(ClientKey::Password, tree, StringValue) {
-                debug!("using password stored in database: {}", p);
-                self.set_password(p);
-            } else {
-                return Err(Error::NoPassword);
-            }
-
-            if self.username.is_some() && self.password.is_some() {
-                if self.login().await.is_ok() {
-                    Ok(self.clone())
-                } else {
-                    Err(Error::Login)
-                }
-            } else {
-                Err(Error::Create)
-            }
-        }
+        Ok(self.clone())
     }
 
     /// Login a user
@@ -260,10 +207,16 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
         let app_id = self.app_id.clone().unwrap();
         let username = self
+            .credentials
+            .as_ref()
+            .unwrap()
             .username
             .clone()
             .expect("tried to login without username.");
         let password = self
+            .credentials
+            .as_ref()
+            .unwrap()
             .password
             .clone()
             .expect("tried to login without password.");
@@ -287,11 +240,7 @@ impl Client {
                 let mut token = json["user_auth_token"].to_string();
                 token = token[1..token.len() - 1].to_string();
 
-                self.user_token = Some(token.clone().into());
-                self.state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::Token),
-                    token.into(),
-                );
+                self.user_token = Some(token);
                 Ok(())
             }
             Err(_) => Err(Error::Login),
@@ -338,7 +287,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::TrackURL.as_str());
         let now = format!("{}", chrono::Utc::now().timestamp());
         let secret = if let Some(secret) = sec {
-            StringValue::from(secret)
+            secret
         } else if let Some(secret) = &self.active_secret {
             secret.clone()
         } else {
@@ -453,28 +402,23 @@ impl Client {
     }
 
     // Set a user access token for authentication
-    fn set_token(&mut self, token: StringValue) {
+    fn set_token(&mut self, token: String) {
         self.user_token = Some(token);
     }
 
     // Set a username for authentication
-    fn set_username(&mut self, username: StringValue) {
-        self.username = Some(username);
-    }
-
-    // Set a password for authentication
-    fn set_password(&mut self, password: StringValue) {
-        self.password = Some(password);
+    fn set_credentials(&mut self, credentials: Credentials) {
+        self.credentials = Some(credentials);
     }
 
     // Set an app_id for authentication
-    fn set_app_id(&mut self, app_id: Option<StringValue>) {
-        self.app_id = app_id;
+    fn set_app_id(&mut self, app_id: String) {
+        self.app_id = Some(app_id);
     }
 
     // Set an app secret for authentication
-    fn set_active_secret(&mut self, active_secret: Option<StringValue>) {
-        self.active_secret = active_secret;
+    fn set_active_secret(&mut self, active_secret: String) {
+        self.active_secret = Some(active_secret);
     }
 
     // Call the api and retrieve the JSON payload
@@ -556,15 +500,11 @@ impl Client {
         let bundle_contents = bundle_page.text().await.unwrap();
 
         if let Some(captures) = self.app_id_regex.captures(bundle_contents.as_str()) {
-            let app_id: StringValue = captures
+            let app_id = captures
                 .name("app_id")
-                .map_or("".to_string(), |m| m.as_str().to_string())
-                .into();
+                .map_or("".to_string(), |m| m.as_str().to_string());
 
             self.app_id = Some(app_id.clone());
-            self.state
-                .config
-                .insert::<String, StringValue>(StateKey::Client(ClientKey::AppID), app_id.clone());
 
             let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 
@@ -572,9 +512,9 @@ impl Client {
                 let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
                 let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-                let info_regex = format!(format_info!(), hifi_rs::util::capitalize(&timezone));
-                let info_regex_str = info_regex.as_str();
-                regex::Regex::new(info_regex_str)
+                //let info_regex = format!(format_info!(), hifi_rs::util::capitalize(&timezone));
+                let info_regex = &timezone;
+                regex::Regex::new(info_regex)
                     .unwrap()
                     .captures_iter(bundle_contents.as_str())
                     .for_each(|c| {
@@ -615,10 +555,6 @@ impl Client {
             if response.is_ok() {
                 debug!("found good secret: {}\t{}", timezone, secret);
                 let secret_string = secret.to_string();
-                self.state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::ActiveSecret),
-                    secret_string.clone().into(),
-                );
                 active_secret = Some(secret_string);
 
                 break;
@@ -626,7 +562,7 @@ impl Client {
         }
 
         if let Some(secret) = active_secret {
-            self.set_active_secret(Some(secret.into()));
+            self.set_active_secret(secret);
             Ok(())
         } else {
             Err(Error::ActiveSecret)
@@ -634,11 +570,14 @@ impl Client {
     }
 }
 
-use crate::client::album::{Album, AlbumSearchResults};
 use crate::client::artist::{Artist, ArtistSearchResults};
 use crate::client::playlist::{Playlist, UserPlaylistsResult};
 use crate::client::track::Track;
 use crate::client::TrackURL;
+use crate::client::{
+    album::{Album, AlbumSearchResults},
+    AudioQuality,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum OutputFormat {
@@ -648,21 +587,14 @@ pub enum OutputFormat {
 
 #[tokio::test]
 async fn can_use_methods() {
-    use crate::TEST_TEMP_PATH;
-    use nanoid::nanoid;
-    use std::{path::PathBuf, str::FromStr};
     use tokio_test::assert_ok;
 
-    let id = nanoid!();
-    let path_string = format!("{}_{}", TEST_TEMP_PATH, id);
-    let path = PathBuf::from_str(path_string.as_str()).expect("failed to create path");
-    let app_state = hifi_rs::state::app::new(path.clone()).expect("failed to create database");
     let creds = Credentials {
         username: Some(env!("QOBUZ_USERNAME").to_string()),
         password: Some(env!("QOBUZ_PASSWORD").to_string()),
     };
 
-    let client = new(app_state.clone(), creds.clone())
+    let client = new(Some(creds.clone()), None, None, None, None)
         .await
         .expect("failed to create client");
 

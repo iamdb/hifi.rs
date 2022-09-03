@@ -1,17 +1,9 @@
 use crate::{
     action, get_player,
     mpris::{self, MprisPlayer, MprisTrackList},
-    qobuz::{
-        self,
-        album::Album,
-        client::Client,
-        playlist::Playlist,
-        track::{PlaylistTrack, Track},
-        TrackURL,
-    },
     state::{
         app::{AppState, PlayerKey, StateKey},
-        AudioQuality, ClockValue, FloatValue, StatusValue, TrackListValue,
+        ClockValue, FloatValue, StatusValue, TrackListValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -19,6 +11,14 @@ use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
+use qobuz_client::client::{
+    self,
+    album::Album,
+    api::Client,
+    playlist::Playlist,
+    track::{PlaylistTrack, Track},
+    AudioQuality, TrackURL,
+};
 use snafu::prelude::*;
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::{select, sync::Mutex};
@@ -545,14 +545,14 @@ impl Player {
             self.client.quality()
         };
 
-        if let Some(url) = qobuz::parse_url(uri.as_str()) {
+        if let Some(url) = client::parse_url(uri.as_str()) {
             match url {
-                qobuz::UrlType::Album { id } => {
+                client::UrlType::Album { id } => {
                     if let Ok(album) = self.client.album(id).await {
                         self.play_album(album, Some(quality)).await;
                     }
                 }
-                qobuz::UrlType::Playlist { id } => {
+                client::UrlType::Playlist { id } => {
                     if let Ok(playlist) = self.client.playlist(id).await {
                         self.play_playlist(playlist, Some(quality)).await;
                     }

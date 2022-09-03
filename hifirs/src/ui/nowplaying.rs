@@ -1,6 +1,5 @@
 use crate::{
     player::Controls,
-    qobuz::track::Track,
     state::{
         app::{AppState, PlayerKey},
         TrackListValue,
@@ -11,6 +10,7 @@ use crate::{
     },
 };
 use futures::executor;
+use qobuz_client::client::track::Track;
 use termion::event::{Key, MouseEvent};
 use tui::layout::{Constraint, Direction, Layout};
 

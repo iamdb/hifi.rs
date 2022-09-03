@@ -1,26 +1,13 @@
-use hifi_rs::ui::components::TableRow;
-use hifi_rs::{
-    state::AudioQuality,
-    ui::components::{ColumnWidth, Row, TableHeaders, TableRows, TableWidths},
-};
-use serde::{Deserialize, Serialize};
-use sled::IVec;
-
 use crate::client::{
     track::{PlaylistTrack, Tracks},
-    User,
+    AudioQuality, User,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserPlaylistsResult {
     pub user: User,
     pub playlists: Playlists,
-}
-
-impl TableHeaders for UserPlaylistsResult {
-    fn headers() -> Vec<String> {
-        vec!["Title".to_string()]
-    }
 }
 
 impl From<UserPlaylistsResult> for Vec<Vec<String>> {
@@ -123,12 +110,6 @@ impl From<Playlists> for Vec<Vec<String>> {
     }
 }
 
-impl TableRows for Playlists {
-    fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|t| t.into()).collect::<Vec<Row>>()
-    }
-}
-
 impl From<Playlist> for Vec<String> {
     fn from(playlist: Playlist) -> Self {
         vec![playlist.name]
@@ -153,44 +134,5 @@ impl From<Box<Playlist>> for Vec<Vec<String>> {
     }
 }
 
-impl From<&Playlist> for Row {
-    fn from(playlist: &Playlist) -> Self {
-        let strings: Vec<String> = playlist.into();
-
-        Row::new(strings, Playlist::widths())
-    }
-}
-
-impl TableHeaders for Playlist {
-    fn headers() -> Vec<String> {
-        vec!["Title".to_string()]
-    }
-}
-
-impl TableRows for Playlist {
-    fn rows(&self) -> Vec<Row> {
-        if let Some(tracks) = &self.tracks {
-            tracks.items.iter().map(|i| i.row()).collect::<Vec<Row>>()
-        } else {
-            vec![]
-        }
-    }
-}
-
-impl TableWidths for Playlist {
-    fn widths() -> Vec<ColumnWidth> {
-        vec![ColumnWidth::new(50), ColumnWidth::new(50)]
-    }
-}
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct PlaylistTracks(Vec<PlaylistTrack>);
-
-impl From<IVec> for PlaylistTracks {
-    fn from(ivec: IVec) -> Self {
-        let deserialized: PlaylistTracks =
-            bincode::deserialize(&ivec).expect("failed to deserialize playlist tracks");
-
-        deserialized
-    }
-}

@@ -1,20 +1,10 @@
-use hifi_rs::{
-    state::AudioQuality,
-    ui::components::{ColumnWidth, Item, Row, TableHeaders, TableRow, TableRows, TableWidths},
-};
-use serde::{Deserialize, Serialize};
-use tui::{
-    style::{Color, Modifier, Style},
-    text::Text,
-    widgets::ListItem,
-};
-
 use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
     track::{PlaylistTrack, Tracks},
-    Composer, Image,
+    AudioQuality, Composer, Image,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Album {
@@ -73,31 +63,6 @@ pub struct Album {
     pub version: Option<String>,
 }
 
-impl TableWidths for Album {
-    fn widths() -> Vec<ColumnWidth> {
-        vec![
-            ColumnWidth::new(44),
-            ColumnWidth::new(44),
-            ColumnWidth::new(12),
-        ]
-    }
-}
-
-impl TableHeaders for Album {
-    fn headers() -> Vec<String> {
-        vec!["Title", "Artist", "Year"]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-    }
-}
-
-impl TableRow for Album {
-    fn row(&self) -> Row {
-        Row::new(self.columns(), Album::widths())
-    }
-}
-
 impl Album {
     pub fn to_playlist_tracklist(&self, quality: AudioQuality) -> Option<Vec<PlaylistTrack>> {
         self.tracks.as_ref().map(|t| {
@@ -113,7 +78,7 @@ impl Album {
         }
     }
 
-    fn columns(&self) -> Vec<String> {
+    pub fn columns(&self) -> Vec<String> {
         let hires_icon = if self.hires_streamable { "*" } else { "" };
         let parental_icon = if self.parental_warning { "e" } else { "" };
 
@@ -151,12 +116,6 @@ pub struct Albums {
     pub items: Vec<Album>,
 }
 
-impl TableRows for Albums {
-    fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|t| t.row()).collect::<Vec<Row>>()
-    }
-}
-
 impl Albums {
     pub fn sort_by_date(&mut self) {
         self.items.sort_by(|a, b| {
@@ -171,26 +130,26 @@ impl Albums {
                 )
         });
     }
-    pub fn item_list(&self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
-        self.items
-            .iter()
-            .map(|t| {
-                let title = textwrap::wrap(
-                    format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
-                    max_width,
-                )
-                .join("\n  ");
-
-                let mut style = Style::default().fg(Color::White);
-
-                if dim {
-                    style = style.add_modifier(Modifier::DIM);
-                }
-
-                ListItem::new(Text::raw(title)).style(style).into()
-            })
-            .collect::<Vec<Item>>()
-    }
+    // pub fn item_list(&self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
+    //     self.items
+    //         .iter()
+    //         .map(|t| {
+    //             let title = textwrap::wrap(
+    //                 format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
+    //                 max_width,
+    //             )
+    //             .join("\n  ");
+    //
+    //             let mut style = Style::default().fg(Color::White);
+    //
+    //             if dim {
+    //                 style = style.add_modifier(Modifier::DIM);
+    //             }
+    //
+    //             ListItem::new(Text::raw(title)).style(style).into()
+    //         })
+    //         .collect::<Vec<Item>>()
+    // }
 }
 
 impl From<Albums> for Vec<Vec<String>> {

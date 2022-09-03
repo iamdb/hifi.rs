@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 pub mod album;
 pub mod artist;
-pub mod client;
 pub mod playlist;
 pub mod search_results;
 pub mod track;

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 pub mod album;
@@ -44,6 +46,21 @@ pub struct User {
 pub enum UrlType {
     Album { id: String },
     Playlist { id: String },
+}
+
+/// The audio quality as defined by the Qobuz API.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AudioQuality {
+    Mp3 = 5,
+    CD = 6,
+    HIFI96 = 7,
+    HIFI192 = 27,
+}
+
+impl Display for AudioQuality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.clone() as u32))
+    }
 }
 
 pub fn parse_url(string_url: &str) -> Option<UrlType> {

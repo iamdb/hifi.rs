@@ -1,12 +1,7 @@
 use gstreamer::ClockTime;
-use hifi_rs::state::Bytes;
-use hifi_rs::{
-    state::AudioQuality,
-    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
-};
 use serde::{Deserialize, Serialize};
 
-use crate::client::{album::Album, TrackURL};
+use crate::client::{album::Album, AudioQuality, TrackURL};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tracks {
@@ -14,12 +9,6 @@ pub struct Tracks {
     pub limit: i64,
     pub total: i64,
     pub items: Vec<Track>,
-}
-
-impl TableRows for Tracks {
-    fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|i| i.row()).collect::<Vec<Row>>()
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -56,7 +45,7 @@ pub struct Track {
 }
 
 impl Track {
-    fn columns(&self) -> Vec<String> {
+    pub fn columns(&self) -> Vec<String> {
         let duration = ClockTime::from_seconds(self.duration as u64)
             .to_string()
             .as_str()[3..7]
@@ -71,37 +60,9 @@ impl Track {
     }
 }
 
-impl TableHeaders for Track {
-    fn headers() -> Vec<String> {
-        vec![
-            "#".to_string(),
-            "Title".to_string(),
-            "Artist".to_string(),
-            "Len".to_string(),
-        ]
-    }
-}
-
-impl TableWidths for Track {
-    fn widths() -> Vec<ColumnWidth> {
-        vec![
-            ColumnWidth::new(4),
-            ColumnWidth::new(46),
-            ColumnWidth::new(36),
-            ColumnWidth::new(14),
-        ]
-    }
-}
-
 impl From<Track> for Vec<u8> {
     fn from(track: Track) -> Self {
         bincode::serialize(&track).expect("failed to serialize track")
-    }
-}
-
-impl TableRow for Track {
-    fn row(&self) -> Row {
-        Row::new(self.columns(), Track::widths())
     }
 }
 
@@ -111,15 +72,6 @@ pub struct PlaylistTrack {
     pub quality: Option<AudioQuality>,
     pub track_url: Option<TrackURL>,
     pub album: Option<Album>,
-}
-
-impl From<Bytes> for PlaylistTrack {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: PlaylistTrack =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize playlist track");
-
-        deserialized
-    }
 }
 
 impl PlaylistTrack {

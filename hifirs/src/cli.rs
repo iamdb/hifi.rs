@@ -1,19 +1,20 @@
 use crate::{
     player,
-    qobuz::{
-        client::{self, output, Credentials, OutputFormat},
-        search_results::SearchResults,
-    },
     state::{
         self,
         app::{ClientKey, StateKey},
-        AudioQuality, StringValue,
+        StringValue,
     },
     switch_screen, ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
-use comfy_table::{presets::UTF8_FULL, Table};
+//use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
+use qobuz_client::client::{
+    api::{self, Credentials, OutputFormat},
+    search_results::SearchResults,
+    AudioQuality,
+};
 use snafu::prelude::*;
 
 #[derive(Parser)]
@@ -130,7 +131,7 @@ pub enum ConfigCommands {
 pub enum Error {
     #[snafu(display("Client Error: {error}"))]
     ClientError {
-        error: client::Error,
+        error: api::Error,
     },
     PlayerError {
         error: player::Error,
@@ -140,8 +141,8 @@ pub enum Error {
     },
 }
 
-impl From<client::Error> for Error {
-    fn from(error: client::Error) -> Self {
+impl From<api::Error> for Error {
+    fn from(error: api::Error) -> Self {
         Error::ClientError { error }
     }
 }
@@ -178,7 +179,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let player = player::new(app_state.clone(), client.clone(), true).await;
 
             player.play();
@@ -193,7 +194,7 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
             player.play_uri(uri, Some(client.quality())).await;
@@ -212,7 +213,7 @@ pub async fn run() -> Result<(), Error> {
             limit,
             output_format,
         } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
 
             match client.search_all(query).await {
                 Ok(results) => {
@@ -229,7 +230,7 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
@@ -259,7 +260,7 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let results =
                 SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
 
@@ -289,7 +290,7 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
 
             if no_tui {
                 println!("nothing to show");
@@ -309,7 +310,7 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Playlist { playlist_id } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let results = client.playlist(playlist_id).await?;
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
@@ -322,7 +323,7 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let client = client::new(app_state.clone(), creds).await?;
+            let client = api::new(Some(creds), None, None, None, None).await?;
             let mut player = player::new(app_state.clone(), client.clone(), false).await;
 
             let track = client.track(track_id).await?;
@@ -343,7 +344,7 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let client = client::new(app_state.clone(), creds)
+            let client = api::new(Some(creds), None, None, None, None)
                 .await
                 .expect("failed to create client");
 

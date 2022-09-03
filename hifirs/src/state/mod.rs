@@ -1,13 +1,13 @@
 pub mod app;
 
 use crate::{
-    qobuz::{album::Album, playlist::Playlist, track::PlaylistTrack},
     state::app::StateKey,
     ui::components::{Item, Row, TableRow, TableRows},
 };
 use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
+use qobuz_client::client::{album::Album, playlist::Playlist, track::PlaylistTrack, AudioQuality};
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Tree};
 use std::{
@@ -310,21 +310,6 @@ impl Bytes {
     }
 }
 
-/// The audio quality as defined by the Qobuz API.
-#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
-pub enum AudioQuality {
-    Mp3 = 5,
-    CD = 6,
-    HIFI96 = 7,
-    HIFI192 = 27,
-}
-
-impl Display for AudioQuality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.clone() as u32))
-    }
-}
-
 impl From<Bytes> for AudioQuality {
     fn from(bytes: Bytes) -> Self {
         let deserialized: AudioQuality =
@@ -339,6 +324,15 @@ impl From<AudioQuality> for Bytes {
         bincode::serialize(&audio_quality)
             .expect("failed to serialize audio quality")
             .into()
+    }
+}
+
+impl From<Bytes> for PlaylistTrack {
+    fn from(bytes: Bytes) -> Self {
+        let deserialized: PlaylistTrack =
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize playlist track");
+
+        deserialized
     }
 }
 
