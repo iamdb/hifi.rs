@@ -1,6 +1,6 @@
 use crate::{
     player,
-    qobuz::SearchResults,
+    qobuz::{self, SearchResults},
     state::{
         self,
         app::{ClientKey, StateKey},
@@ -172,14 +172,20 @@ pub async fn run() -> Result<(), Error> {
     let app_state = state::app::new(base_dir).expect("failed to setup database");
 
     let creds = Credentials {
-        username: cli.username,
-        password: cli.password,
+        username: cli.username.clone(),
+        password: cli.password.clone(),
     };
+
+    let client = api::new(Some(creds.clone()), None, None, None, None).await?;
+
+    if cli.username.is_none() && cli.password.is_none() {
+        debug!("setting up qobuz client");
+        qobuz::setup_client(client.clone(), app_state.clone()).await;
+    }
 
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let player = player::new(app_state.clone(), client.clone(), true).await;
 
             player.play();
@@ -194,7 +200,6 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let mut player = player::new(app_state.clone(), client.clone(), true).await;
 
             player.play_uri(uri, Some(client.quality())).await;
@@ -213,8 +218,6 @@ pub async fn run() -> Result<(), Error> {
             limit,
             output_format,
         } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
-
             match client.search_all(query).await {
                 Ok(results) => {
                     //let json = serde_json::to_string(&results);
@@ -230,7 +233,6 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
@@ -260,7 +262,6 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let results =
                 SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
 
@@ -290,8 +291,6 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
-
             if no_tui {
                 println!("nothing to show");
             } else {
@@ -310,7 +309,6 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Playlist { playlist_id } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let results = client.playlist(playlist_id).await?;
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
@@ -323,7 +321,6 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let client = api::new(Some(creds), None, None, None, None).await?;
             let mut player = player::new(app_state.clone(), client.clone(), false).await;
 
             let track = client.track(track_id).await?;
@@ -344,10 +341,6 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let client = api::new(Some(creds), None, None, None, None)
-                .await
-                .expect("failed to create client");
-
             let album = client.album(album_id).await?;
 
             let quality = if let Some(q) = quality {

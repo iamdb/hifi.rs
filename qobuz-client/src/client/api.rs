@@ -20,10 +20,25 @@ macro_rules! format_info {
     };
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credentials {
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+impl From<Vec<u8>> for Credentials {
+    fn from(bytes: Vec<u8>) -> Self {
+        let deserialized: Credentials =
+            bincode::deserialize(&bytes).expect("failed to deserialize status value");
+
+        deserialized
+    }
+}
+
+impl From<Credentials> for Vec<u8> {
+    fn from(creds: Credentials) -> Self {
+        bincode::serialize(&creds).expect("failed to serialize string value")
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -116,7 +131,7 @@ pub async fn new(
         AudioQuality::Mp3
     };
 
-    Client {
+    Ok(Client {
         client,
         secrets: HashMap::new(),
         active_secret,
@@ -128,9 +143,7 @@ pub async fn new(
         bundle_regex: regex::Regex::new(BUNDLE_REGEX).unwrap(),
         app_id_regex: regex::Regex::new(APP_REGEX).unwrap(),
         seed_regex: regex::Regex::new(SEED_REGEX).unwrap(),
-    }
-    .setup()
-    .await
+    })
 }
 
 #[non_exhaustive]
@@ -203,11 +216,14 @@ impl Client {
 
         if self.credentials.is_none() {
             error!("credentials missing");
-        } else {
-            self.login().await;
         }
 
         Ok(self.clone())
+    }
+
+    pub async fn refresh(&mut self) {
+        self.get_config().await.expect("failed to get config");
+        self.test_secrets().await.expect("failed to get secrets");
     }
 
     /// Login a user
@@ -410,22 +426,22 @@ impl Client {
     }
 
     // Set a user access token for authentication
-    fn set_token(&mut self, token: String) {
+    pub fn set_token(&mut self, token: String) {
         self.user_token = Some(token);
     }
 
     // Set a username for authentication
-    fn set_credentials(&mut self, credentials: Credentials) {
+    pub fn set_credentials(&mut self, credentials: Credentials) {
         self.credentials = Some(credentials);
     }
 
     // Set an app_id for authentication
-    fn set_app_id(&mut self, app_id: String) {
+    pub fn set_app_id(&mut self, app_id: String) {
         self.app_id = Some(app_id);
     }
 
     // Set an app secret for authentication
-    fn set_active_secret(&mut self, active_secret: String) {
+    pub fn set_active_secret(&mut self, active_secret: String) {
         self.active_secret = Some(active_secret);
     }
 
@@ -602,9 +618,12 @@ async fn can_use_methods() {
         password: Some(env!("QOBUZ_PASSWORD").to_string()),
     };
 
-    let client = new(Some(creds.clone()), None, None, None, None)
+    let mut client = new(Some(creds.clone()), None, None, None, None)
         .await
         .expect("failed to create client");
+
+    client.refresh().await;
+    client.login().await.expect("failed to login");
 
     assert_ok!(client.user_playlists().await);
     let album_response = assert_ok!(

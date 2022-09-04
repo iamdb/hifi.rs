@@ -1,9 +1,15 @@
-use crate::ui::components::{
-    ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths,
+use crate::{
+    get_client,
+    state::{
+        app::{AppState, ClientKey, StateKey},
+        StringValue,
+    },
+    ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use enum_as_inner::EnumAsInner;
 use qobuz_client::client::{
     album::{Album, AlbumSearchResults},
+    api::Client,
     artist::{Artist, ArtistSearchResults},
     playlist::{Playlist, UserPlaylistsResult},
     track::Track,
@@ -14,6 +20,51 @@ pub mod album;
 pub mod artist;
 pub mod playlist;
 pub mod track;
+
+/// Setup app_id, secret and user credentials for authentication
+pub async fn setup_client(mut client: Client, app_state: AppState) -> Client {
+    info!("setting up the api client");
+
+    let tree = app_state.config.clone();
+    let mut refresh_config = false;
+
+    if let Some(app_id) = get_client!(ClientKey::AppID, tree, StringValue) {
+        info!("using app_id from cache: {}", app_id);
+        client.set_app_id(app_id.to_string());
+    } else {
+        refresh_config = true;
+    }
+
+    if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
+        info!("using app_secret from cache: {}", active_secret);
+        client.set_active_secret(active_secret.to_string());
+    } else {
+        refresh_config = true;
+    }
+
+    if refresh_config {
+        client.refresh().await;
+    }
+
+    if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
+        info!("using token from cache");
+        client.set_token(token.to_string());
+    } else if let (Some(username), Some(password)) = (
+        get_client!(ClientKey::Username, tree, StringValue),
+        get_client!(ClientKey::Password, tree, StringValue),
+    ) {
+        info!("using username and password from cache");
+        client.set_credentials(qobuz_client::client::api::Credentials {
+            username: Some(username.to_string()),
+            password: Some(password.to_string()),
+        });
+
+        info!("signing in");
+        client.login().await.expect("failed to login");
+    }
+
+    client
+}
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Composer {
