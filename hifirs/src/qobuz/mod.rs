@@ -1,9 +1,18 @@
+use crate::ui::components::{
+    ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths,
+};
+use enum_as_inner::EnumAsInner;
+use qobuz_client::client::{
+    album::{Album, AlbumSearchResults},
+    artist::{Artist, ArtistSearchResults},
+    playlist::{Playlist, UserPlaylistsResult},
+    track::Track,
+};
 use serde::{Deserialize, Serialize};
 
 pub mod album;
 pub mod artist;
 pub mod playlist;
-pub mod search_results;
 pub mod track;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,43 +49,90 @@ pub struct User {
     pub login: String,
 }
 
-pub enum UrlType {
-    Album { id: String },
-    Playlist { id: String },
+#[derive(Clone, Debug, Deserialize, Serialize, EnumAsInner)]
+pub enum SearchResults {
+    Albums(AlbumSearchResults),
+    Artists(ArtistSearchResults),
+    UserPlaylists(UserPlaylistsResult),
+    Playlist(Box<Playlist>),
+    Album(Box<Album>),
+    Artist(Artist),
 }
 
-pub fn parse_url(string_url: &str) -> Option<UrlType> {
-    if let Ok(url) = url::Url::parse(string_url) {
-        if let (Some(host), Some(mut path)) = (url.host_str(), url.path_segments()) {
-            if host == "play.qobuz.com" {
-                debug!("got a qobuz url");
+impl From<SearchResults> for Table {
+    fn from(results: SearchResults) -> Self {
+        let mut table = Table::new(None, None, None);
 
-                match path.next() {
-                    Some("album") => {
-                        debug!("this is an album");
-                        let id = path.next().unwrap().to_string();
+        table.set_header(results.headers());
+        table.set_rows(results.rows());
+        table.set_widths(results.widths());
 
-                        Some(UrlType::Album { id })
-                    }
-                    Some("playlist") => {
-                        debug!("this is a playlist");
-                        let id = path.next().unwrap().to_string();
+        table
+    }
+}
 
-                        Some(UrlType::Playlist { id })
-                    }
-                    None => {
-                        debug!("no path, cannot use path");
-                        None
-                    }
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        } else {
-            None
+impl From<SearchResults> for Vec<Vec<String>> {
+    fn from(results: SearchResults) -> Self {
+        match results {
+            SearchResults::Albums(r) => r.into(),
+            SearchResults::Artists(r) => r.into(),
+            SearchResults::UserPlaylists(r) => r.into(),
+            SearchResults::Playlist(r) => r.into(),
+            SearchResults::Album(r) => r.into(),
+            SearchResults::Artist(r) => r.into(),
         }
-    } else {
-        None
+    }
+}
+
+impl From<AlbumSearchResults> for SearchResults {
+    fn from(results: AlbumSearchResults) -> Self {
+        SearchResults::Albums(results)
+    }
+}
+
+impl From<Box<Album>> for SearchResults {
+    fn from(album: Box<Album>) -> Self {
+        Self::Album(album)
+    }
+}
+
+impl From<SearchResults> for Album {
+    fn from(results: SearchResults) -> Self {
+        results.into()
+    }
+}
+
+impl SearchResults {
+    pub fn headers(&self) -> Vec<String> {
+        match self {
+            SearchResults::Albums(_) => Album::headers(),
+            SearchResults::Artists(_) => Artist::headers(),
+            SearchResults::UserPlaylists(_) => Playlist::headers(),
+            SearchResults::Playlist(_) => Track::headers(),
+            SearchResults::Album(_) => Album::headers(),
+            SearchResults::Artist(_) => Artist::headers(),
+        }
+    }
+
+    pub fn widths(&self) -> Vec<ColumnWidth> {
+        match self {
+            SearchResults::Albums(_) => Album::widths(),
+            SearchResults::Artists(_) => Artist::widths(),
+            SearchResults::UserPlaylists(_) => Playlist::widths(),
+            SearchResults::Playlist(_) => Track::widths(),
+            SearchResults::Album(_) => Album::widths(),
+            SearchResults::Artist(_) => Artist::widths(),
+        }
+    }
+
+    pub fn rows(&self) -> Vec<Row> {
+        match self {
+            SearchResults::Albums(r) => r.albums.rows(),
+            SearchResults::Artists(r) => r.artists.rows(),
+            SearchResults::UserPlaylists(r) => r.playlists.rows(),
+            SearchResults::Playlist(r) => r.rows(),
+            SearchResults::Album(r) => vec![r.row()],
+            SearchResults::Artist(r) => vec![r.row()],
+        }
     }
 }

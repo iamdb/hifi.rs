@@ -6,6 +6,7 @@ pub mod search;
 use crate::{
     get_app,
     player::Controls,
+    qobuz::SearchResults,
     state::{
         app::{AppKey, AppState, StateKey},
         ActiveScreen,
@@ -16,7 +17,7 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use gstreamer::State as GstState;
-use qobuz_client::client::{api::Client, search_results::SearchResults};
+use qobuz_client::client::api::Client;
 use snafu::prelude::*;
 use std::{cell::RefCell, collections::HashMap, io::Stdout, rc::Rc, thread, time::Duration};
 use termion::{

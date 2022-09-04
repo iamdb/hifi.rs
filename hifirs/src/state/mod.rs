@@ -4,7 +4,6 @@ use crate::{
     state::app::StateKey,
     ui::components::{Item, Row, TableRow, TableRows},
 };
-use clap::ValueEnum;
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use qobuz_client::client::{album::Album, playlist::Playlist, track::PlaylistTrack, AudioQuality};

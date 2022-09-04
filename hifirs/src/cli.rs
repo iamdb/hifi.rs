@@ -1,5 +1,6 @@
 use crate::{
     player,
+    qobuz::SearchResults,
     state::{
         self,
         app::{ClientKey, StateKey},
@@ -8,11 +9,10 @@ use crate::{
     switch_screen, ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
-//use comfy_table::{presets::UTF8_FULL, Table};
+use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use qobuz_client::client::{
     api::{self, Credentials, OutputFormat},
-    search_results::SearchResults,
     AudioQuality,
 };
 use snafu::prelude::*;
@@ -461,3 +461,47 @@ macro_rules! wait {
         }
     };
 }
+
+#[macro_export]
+macro_rules! output {
+    ($results:ident, $output_format:expr) => {
+        match $output_format {
+            Some(OutputFormat::Json) => {
+                let json =
+                    serde_json::to_string(&$results).expect("failed to convert results to string");
+
+                print!("{}", json);
+            }
+            Some(OutputFormat::Tsv) => {
+                let formatted_results: Vec<Vec<String>> = $results.into();
+
+                let rows = formatted_results
+                    .iter()
+                    .map(|row| {
+                        let tabbed = row.join("\t");
+
+                        tabbed
+                    })
+                    .collect::<Vec<String>>();
+
+                print!("{}", rows.join("\n"));
+            }
+            None => {
+                let mut table = Table::new();
+                table.load_preset(UTF8_FULL);
+                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                table.set_header($results.headers());
+
+                let table_rows: Vec<Vec<String>> = $results.into();
+
+                for row in table_rows {
+                    table.add_row(row);
+                }
+
+                print!("{}", table);
+            }
+        }
+    };
+}
+
+pub(crate) use output;

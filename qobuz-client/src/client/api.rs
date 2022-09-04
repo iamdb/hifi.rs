@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Method, Response, StatusCode,
@@ -179,6 +180,7 @@ macro_rules! call {
     };
 }
 
+#[allow(unused)]
 impl Client {
     pub fn quality(&self) -> AudioQuality {
         self.default_quality.clone()
@@ -197,6 +199,12 @@ impl Client {
         if refresh_config {
             self.get_config().await.expect("failed to get config");
             self.test_secrets().await.expect("failed to get secrets");
+        }
+
+        if self.credentials.is_none() {
+            error!("credentials missing");
+        } else {
+            self.login().await;
         }
 
         Ok(self.clone())
@@ -512,9 +520,9 @@ impl Client {
                 let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
                 let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-                //let info_regex = format!(format_info!(), hifi_rs::util::capitalize(&timezone));
-                let info_regex = &timezone;
-                regex::Regex::new(info_regex)
+                let info_regex = format!(format_info!(), util::capitalize(&timezone));
+                let info_regex_str = info_regex.as_str();
+                regex::Regex::new(info_regex_str)
                     .unwrap()
                     .captures_iter(bundle_contents.as_str())
                     .for_each(|c| {
@@ -570,6 +578,12 @@ impl Client {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+pub enum OutputFormat {
+    Json,
+    Tsv,
+}
+
 use crate::client::artist::{Artist, ArtistSearchResults};
 use crate::client::playlist::{Playlist, UserPlaylistsResult};
 use crate::client::track::Track;
@@ -578,12 +592,6 @@ use crate::client::{
     album::{Album, AlbumSearchResults},
     AudioQuality,
 };
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum OutputFormat {
-    Json,
-    Tsv,
-}
 
 #[tokio::test]
 async fn can_use_methods() {

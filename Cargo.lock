@@ -959,7 +959,6 @@ dependencies = [
  "gstreamer-player",
  "log",
  "md5",
- "nanoid",
  "pretty_env_logger",
  "qobuz-client",
  "regex",
@@ -972,7 +971,6 @@ dependencies = [
  "textwrap",
  "tokio",
  "tokio-stream",
- "tokio-test",
  "tui",
  "url",
  "zbus",
@@ -1619,6 +1617,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "chrono",
+ "clap",
  "enum-as-inner",
  "flume",
  "futures",
@@ -1635,6 +1634,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "url",
+ "util",
 ]
 
 [[package]]
@@ -2505,6 +2505,10 @@ dependencies = [
  "matches",
  "percent-encoding",
 ]
+
+[[package]]
+name = "util"
+version = "0.1.0"
 
 [[package]]
 name = "vcpkg"

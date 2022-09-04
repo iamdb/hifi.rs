@@ -3,7 +3,8 @@
 members = [
   "hifirs",
   "qobuz-client",
-  "playlist-sync"
+  "playlist-sync",
+  "util"
 ]
 
 [profile.release]

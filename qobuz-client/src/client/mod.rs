@@ -1,12 +1,11 @@
-use std::fmt::Display;
-
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 pub mod album;
 pub mod api;
 pub mod artist;
 pub mod playlist;
-pub mod search_results;
 pub mod track;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,7 +48,7 @@ pub enum UrlType {
 }
 
 /// The audio quality as defined by the Qobuz API.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum AudioQuality {
     Mp3 = 5,
     CD = 6,

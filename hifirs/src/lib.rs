@@ -12,7 +12,6 @@ mod qobuz;
 pub mod state;
 #[macro_use]
 pub mod ui;
-pub mod util;
 
 const REFRESH_RESOLUTION: u64 = 500;
 pub const TEST_TEMP_PATH: &str = "/tmp/hifirs_test";

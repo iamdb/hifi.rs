@@ -1,6 +1,12 @@
-use qobuz_client::client::album::Album;
+use qobuz_client::client::album::{Album, Albums};
 
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
+
+impl TableRows for Albums {
+    fn rows(&self) -> Vec<Row> {
+        self.items.iter().map(|t| t.row()).collect::<Vec<Row>>()
+    }
+}
 
 impl TableWidths for Album {
     fn widths() -> Vec<ColumnWidth> {
