@@ -13,6 +13,7 @@ use qobuz_client::client::{
     artist::{Artist, ArtistSearchResults},
     playlist::{Playlist, UserPlaylistsResult},
     track::Track,
+    AudioQuality,
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,6 +34,11 @@ pub async fn setup_client(mut client: Client, app_state: AppState) -> Client {
         client.set_app_id(app_id.to_string());
     } else {
         refresh_config = true;
+    }
+
+    if let Some(quality) = get_client!(ClientKey::DefaultQuality, tree, AudioQuality) {
+        info!("using default quality from cache: {}", quality);
+        client.set_default_quality(quality);
     }
 
     if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {

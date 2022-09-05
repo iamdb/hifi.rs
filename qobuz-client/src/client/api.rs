@@ -445,6 +445,10 @@ impl Client {
         self.active_secret = Some(active_secret);
     }
 
+    pub fn set_default_quality(&mut self, quality: AudioQuality) {
+        self.default_quality = quality;
+    }
+
     // Call the api and retrieve the JSON payload
     async fn make_call(
         &self,
