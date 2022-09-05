@@ -72,6 +72,7 @@ pub struct PlaylistTrack {
     pub quality: Option<AudioQuality>,
     pub track_url: Option<TrackURL>,
     pub album: Option<Album>,
+    pub is_in_playlist: bool,
 }
 
 impl PlaylistTrack {
@@ -81,6 +82,7 @@ impl PlaylistTrack {
             quality,
             track_url: None,
             album,
+            is_in_playlist: false,
         }
     }
 

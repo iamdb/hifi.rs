@@ -2,7 +2,7 @@ pub mod app;
 
 use crate::{
     state::app::StateKey,
-    ui::components::{Item, Row, TableRow, TableRows},
+    ui::components::{Item, Row, TableRow, TableRows, TableWidths},
 };
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
@@ -335,12 +335,20 @@ impl From<Bytes> for PlaylistTrack {
     }
 }
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum TrackListType {
+    #[default]
+    Album,
+    Playlist,
+}
+
 /// A playlist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TrackListValue {
     queue: VecDeque<PlaylistTrack>,
     album: Option<Album>,
     playlist: Option<Playlist>,
+    list_type: Option<TrackListType>,
 }
 
 impl From<Bytes> for TrackListValue {
@@ -364,7 +372,18 @@ impl TableRows for TrackListValue {
     fn rows(&self) -> Vec<Row> {
         self.queue
             .iter()
-            .map(|i| i.track.row())
+            .enumerate()
+            .map(|(i, t)| {
+                if t.is_in_playlist {
+                    let mut columns = t.track.columns();
+                    columns.remove(0);
+                    columns.insert(0, (i + 2).to_string());
+
+                    Row::new(columns, Playlist::widths())
+                } else {
+                    t.track.row()
+                }
+            })
             .collect::<Vec<Row>>()
     }
 }
@@ -375,15 +394,20 @@ impl TrackListValue {
             queue: VecDeque::new(),
             album: None,
             playlist: None,
+            list_type: None,
         }
     }
 
     pub fn clear(&mut self) {
+        self.list_type = None;
+        self.album = None;
+        self.playlist = None;
         self.queue.clear();
     }
 
     pub fn set_album(&mut self, album: Album) {
         self.album = Some(album);
+        self.list_type = Some(TrackListType::Album);
     }
 
     pub fn get_album(&self) -> Option<&Album> {
@@ -392,10 +416,15 @@ impl TrackListValue {
 
     pub fn set_playlist(&mut self, playlist: Playlist) {
         self.playlist = Some(playlist);
+        self.list_type = Some(TrackListType::Playlist);
     }
 
     pub fn get_playlist(&self) -> Option<&Playlist> {
         self.playlist.as_ref()
+    }
+
+    pub fn set_list_type(&mut self, list_type: TrackListType) {
+        self.list_type = Some(list_type);
     }
 
     pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {

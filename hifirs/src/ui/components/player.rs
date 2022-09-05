@@ -90,21 +90,26 @@ pub(crate) fn current_track<B>(
         current_track_text.insert(0, Spans::from(""));
     }
 
-    let mut track_number_text = vec![
-        Spans::from(""),
-        Spans::from(format!("{:02}", playlist_track.track.track_number)),
-    ];
+    let mut track_number_text = vec![Spans::from("")];
 
-    if let Some(album) = playlist_track.album {
-        let release_year =
-            chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
-                .unwrap()
-                .format("%Y");
-        current_track_text.push(Spans::from(format!("{} ({})", album.title, release_year)));
+    if playlist_track.is_in_playlist {
+    } else {
+        track_number_text.push(Spans::from(format!(
+            "{:02}",
+            playlist_track.track.track_number
+        )));
 
-        track_number_text.push(Spans::from("of"));
-        track_number_text.push(Spans::from(format!("{:02}", album.tracks_count)));
-        track_number_text.push(Spans::from(""));
+        if let Some(album) = playlist_track.album {
+            let release_year =
+                chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
+                    .unwrap()
+                    .format("%Y");
+            current_track_text.push(Spans::from(format!("{} ({})", album.title, release_year)));
+
+            track_number_text.push(Spans::from("of"));
+            track_number_text.push(Spans::from(format!("{:02}", album.tracks_count)));
+            track_number_text.push(Spans::from(""));
+        }
     }
 
     let current_track = Paragraph::new(current_track_text)

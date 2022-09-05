@@ -1,6 +1,5 @@
-use qobuz_client::client::track::{Track, Tracks};
-
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
+use qobuz_client::client::track::{Track, Tracks};
 
 impl TableRow for Track {
     fn row(&self) -> Row {

@@ -84,6 +84,7 @@ impl Playlist {
                     quality: quality.clone(),
                     track_url: None,
                     album: None,
+                    is_in_playlist: true,
                 })
                 .collect::<Vec<PlaylistTrack>>()
         } else {
