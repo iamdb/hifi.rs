@@ -43,6 +43,7 @@ pub async fn setup_client(mut client: Client, app_state: AppState) -> Client {
     }
 
     if refresh_config {
+        debug!("refreshing app secret and id");
         client.refresh().await;
     }
 

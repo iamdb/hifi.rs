@@ -456,6 +456,8 @@ impl Client {
         if let Some(app_id) = &self.app_id {
             info!("adding app_id to request headers: {}", app_id);
             headers.insert("X-App-Id", HeaderValue::from_str(app_id.as_str()).unwrap());
+        } else {
+            error!("no app_id");
         }
 
         if let Some(token) = &self.user_token {
