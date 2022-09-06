@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+futures = "0.3"
 qobuz-client = { version = "0.1.0", path = "../qobuz-client" }
-rspotify = "0.11.5"
+rspotify = { version = "0.11", features = ["cli"] } 
+tokio = { version = "1.0", features = ["full"]}
+snafu = "0.7"
