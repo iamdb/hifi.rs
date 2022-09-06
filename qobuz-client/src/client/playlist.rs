@@ -1,5 +1,5 @@
 use crate::client::{
-    track::{PlaylistTrack, Tracks},
+    track::{TrackListTrack, Tracks},
     AudioQuality, User,
 };
 use serde::{Deserialize, Serialize};
@@ -73,22 +73,24 @@ impl Playlist {
         }
     }
 
-    pub fn playlist_tracks(&mut self, quality: Option<AudioQuality>) -> Vec<PlaylistTrack> {
-        if let Some(tracks) = &self.tracks {
+    pub fn to_tracklist(&mut self, quality: Option<AudioQuality>) -> Option<Vec<TrackListTrack>> {
+        self.tracks.as_ref().map(|tracks| {
             tracks
                 .items
                 .iter()
                 .cloned()
-                .map(|i| PlaylistTrack {
-                    track: i,
-                    quality: quality.clone(),
-                    track_url: None,
-                    album: None,
+                .enumerate()
+                .map(|(i, t)| {
+                    TrackListTrack::new(
+                        t,
+                        Some(i + 1),
+                        Some(tracks.items.len()),
+                        quality.clone(),
+                        None,
+                    )
                 })
-                .collect::<Vec<PlaylistTrack>>()
-        } else {
-            vec![]
-        }
+                .collect::<Vec<TrackListTrack>>()
+        })
     }
 }
 
@@ -134,5 +136,4 @@ impl From<Box<Playlist>> for Vec<Vec<String>> {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct PlaylistTracks(Vec<PlaylistTrack>);
+pub type TrackListTracks = Vec<TrackListTrack>;

@@ -75,9 +75,9 @@ impl Screen for NowPlayingScreen {
                     self.track_list.set_widths(Track::widths());
 
                     title = if let Some(album) = tracklist.get_album() {
-                        format!("Now Playing: {}", album.title)
+                        format!("Album: {}", album.title)
                     } else if let Some(playlist) = tracklist.get_playlist() {
-                        format!("Now Playing: {}", playlist.name)
+                        format!("Playlist: {}", playlist.name)
                     } else {
                         "Now Playing".to_string()
                     };

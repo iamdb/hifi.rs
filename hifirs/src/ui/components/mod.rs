@@ -4,7 +4,7 @@ use crate::state::{
     app::{AppState, PlayerKey, StateKey},
     ClockValue, FloatValue, StatusValue,
 };
-use qobuz_client::client::track::PlaylistTrack;
+use qobuz_client::client::track::TrackListTrack;
 use textwrap::fill;
 use tui::{
     backend::Backend,
@@ -25,7 +25,7 @@ where
 {
     let tree = state.player;
 
-    if let Some(track) = get_player!(PlayerKey::NextUp, tree, PlaylistTrack) {
+    if let Some(track) = get_player!(PlayerKey::NextUp, tree, TrackListTrack) {
         if let Some(status) = get_player!(PlayerKey::Status, tree, StatusValue) {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
@@ -321,6 +321,14 @@ impl Row {
 
     pub fn set_dim(&mut self, dim: bool) {
         self.dim = dim;
+    }
+
+    pub fn insert_column(&mut self, index: usize, column: String) {
+        self.columns.insert(index, column);
+    }
+
+    pub fn remove_column(&mut self, index: usize) {
+        self.columns.remove(index);
     }
 
     pub fn term_row(&self, size: u16) -> TermRow<'_> {
