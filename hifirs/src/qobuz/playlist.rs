@@ -16,25 +16,15 @@ impl TableRows for Playlists {
     }
 }
 
-impl TableRow for Playlist {
-    fn row(&self) -> Row {
-        Row::new(vec![self.name.clone()], Playlist::widths())
-    }
-}
-
 impl TableHeaders for Playlists {
     fn headers() -> Vec<String> {
         vec!["Title".to_string()]
     }
 }
 
-impl TableHeaders for Playlist {
-    fn headers() -> Vec<String> {
-        let mut headers = Track::headers();
-        headers.remove(0);
-        headers.insert(0, "Track #".to_string());
-
-        headers
+impl TableRow for Playlist {
+    fn row(&self) -> Row {
+        Row::new(vec![self.name.clone()], Playlist::widths())
     }
 }
 
@@ -46,11 +36,11 @@ impl TableRows for Playlist {
                 .iter()
                 .enumerate()
                 .map(|(i, t)| {
-                    let mut columns = t.columns();
-                    columns.remove(0);
-                    columns.insert(0, (i + 1).to_string());
+                    let mut row = t.row();
+                    row.remove_column(0);
+                    row.insert_column(0, (i + 1).to_string());
 
-                    Row::new(columns, Track::widths())
+                    row
                 })
                 .collect::<Vec<Row>>()
         } else {

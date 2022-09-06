@@ -1,6 +1,6 @@
 use crate::state::{ClockValue, FloatValue, StatusValue};
 use gstreamer::{ClockTime, State as GstState};
-use qobuz_client::client::track::PlaylistTrack;
+use qobuz_client::client::track::TrackListTrack;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -50,7 +50,7 @@ pub(crate) fn progress<B>(
 }
 
 pub(crate) fn current_track<B>(
-    playlist_track: PlaylistTrack,
+    playlist_track: TrackListTrack,
     status: StatusValue,
     f: &mut Frame<B>,
     area: Rect,
@@ -90,31 +90,25 @@ pub(crate) fn current_track<B>(
         current_track_text.insert(0, Spans::from(""));
     }
 
-    let mut track_number_text = vec![Spans::from("")];
-
-    if playlist_track.is_in_playlist {
-    } else {
-        track_number_text.push(Spans::from(format!(
-            "{:02}",
-            playlist_track.track.track_number
-        )));
-
-        if let Some(album) = playlist_track.album {
-            let release_year =
-                chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
-                    .unwrap()
-                    .format("%Y");
-            current_track_text.push(Spans::from(format!("{} ({})", album.title, release_year)));
-
-            track_number_text.push(Spans::from("of"));
-            track_number_text.push(Spans::from(format!("{:02}", album.tracks_count)));
-            track_number_text.push(Spans::from(""));
-        }
+    if let Some(album) = playlist_track.album {
+        let release_year =
+            chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
+                .unwrap()
+                .format("%Y");
+        current_track_text.push(Spans::from(format!("{} ({})", album.title, release_year)));
     }
 
     let current_track = Paragraph::new(current_track_text)
         .wrap(Wrap { trim: false })
         .block(Block::default().style(Style::default().bg(Color::Indexed(237))));
+
+    let track_number_text = vec![
+        Spans::from(""),
+        Spans::from(format!("{:02}", playlist_track.index)),
+        Spans::from("of"),
+        Spans::from(format!("{:02}", playlist_track.total)),
+        Spans::from(""),
+    ];
 
     let track_number = Paragraph::new(track_number_text)
         .block(

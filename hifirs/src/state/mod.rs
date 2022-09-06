@@ -2,11 +2,11 @@ pub mod app;
 
 use crate::{
     state::app::StateKey,
-    ui::components::{Item, Row, TableRow, TableRows, TableWidths},
+    ui::components::{Item, Row, TableRow, TableRows},
 };
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
-use qobuz_client::client::{album::Album, playlist::Playlist, track::PlaylistTrack, AudioQuality};
+use qobuz_client::client::{album::Album, playlist::Playlist, track::TrackListTrack, AudioQuality};
 use serde::{Deserialize, Serialize};
 use sled::{IVec, Tree};
 use std::{
@@ -326,16 +326,16 @@ impl From<AudioQuality> for Bytes {
     }
 }
 
-impl From<Bytes> for PlaylistTrack {
+impl From<Bytes> for TrackListTrack {
     fn from(bytes: Bytes) -> Self {
-        let deserialized: PlaylistTrack =
+        let deserialized: TrackListTrack =
             bincode::deserialize(&bytes.vec()).expect("failed to deserialize playlist track");
 
         deserialized
     }
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TrackListType {
     #[default]
     Album,
@@ -345,7 +345,7 @@ pub enum TrackListType {
 /// A playlist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TrackListValue {
-    queue: VecDeque<PlaylistTrack>,
+    queue: VecDeque<TrackListTrack>,
     album: Option<Album>,
     playlist: Option<Playlist>,
     list_type: Option<TrackListType>,
@@ -370,21 +370,7 @@ impl From<TrackListValue> for Bytes {
 
 impl TableRows for TrackListValue {
     fn rows(&self) -> Vec<Row> {
-        self.queue
-            .iter()
-            .enumerate()
-            .map(|(i, t)| {
-                if t.is_in_playlist {
-                    let mut columns = t.track.columns();
-                    columns.remove(0);
-                    columns.insert(0, (i + 2).to_string());
-
-                    Row::new(columns, Playlist::widths())
-                } else {
-                    t.track.row()
-                }
-            })
-            .collect::<Vec<Row>>()
+        self.queue.iter().map(|t| t.row()).collect::<Vec<Row>>()
     }
 }
 
@@ -427,7 +413,11 @@ impl TrackListValue {
         self.list_type = Some(list_type);
     }
 
-    pub fn find_track(&self, track_id: usize) -> Option<PlaylistTrack> {
+    pub fn list_type(&self) -> Option<&TrackListType> {
+        self.list_type.as_ref()
+    }
+
+    pub fn find_track(&self, track_id: usize) -> Option<TrackListTrack> {
         self.queue
             .iter()
             .find(|t| t.track.id as usize == track_id)
@@ -467,18 +457,18 @@ impl TrackListValue {
             .collect::<Vec<Item>>()
     }
 
-    pub fn vec(&self) -> VecDeque<PlaylistTrack> {
+    pub fn vec(&self) -> VecDeque<TrackListTrack> {
         self.queue.clone()
     }
 
-    pub fn drain<R>(&mut self, range: R) -> Drain<PlaylistTrack>
+    pub fn drain<R>(&mut self, range: R) -> Drain<TrackListTrack>
     where
         R: RangeBounds<usize>,
     {
         self.queue.drain(range)
     }
 
-    pub fn append(&mut self, mut items: VecDeque<PlaylistTrack>) {
+    pub fn append(&mut self, mut items: VecDeque<TrackListTrack>) {
         self.queue.append(&mut items)
     }
 
@@ -486,27 +476,27 @@ impl TrackListValue {
         self.queue.len()
     }
 
-    pub fn front(&self) -> Option<&PlaylistTrack> {
+    pub fn front(&self) -> Option<&TrackListTrack> {
         self.queue.front()
     }
 
-    pub fn back(&self) -> Option<&PlaylistTrack> {
+    pub fn back(&self) -> Option<&TrackListTrack> {
         self.queue.back()
     }
 
-    pub fn pop_front(&mut self) -> Option<PlaylistTrack> {
+    pub fn pop_front(&mut self) -> Option<TrackListTrack> {
         self.queue.pop_front()
     }
 
-    pub fn pop_back(&mut self) -> Option<PlaylistTrack> {
+    pub fn pop_back(&mut self) -> Option<TrackListTrack> {
         self.queue.pop_back()
     }
 
-    pub fn push_front(&mut self, track: PlaylistTrack) {
+    pub fn push_front(&mut self, track: TrackListTrack) {
         self.queue.push_front(track);
     }
 
-    pub fn push_back(&mut self, track: PlaylistTrack) {
+    pub fn push_back(&mut self, track: TrackListTrack) {
         self.queue.push_back(track);
     }
 

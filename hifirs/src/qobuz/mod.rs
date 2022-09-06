@@ -11,7 +11,7 @@ use qobuz_client::client::{
     album::{Album, AlbumSearchResults},
     api::Client,
     artist::{Artist, ArtistSearchResults},
-    playlist::{Playlist, UserPlaylistsResult},
+    playlist::{Playlist, Playlists, UserPlaylistsResult},
     track::Track,
     AudioQuality,
 };
@@ -165,7 +165,7 @@ impl SearchResults {
         match self {
             SearchResults::Albums(_) => Album::headers(),
             SearchResults::Artists(_) => Artist::headers(),
-            SearchResults::UserPlaylists(_) => Playlist::headers(),
+            SearchResults::UserPlaylists(_) => Playlists::headers(),
             SearchResults::Playlist(_) => Track::headers(),
             SearchResults::Album(_) => Album::headers(),
             SearchResults::Artist(_) => Artist::headers(),

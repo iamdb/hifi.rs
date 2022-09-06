@@ -67,23 +67,48 @@ impl From<Track> for Vec<u8> {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct PlaylistTrack {
+pub struct TrackListTrack {
     pub track: Track,
     pub quality: Option<AudioQuality>,
     pub track_url: Option<TrackURL>,
     pub album: Option<Album>,
-    pub is_in_playlist: bool,
+    pub index: usize,
+    pub total: usize,
 }
 
-impl PlaylistTrack {
-    pub fn new(track: Track, quality: Option<AudioQuality>, album: Option<Album>) -> Self {
-        PlaylistTrack {
+impl TrackListTrack {
+    pub fn new(
+        track: Track,
+        index: Option<usize>,
+        total: Option<usize>,
+        quality: Option<AudioQuality>,
+        album: Option<Album>,
+    ) -> Self {
+        let index = if let Some(index) = index { index } else { 0 };
+        let total = if let Some(total) = total { total } else { 1 };
+
+        TrackListTrack {
+            index,
+            total,
             track,
             quality,
             track_url: None,
             album,
-            is_in_playlist: false,
         }
+    }
+
+    pub fn columns(&self) -> Vec<String> {
+        let duration = ClockTime::from_seconds(self.track.duration as u64)
+            .to_string()
+            .as_str()[3..7]
+            .to_string();
+
+        vec![
+            self.index.to_string(),
+            self.track.title.clone(),
+            self.track.performer.name.clone(),
+            duration,
+        ]
     }
 
     pub fn set_track_url(&mut self, track_url: TrackURL) -> Self {

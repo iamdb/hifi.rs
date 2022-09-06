@@ -1,7 +1,7 @@
 use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
-    track::{PlaylistTrack, Tracks},
+    track::{TrackListTrack, Tracks},
     AudioQuality, Composer, Image,
 };
 use serde::{Deserialize, Serialize};
@@ -64,12 +64,20 @@ pub struct Album {
 }
 
 impl Album {
-    pub fn to_playlist_tracklist(&self, quality: AudioQuality) -> Option<Vec<PlaylistTrack>> {
+    pub fn to_tracklist(&self, quality: AudioQuality) -> Option<Vec<TrackListTrack>> {
         self.tracks.as_ref().map(|t| {
             t.items
                 .iter()
-                .map(|i| PlaylistTrack::new(i.clone(), Some(quality.clone()), Some(self.clone())))
-                .collect::<Vec<PlaylistTrack>>()
+                .map(|t| {
+                    TrackListTrack::new(
+                        t.clone(),
+                        Some(t.track_number as usize),
+                        Some(self.tracks_count as usize),
+                        Some(quality.clone()),
+                        Some(self.clone()),
+                    )
+                })
+                .collect::<Vec<TrackListTrack>>()
         })
     }
     pub async fn attach_tracks(&mut self, client: Client) {

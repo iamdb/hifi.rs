@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::player::Controls;
 use gstreamer::ClockTime;
-use qobuz_client::client::track::PlaylistTrack;
+use qobuz_client::client::track::TrackListTrack;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
@@ -237,7 +237,9 @@ impl MprisTrackList {
     }
 }
 
-fn track_to_meta(playlist_track: PlaylistTrack) -> HashMap<&'static str, zvariant::Value<'static>> {
+fn track_to_meta(
+    playlist_track: TrackListTrack,
+) -> HashMap<&'static str, zvariant::Value<'static>> {
     let mut meta = HashMap::new();
 
     meta.insert(
