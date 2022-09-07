@@ -1,22 +1,19 @@
 use futures::stream::TryStreamExt;
 use rspotify::{
-    model::{FullPlaylist, FullTrack, PlaylistId, SimplifiedPlaylist},
+    model::{FullPlaylist, FullTrack, PlaylistId, PlaylistItem, SimplifiedPlaylist},
     prelude::*,
     scopes, AuthCodeSpotify, Config, Credentials as SpotifyCredentials, OAuth,
 };
 use snafu::prelude::*;
 use std::{path::PathBuf, str::FromStr};
 
-#[derive(Snafu, Debug)]
-pub enum Error {
-    ClientError { error: String },
+use crate::Isrc;
+
+#[allow(unused)]
+pub struct SpotifyFullPlaylist {
+    spotify_playlist: FullPlaylist,
+    all_items: Vec<PlaylistItem>,
 }
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(PartialEq)]
-struct Isrc(String);
-struct SpotifyFullPlaylist(FullPlaylist);
 
 pub struct Spotify {
     client: AuthCodeSpotify,
@@ -52,7 +49,7 @@ pub async fn new() -> Spotify {
 }
 
 impl Spotify {
-    async fn user_playlists(&self) -> Vec<SimplifiedPlaylist> {
+    pub async fn user_playlists(&self) -> Vec<SimplifiedPlaylist> {
         let mut playlists = self.client.current_user_playlists();
         let mut all_playlists: Vec<SimplifiedPlaylist> = vec![];
 
@@ -63,21 +60,26 @@ impl Spotify {
         all_playlists
     }
 
-    async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
-        match self.client.playlist(&playlist_id, None, None).await {
-            Ok(playlist) => Ok(SpotifyFullPlaylist(playlist)),
-            Err(err) => Err(Error::ClientError {
-                error: err.to_string(),
-            }),
+    pub async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
+        let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
+
+        let mut items = self.client.playlist_items(&playlist_id, None, None);
+        let mut all_items: Vec<PlaylistItem> = vec![];
+
+        while let Some(item) = items.try_next().await.unwrap() {
+            all_items.push(item);
         }
+
+        Ok(SpotifyFullPlaylist {
+            spotify_playlist,
+            all_items,
+        })
     }
 }
 
 impl SpotifyFullPlaylist {
     pub fn isrc_list(&self) -> Vec<Isrc> {
-        self.0
-            .tracks
-            .items
+        self.all_items
             .iter()
             .filter_map(|playlist_item| {
                 if let Some(playable_item) = &playlist_item.track {
@@ -96,9 +98,7 @@ impl SpotifyFullPlaylist {
     }
 
     pub fn missing_tracks(&self, isrcs: Vec<Isrc>) -> Vec<FullTrack> {
-        self.0
-            .tracks
-            .items
+        self.all_items
             .iter()
             .cloned()
             .filter_map(|playlist_item| {
@@ -122,5 +122,24 @@ impl SpotifyFullPlaylist {
                 }
             })
             .collect::<Vec<FullTrack>>()
+    }
+
+    pub fn track_count(&self) -> usize {
+        self.all_items.len() as usize
+    }
+}
+
+#[derive(Snafu, Debug)]
+pub enum Error {
+    ClientError { error: String },
+}
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+impl From<rspotify::ClientError> for Error {
+    fn from(error: rspotify::ClientError) -> Self {
+        Error::ClientError {
+            error: error.to_string(),
+        }
     }
 }
