@@ -1,18 +1,21 @@
+use crate::Isrc;
 use futures::stream::TryStreamExt;
+use log::debug;
 use rspotify::{
-    model::{FullPlaylist, FullTrack, PlaylistId, PlaylistItem, SimplifiedPlaylist},
+    model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, SimplifiedPlaylist},
     prelude::*,
     scopes, AuthCodeSpotify, Config, Credentials as SpotifyCredentials, OAuth,
 };
 use snafu::prelude::*;
-use std::{path::PathBuf, str::FromStr};
+use std::{collections::HashSet, path::PathBuf, str::FromStr};
+use warp::Filter;
 
-use crate::Isrc;
+const TOKEN_CACHE: &str = "/tmp/.spotify_token_cache.json";
 
 #[allow(unused)]
 pub struct SpotifyFullPlaylist {
     spotify_playlist: FullPlaylist,
-    all_items: Vec<PlaylistItem>,
+    all_items: Vec<FullTrack>,
 }
 
 pub struct Spotify {
@@ -33,7 +36,7 @@ pub async fn new() -> Spotify {
     let oauth = OAuth::from_env(scopes).unwrap();
 
     let config = Config {
-        cache_path: PathBuf::from_str("/tmp/.spotify_token_cache.json").unwrap(),
+        cache_path: PathBuf::from_str(TOKEN_CACHE).expect("failed to create path from TOKEN_CACHE"),
         token_cached: true,
         token_refreshing: true,
         ..Default::default()
@@ -61,13 +64,24 @@ impl Spotify {
     }
 
     pub async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
+        debug!("fetching playlist {}", playlist_id.to_string());
         let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
 
+        debug!("fetching all spotify playlist items");
         let mut items = self.client.playlist_items(&playlist_id, None, None);
-        let mut all_items: Vec<PlaylistItem> = vec![];
+        let mut all_items: Vec<FullTrack> = vec![];
 
-        while let Some(item) = items.try_next().await.unwrap() {
-            all_items.push(item);
+        while let Ok(next_item) = items.try_next().await {
+            if let Some(list_item) = next_item {
+                if let Some(playable_item) = list_item.track {
+                    match playable_item {
+                        PlayableItem::Track(track) => {
+                            all_items.push(track);
+                        }
+                        PlayableItem::Episode(_) => debug!("skipping episode"),
+                    }
+                }
+            }
         }
 
         Ok(SpotifyFullPlaylist {
@@ -78,44 +92,33 @@ impl Spotify {
 }
 
 impl SpotifyFullPlaylist {
-    pub fn isrc_list(&self) -> Vec<Isrc> {
-        self.all_items
-            .iter()
-            .filter_map(|playlist_item| {
-                if let Some(playable_item) = &playlist_item.track {
-                    match playable_item {
-                        rspotify::model::PlayableItem::Track(track) => track
-                            .external_ids
-                            .get("isrc")
-                            .map(|isrc| Isrc(isrc.to_string())),
-                        rspotify::model::PlayableItem::Episode(_) => None,
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Isrc>>()
+    pub fn isrc_list(&self) -> HashSet<Isrc> {
+        let mut set = HashSet::new();
+
+        for track in &self.all_items {
+            track
+                .external_ids
+                .get("isrc")
+                .map(|isrc| set.insert(Isrc(isrc.to_string())));
+        }
+
+        set
     }
 
-    pub fn missing_tracks(&self, isrcs: Vec<Isrc>) -> Vec<FullTrack> {
+    pub fn missing_tracks(&self, isrcs: HashSet<Isrc>) -> Vec<FullTrack> {
+        let spotify_isrcs = self.isrc_list();
+        let diff = spotify_isrcs.difference(&isrcs).collect::<HashSet<&Isrc>>();
+
         self.all_items
             .iter()
             .cloned()
-            .filter_map(|playlist_item| {
-                if let Some(playable_item) = playlist_item.track {
-                    match playable_item {
-                        rspotify::model::PlayableItem::Track(track) => {
-                            if let Some(isrc) = track.external_ids.get("isrc") {
-                                if isrcs.contains(&Isrc(isrc.to_string())) {
-                                    None
-                                } else {
-                                    Some(track)
-                                }
-                            } else {
-                                None
-                            }
-                        }
-                        rspotify::model::PlayableItem::Episode(_) => None,
+            .filter_map(|track| {
+                if let Some(isrc) = track.external_ids.get("isrc") {
+                    if diff.contains(&&Isrc(isrc.to_string())) {
+                        None
+                    } else {
+                        debug!("track missing from destination playlist: {}", isrc);
+                        Some(track)
                     }
                 } else {
                     None
@@ -142,4 +145,10 @@ impl From<rspotify::ClientError> for Error {
             error: error.to_string(),
         }
     }
+}
+
+pub async fn wait_for_auth() {
+    let hello = warp::path!("callback" / String).map(|name| format!("Hello, {}!", name));
+
+    warp::serve(hello).run(([127, 0, 0, 1], 8080)).await;
 }

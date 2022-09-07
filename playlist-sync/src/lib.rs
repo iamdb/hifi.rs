@@ -1,9 +1,12 @@
 use snafu::prelude::*;
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 
 pub mod qobuz;
 pub mod spotify;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Hash, Clone, Eq, PartialEq)]
 pub struct Isrc(String);
 
 #[derive(Snafu, Debug)]

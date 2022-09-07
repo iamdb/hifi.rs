@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::Isrc;
 use qobuz_client::client::{
     api::{Client, Credentials as QobuzCredentials},
@@ -49,15 +51,19 @@ impl Qobuz {
 pub struct QobuzPlaylist(Playlist);
 
 impl QobuzPlaylist {
-    pub fn irsc_list(&self) -> Vec<Isrc> {
+    pub fn irsc_list(&self) -> HashSet<Isrc> {
         if let Some(tracks) = &self.0.tracks {
-            tracks
-                .items
-                .iter()
-                .filter_map(|t| t.isrc.as_ref().map(|isrc| Isrc(isrc.clone())))
-                .collect::<Vec<Isrc>>()
+            let mut set = HashSet::new();
+
+            for track in &tracks.items {
+                if let Some(isrc) = &track.isrc {
+                    set.insert(Isrc(isrc.to_string()));
+                }
+            }
+
+            set
         } else {
-            vec![]
+            HashSet::new()
         }
     }
 

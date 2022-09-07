@@ -282,14 +282,77 @@ impl Client {
     /// Retrieve a playlist
     pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
-        let params = vec![
+        let mut params = vec![
             ("limit", "500"),
             ("extra", "tracks"),
             ("playlist_id", playlist_id.as_str()),
             ("offset", "0"),
         ];
+        let mut fetched_tracks = 0;
 
-        call!(self, endpoint, Some(params))
+        let playlist: Result<Playlist> = call!(self, endpoint.clone(), Some(params.clone()));
+
+        if let Ok(playlist) = playlist {
+            if let Ok(all_items_playlist) = self.playlist_items(&playlist, endpoint, params).await {
+                Ok(all_items_playlist.clone())
+            } else {
+                Err(Error::Api {
+                    message: "error fetching playlist".to_string(),
+                })
+            }
+        } else {
+            Err(Error::Api {
+                message: "error fetching playlist".to_string(),
+            })
+        }
+    }
+
+    async fn playlist_items<'p>(
+        &self,
+        mut playlist: &'p Playlist,
+        endpoint: String,
+        params: Vec<(&str, &str)>,
+    ) -> Result<&'p Playlist> {
+        let mut params = params.clone();
+        let total_tracks = playlist.tracks_count as usize;
+        let mut all_tracks = Vec::new();
+        let mut offset = 0;
+
+        if let Some(mut tracks) = playlist.tracks.clone() {
+            all_tracks.append(&mut tracks.items.clone());
+            offset = tracks.items.len();
+
+            while all_tracks.len() <= total_tracks {
+                let id = playlist.id.to_string();
+                let offset_string = offset.to_string();
+
+                let mut params = vec![
+                    ("limit", "500"),
+                    ("extra", "tracks"),
+                    ("playlist_id", id.as_str()),
+                    ("offset", offset_string.as_str()),
+                ];
+
+                params[3] = ("offset", offset_string.as_str());
+
+                println!("*** {}", offset);
+
+                let playlist: Result<Playlist> = call!(self, endpoint.clone(), Some(params));
+
+                if let Ok(playlist) = &playlist {
+                    if let Some(new_tracks) = &playlist.tracks {
+                        all_tracks.append(new_tracks.clone().items.as_mut());
+                        offset += new_tracks.items.len() as usize;
+                    }
+                }
+            }
+
+            if !all_tracks.is_empty() {
+                tracks.items = all_tracks;
+            }
+        }
+
+        Ok(playlist)
     }
 
     /// Retrieve track information

@@ -8,6 +8,8 @@ use std::str::FromStr;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    pretty_env_logger::init();
+
     let spotify = spotify::new().await;
     let qobuz = qobuz::new().await;
 
