@@ -2,7 +2,7 @@ use crate::Isrc;
 use futures::stream::TryStreamExt;
 use log::debug;
 use rspotify::{
-    model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, SimplifiedPlaylist},
+    model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, PlaylistItem, SimplifiedPlaylist},
     prelude::*,
     scopes, AuthCodeSpotify, Config, Credentials as SpotifyCredentials, OAuth,
 };
@@ -15,7 +15,7 @@ const TOKEN_CACHE: &str = "/tmp/.spotify_token_cache.json";
 #[allow(unused)]
 pub struct SpotifyFullPlaylist {
     spotify_playlist: FullPlaylist,
-    all_items: Vec<FullTrack>,
+    all_tracks: Vec<FullTrack>,
 }
 
 pub struct Spotify {
@@ -68,26 +68,39 @@ impl Spotify {
         let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
 
         debug!("fetching all spotify playlist items");
-        let mut items = self.client.playlist_items(&playlist_id, None, None);
-        let mut all_items: Vec<FullTrack> = vec![];
+        let items = self.client.playlist_items(&playlist_id, None, None);
 
-        while let Ok(next_item) = items.try_next().await {
-            if let Some(list_item) = next_item {
-                if let Some(playable_item) = list_item.track {
-                    match playable_item {
-                        PlayableItem::Track(track) => {
-                            all_items.push(track);
+        match items.try_collect::<Vec<PlaylistItem>>().await {
+            Ok(full_list) => {
+                debug!("list size: {}", full_list.len());
+
+                let all_tracks = full_list
+                    .iter()
+                    .filter_map(|item| {
+                        if let Some(playable) = &item.track {
+                            match playable {
+                                PlayableItem::Track(track) => Some(track),
+                                PlayableItem::Episode(_) => {
+                                    debug!("skipping episode");
+                                    None
+                                }
+                            }
+                        } else {
+                            None
                         }
-                        PlayableItem::Episode(_) => debug!("skipping episode"),
-                    }
-                }
-            }
-        }
+                    })
+                    .cloned()
+                    .collect::<Vec<FullTrack>>();
 
-        Ok(SpotifyFullPlaylist {
-            spotify_playlist,
-            all_items,
-        })
+                Ok(SpotifyFullPlaylist {
+                    spotify_playlist,
+                    all_tracks,
+                })
+            }
+            Err(error) => Err(Error::ClientError {
+                error: error.to_string(),
+            }),
+        }
     }
 }
 
@@ -95,7 +108,7 @@ impl SpotifyFullPlaylist {
     pub fn isrc_list(&self) -> HashSet<Isrc> {
         let mut set = HashSet::new();
 
-        for track in &self.all_items {
+        for track in &self.all_tracks {
             track
                 .external_ids
                 .get("isrc")
@@ -107,18 +120,17 @@ impl SpotifyFullPlaylist {
 
     pub fn missing_tracks(&self, isrcs: HashSet<Isrc>) -> Vec<FullTrack> {
         let spotify_isrcs = self.isrc_list();
-        let diff = spotify_isrcs.difference(&isrcs).collect::<HashSet<&Isrc>>();
+        let diff = spotify_isrcs.difference(&isrcs).collect::<HashSet<_>>();
 
-        self.all_items
+        self.all_tracks
             .iter()
             .cloned()
             .filter_map(|track| {
                 if let Some(isrc) = track.external_ids.get("isrc") {
                     if diff.contains(&&Isrc(isrc.to_string())) {
-                        None
-                    } else {
-                        debug!("track missing from destination playlist: {}", isrc);
                         Some(track)
+                    } else {
+                        None
                     }
                 } else {
                     None
@@ -128,7 +140,7 @@ impl SpotifyFullPlaylist {
     }
 
     pub fn track_count(&self) -> usize {
-        self.all_items.len() as usize
+        self.all_tracks.len() as usize
     }
 }
 

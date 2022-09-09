@@ -315,35 +315,34 @@ impl Client {
     ) -> Result<&'p Playlist> {
         let mut params = params.clone();
         let total_tracks = playlist.tracks_count as usize;
-        let mut all_tracks = Vec::new();
-        let mut offset = 0;
+        let mut all_tracks: Vec<Track> = Vec::new();
 
         if let Some(mut tracks) = playlist.tracks.clone() {
-            all_tracks.append(&mut tracks.items.clone());
-            offset = tracks.items.len();
+            all_tracks.append(&mut tracks.items);
 
-            while all_tracks.len() <= total_tracks {
+            while all_tracks.len() < total_tracks {
                 let id = playlist.id.to_string();
-                let offset_string = offset.to_string();
+                let limit_string = (total_tracks - all_tracks.len()).to_string();
+                let offset_string = all_tracks.len().to_string();
 
                 let mut params = vec![
-                    ("limit", "500"),
+                    ("limit", limit_string.as_str()),
                     ("extra", "tracks"),
                     ("playlist_id", id.as_str()),
                     ("offset", offset_string.as_str()),
                 ];
 
-                params[3] = ("offset", offset_string.as_str());
+                let playlist: Result<Playlist> =
+                    call!(self, endpoint.clone(), Some(params.clone()));
 
-                println!("*** {}", offset);
-
-                let playlist: Result<Playlist> = call!(self, endpoint.clone(), Some(params));
-
-                if let Ok(playlist) = &playlist {
-                    if let Some(new_tracks) = &playlist.tracks {
-                        all_tracks.append(new_tracks.clone().items.as_mut());
-                        offset += new_tracks.items.len() as usize;
+                match &playlist {
+                    Ok(playlist) => {
+                        debug!("appending tracks to playlist");
+                        if let Some(new_tracks) = &playlist.tracks {
+                            all_tracks.append(&mut new_tracks.clone().items);
+                        }
                     }
+                    Err(error) => error!("{}", error.to_string()),
                 }
             }
 

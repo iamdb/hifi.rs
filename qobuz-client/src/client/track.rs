@@ -28,7 +28,7 @@ pub struct Track {
     pub maximum_sampling_rate: f64,
     pub media_number: i64,
     pub parental_warning: bool,
-    pub performer: Performer,
+    pub performer: Option<Performer>,
     pub performers: Option<String>,
     pub previewable: bool,
     pub purchasable: bool,
@@ -51,10 +51,16 @@ impl Track {
             .as_str()[3..7]
             .to_string();
 
+        let performer = if let Some(performer) = &self.performer {
+            performer.name.clone()
+        } else {
+            "".to_string()
+        };
+
         vec![
             self.track_number.to_string(),
             self.title.clone(),
-            self.performer.name.clone(),
+            performer,
             duration,
         ]
     }
@@ -103,10 +109,16 @@ impl TrackListTrack {
             .as_str()[3..7]
             .to_string();
 
+        let performer = if let Some(performer) = &self.track.performer {
+            performer.name.clone()
+        } else {
+            "".to_string()
+        };
+
         vec![
             self.index.to_string(),
             self.track.title.clone(),
-            self.track.performer.name.clone(),
+            performer,
             duration,
         ]
     }
