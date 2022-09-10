@@ -1,7 +1,9 @@
+use log::debug;
 use playlist_sync::Result;
 use playlist_sync::{qobuz, spotify};
 use rspotify::model::PlaylistId;
 use std::str::FromStr;
+use std::time::Duration;
 
 // QOBUZ PLAYLIST https://play.qobuz.com/playlist/3551270
 // SPOTIFY PLAYLIST https://open.spotify.com/playlist/2IkvmS2LOZJCFa6n9yiA7Z
@@ -29,6 +31,20 @@ async fn main() -> Result<()> {
     println!("qobuz size: {}", qobuz_playlist.track_count());
     println!("qobuz isrc: {}", qobuz_isrcs.len());
     println!("missing tracks: {}", missing_tracks.len());
+
+    for track in missing_tracks {
+        if let Some(isrc) = track.external_ids.get("isrc") {
+            debug!("Missing {isrc}");
+            let results = qobuz.search(isrc.to_string()).await;
+            if !results.is_empty() {
+                let found = results.get(0).unwrap();
+
+                println!("searching for {isrc}, found {found:?}");
+
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        }
+    }
 
     Ok(())
 }

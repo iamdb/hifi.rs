@@ -409,7 +409,7 @@ impl Client {
         call!(self, endpoint, Some(params))
     }
 
-    pub async fn search_all(&self, query: String) -> Result<String> {
+    pub async fn search_all(&self, query: String) -> Result<SearchAllResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
@@ -668,13 +668,16 @@ pub enum OutputFormat {
     Tsv,
 }
 
-use crate::client::artist::{Artist, ArtistSearchResults};
 use crate::client::playlist::{Playlist, UserPlaylistsResult};
 use crate::client::track::Track;
 use crate::client::TrackURL;
 use crate::client::{
     album::{Album, AlbumSearchResults},
     AudioQuality,
+};
+use crate::client::{
+    artist::{Artist, ArtistSearchResults},
+    search_results::SearchAllResults,
 };
 
 #[tokio::test]

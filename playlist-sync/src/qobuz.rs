@@ -4,6 +4,7 @@ use crate::Isrc;
 use qobuz_client::client::{
     api::{Client, Credentials as QobuzCredentials},
     playlist::Playlist,
+    track::Track,
 };
 use snafu::prelude::*;
 
@@ -45,6 +46,12 @@ pub async fn new() -> Qobuz {
 impl Qobuz {
     pub async fn playlist(&self, playlist_id: String) -> Result<QobuzPlaylist> {
         Ok(QobuzPlaylist(self.client.playlist(playlist_id).await?))
+    }
+
+    pub async fn search(&self, query: String) -> Vec<Track> {
+        let results = self.client.search_all(query).await.unwrap();
+
+        results.tracks.items
     }
 }
 

@@ -16,6 +16,7 @@ use qobuz_client::client::{
     AudioQuality,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 pub mod album;
 pub mod artist;
