@@ -9,6 +9,12 @@ pub mod spotify;
 #[derive(Hash, Clone, Eq, PartialEq)]
 pub struct Isrc(String);
 
+impl From<&String> for Isrc {
+    fn from(s: &String) -> Self {
+        Isrc(s.to_lowercase())
+    }
+}
+
 #[derive(Snafu, Debug)]
 pub enum Error {
     ClientError { error: String },

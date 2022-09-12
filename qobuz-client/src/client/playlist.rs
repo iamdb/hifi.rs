@@ -67,6 +67,10 @@ pub struct Playlist {
 }
 
 impl Playlist {
+    pub fn set_tracks(&mut self, tracks: Tracks) {
+        self.tracks = Some(tracks);
+    }
+
     pub fn reverse(&mut self) {
         if let Some(tracks) = &mut self.tracks {
             tracks.items.reverse();

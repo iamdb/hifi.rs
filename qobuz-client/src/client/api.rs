@@ -1,6 +1,7 @@
 use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
+    multipart::Form,
     Method, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
@@ -147,6 +148,7 @@ pub async fn new(
 }
 
 #[non_exhaustive]
+#[allow(unused)]
 enum Endpoint {
     Album,
     Artist,
@@ -157,6 +159,9 @@ enum Endpoint {
     SearchAlbums,
     TrackURL,
     Playlist,
+    PlaylistAddTracks,
+    PlaylistDeleteTracks,
+    PlaylistUpdatePosition,
     Search,
 }
 
@@ -166,20 +171,39 @@ impl Endpoint {
             Endpoint::Album => "album/get",
             Endpoint::Artist => "artist/get",
             Endpoint::Login => "user/login",
-            Endpoint::Track => "track/get",
-            Endpoint::SearchArtists => "artist/search",
-            Endpoint::UserPlaylist => "playlist/getUserPlaylists",
-            Endpoint::SearchAlbums => "album/search",
-            Endpoint::Search => "catalog/search",
-            Endpoint::TrackURL => "track/getFileUrl",
             Endpoint::Playlist => "playlist/get",
+            Endpoint::PlaylistAddTracks => "playlist/addTracks",
+            Endpoint::PlaylistDeleteTracks => "playlist/deleteTracks",
+            Endpoint::PlaylistUpdatePosition => "playlist/updateTracksPosition",
+            Endpoint::Search => "catalog/search",
+            Endpoint::SearchAlbums => "album/search",
+            Endpoint::SearchArtists => "artist/search",
+            Endpoint::Track => "track/get",
+            Endpoint::TrackURL => "track/getFileUrl",
+            Endpoint::UserPlaylist => "playlist/getUserPlaylists",
         }
     }
 }
 
-macro_rules! call {
+macro_rules! get {
     ($self:ident, $endpoint:expr, $params:expr) => {
-        match $self.make_call($endpoint, $params).await {
+        match $self.make_get_call($endpoint, $params).await {
+            Ok(response) => match serde_json::from_str(response.as_str()) {
+                Ok(item) => Ok(item),
+                Err(error) => Err(Error::DeserializeJSON {
+                    message: error.to_string(),
+                }),
+            },
+            Err(error) => Err(Error::Api {
+                message: error.to_string(),
+            }),
+        }
+    };
+}
+
+macro_rules! post {
+    ($self:ident, $endpoint:expr, $form:expr) => {
+        match $self.make_post_call($endpoint, $form).await {
             Ok(response) => match serde_json::from_str(response.as_str()) {
                 Ok(item) => Ok(item),
                 Err(error) => Err(Error::DeserializeJSON {
@@ -256,7 +280,7 @@ impl Client {
             ("app_id", app_id.as_str()),
         ];
 
-        match self.make_call(endpoint, Some(params)).await {
+        match self.make_get_call(endpoint, Some(params)).await {
             Ok(response) => {
                 let json: Value = serde_json::from_str(response.as_str()).unwrap();
                 info!("Successfully logged in");
@@ -276,7 +300,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     /// Retrieve a playlist
@@ -290,10 +314,12 @@ impl Client {
         ];
         let mut fetched_tracks = 0;
 
-        let playlist: Result<Playlist> = call!(self, endpoint.clone(), Some(params.clone()));
+        let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
 
-        if let Ok(playlist) = playlist {
-            if let Ok(all_items_playlist) = self.playlist_items(&playlist, endpoint, params).await {
+        if let Ok(mut playlist) = playlist {
+            if let Ok(all_items_playlist) =
+                self.playlist_items(&mut playlist, endpoint, params).await
+            {
                 Ok(all_items_playlist.clone())
             } else {
                 Err(Error::Api {
@@ -309,7 +335,7 @@ impl Client {
 
     async fn playlist_items<'p>(
         &self,
-        mut playlist: &'p Playlist,
+        mut playlist: &'p mut Playlist,
         endpoint: String,
         params: Vec<(&str, &str)>,
     ) -> Result<&'p Playlist> {
@@ -332,8 +358,7 @@ impl Client {
                     ("offset", offset_string.as_str()),
                 ];
 
-                let playlist: Result<Playlist> =
-                    call!(self, endpoint.clone(), Some(params.clone()));
+                let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
 
                 match &playlist {
                     Ok(playlist) => {
@@ -348,10 +373,60 @@ impl Client {
 
             if !all_tracks.is_empty() {
                 tracks.items = all_tracks;
+                playlist.set_tracks(tracks);
             }
         }
 
         Ok(playlist)
+    }
+
+    /// Add new track to playlist
+    pub async fn playlist_add_track(
+        &self,
+        playlist_id: String,
+        track_ids: Vec<String>,
+    ) -> Result<Playlist> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
+        let form_data = Form::new()
+            .text("playlist_id", playlist_id)
+            .text("track_ids", track_ids.join(","))
+            .text("no_duplicate", "true");
+
+        post!(self, endpoint, form_data)
+    }
+
+    /// Add new track to playlist
+    pub async fn playlist_delete_track(
+        &self,
+        playlist_id: String,
+        playlist_track_ids: Vec<String>,
+    ) -> Result<Playlist> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
+        let form_data = Form::new()
+            .text("playlist_id", playlist_id)
+            .text("playlist_track_ids", playlist_track_ids.join(","));
+
+        post!(self, endpoint, form_data)
+    }
+
+    /// Update track position in playlist
+    pub async fn playlist_track_position(
+        &self,
+        index: usize,
+        playlist_id: String,
+        track_id: String,
+    ) -> Result<Playlist> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url,
+            Endpoint::PlaylistUpdatePosition.as_str()
+        );
+        let form_data = Form::new()
+            .text("playlist_id", playlist_id)
+            .text("playlist_track_ids", track_id)
+            .text("insert_before", index.to_string());
+
+        post!(self, endpoint, form_data)
     }
 
     /// Retrieve track information
@@ -360,7 +435,7 @@ impl Client {
         let track_id_string = track_id.to_string();
         let params = vec![("track_id", track_id_string.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     /// Retrieve url information for a track's audio file
@@ -406,14 +481,14 @@ impl Client {
             ("intent", "stream"),
         ];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     pub async fn search_all(&self, query: String) -> Result<SearchAllResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an album
@@ -421,7 +496,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
         let params = vec![("album_id", album_id.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Search the database for albums
@@ -438,7 +513,7 @@ impl Client {
         };
         let params = vec![("query", query.as_str()), ("limit", limit.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an artist
@@ -467,7 +542,7 @@ impl Client {
             ("extra", "albums"),
         ];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Search the database for artists
@@ -484,7 +559,7 @@ impl Client {
         };
         let params = vec![("query", query.as_str()), ("limit", &limit)];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Set a user access token for authentication
@@ -511,8 +586,8 @@ impl Client {
         self.default_quality = quality;
     }
 
-    // Call the api and retrieve the JSON payload
-    async fn make_call(
+    // Make a GET call to the API with the provided parameters
+    async fn make_get_call(
         &self,
         endpoint: String,
         params: Option<Vec<(&str, &str)>>,
@@ -544,6 +619,37 @@ impl Client {
             let response = request.send().await?;
             self.handle_response(response).await
         }
+    }
+
+    // Make a POST call to the API with form data
+    async fn make_post_call(&self, endpoint: String, form: Form) -> Result<String> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(app_id) = &self.app_id {
+            info!("adding app_id to request headers: {}", app_id);
+            headers.insert("X-App-Id", HeaderValue::from_str(app_id.as_str()).unwrap());
+        } else {
+            error!("no app_id");
+        }
+
+        if let Some(token) = &self.user_token {
+            info!("adding token to request headers: {}", token);
+            headers.insert(
+                "X-User-Auth-Token",
+                HeaderValue::from_str(token.as_str()).unwrap(),
+            );
+        }
+
+        debug!("calling {} endpoint", endpoint);
+        let response = self
+            .client
+            .request(Method::POST, endpoint)
+            .headers(headers)
+            .form(&form.boundary())
+            .send()
+            .await?;
+
+        self.handle_response(response).await
     }
 
     // Handle a response retrieved from the api

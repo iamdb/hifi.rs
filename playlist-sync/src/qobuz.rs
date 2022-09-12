@@ -53,6 +53,20 @@ impl Qobuz {
 
         results.tracks.items
     }
+
+    pub async fn add_track(&self, playlist_id: String, track_id: String) {
+        self.client
+            .playlist_add_track(playlist_id, vec![track_id])
+            .await
+            .expect("failed to add track to playlist");
+    }
+
+    pub async fn update_track_position(&self, playlist_id: String, track_id: String, index: usize) {
+        self.client
+            .playlist_track_position(index, playlist_id, track_id)
+            .await
+            .expect("failed to update playlist track position");
+    }
 }
 
 pub struct QobuzPlaylist(Playlist);
@@ -64,7 +78,7 @@ impl QobuzPlaylist {
 
             for track in &tracks.items {
                 if let Some(isrc) = &track.isrc {
-                    set.insert(Isrc(isrc.to_string()));
+                    set.insert(Isrc(isrc.to_lowercase()));
                 }
             }
 
@@ -74,9 +88,27 @@ impl QobuzPlaylist {
         }
     }
 
-    pub fn track_count(&self) -> usize {
-        self.0.tracks_count as usize
+    pub fn id(&self) -> String {
+        self.0.id.to_string()
     }
 
-    //pub async fn sync_spotify_playlist(&self, spotify_playlist: SpotifyFullPlaylist) {}
+    pub fn insert(&mut self, index: usize, track: &Track) {
+        if let Some(tracks) = self.0.tracks.as_mut() {
+            tracks.items.insert(index, track.clone());
+        }
+    }
+
+    pub fn push(&mut self, track: &Track) {
+        if let Some(tracks) = self.0.tracks.as_mut() {
+            tracks.items.push(track.clone());
+        }
+    }
+
+    pub fn track_count(&self) -> usize {
+        if let Some(tracks) = &self.0.tracks {
+            tracks.items.len() as usize
+        } else {
+            0
+        }
+    }
 }

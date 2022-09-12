@@ -7,7 +7,12 @@ use rspotify::{
     scopes, AuthCodeSpotify, Config, Credentials as SpotifyCredentials, OAuth,
 };
 use snafu::prelude::*;
-use std::{collections::HashSet, path::PathBuf, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    str::FromStr,
+};
+use tokio::select;
 use warp::Filter;
 
 const TOKEN_CACHE: &str = "/tmp/.spotify_token_cache.json";
@@ -42,16 +47,74 @@ pub async fn new() -> Spotify {
         ..Default::default()
     };
 
-    let mut client = AuthCodeSpotify::with_config(creds.clone(), oauth.clone(), config);
-
-    let url = client.get_authorize_url(true).unwrap();
-    // This function requires the `cli` feature enabled.
-    client.prompt_for_token(&url).await.unwrap();
+    let client = AuthCodeSpotify::with_config(creds, oauth, config);
 
     Spotify { client }
 }
 
 impl Spotify {
+    pub async fn auth(&mut self) {
+        if let Ok(Some(token)) = self.client.read_token_cache(true).await {
+            debug!("found token in cache: {:?}", token);
+            let expired = token.is_expired();
+
+            *self.client.get_token().lock().await.unwrap() = Some(token);
+
+            if expired {
+                match self
+                    .client
+                    .refetch_token()
+                    .await
+                    .expect("failed to refetch token")
+                {
+                    Some(refreshed_token) => {
+                        debug!("cached token refreshed");
+                        *self.client.get_token().lock().await.unwrap() = Some(refreshed_token);
+                    }
+                    None => {
+                        debug!("no cached token, authorizing client");
+                        let url = self.client.get_authorize_url(true).unwrap();
+
+                        if webbrowser::open(&url).is_ok() {
+                            self.wait_for_auth().await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn wait_for_auth(&mut self) {
+        let (tx, rx) = flume::bounded::<String>(1);
+
+        let oauth_callback = warp::path!("callback")
+            .and(warp::get())
+            .and(warp::query::<HashMap<String, String>>())
+            .map(move |mut qs: HashMap<String, String>| {
+                if let Some(oauth_code) = qs.remove("code") {
+                    tx.send(oauth_code).expect("failed to send code");
+                }
+                "you can close this"
+            });
+
+        debug!("creating temp http server for auth callback");
+        println!("Starting a temporary web server to retreive the authorization code from Spotify");
+        let server_handle = tokio::spawn(warp::serve(oauth_callback).run(([127, 0, 0, 1], 8080)));
+
+        loop {
+            select! {
+                Ok(code) = rx.recv_async() => {
+                    debug!("received code: {}", code);
+                    println!("Received an authorization code from Spotify, shutting down termporary web server");
+
+                    self.client.request_token(code.as_str()).await.expect("failed to get auth token");
+                    server_handle.abort();
+                    break;
+                }
+            }
+        }
+    }
+
     pub async fn user_playlists(&self) -> Vec<SimplifiedPlaylist> {
         let mut playlists = self.client.current_user_playlists();
         let mut all_playlists: Vec<SimplifiedPlaylist> = vec![];
@@ -65,6 +128,7 @@ impl Spotify {
 
     pub async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
         debug!("fetching playlist {}", playlist_id.to_string());
+
         let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
 
         debug!("fetching all spotify playlist items");
@@ -112,23 +176,24 @@ impl SpotifyFullPlaylist {
             track
                 .external_ids
                 .get("isrc")
-                .map(|isrc| set.insert(Isrc(isrc.to_string())));
+                .map(|isrc| set.insert(Isrc(isrc.to_lowercase())));
         }
 
         set
     }
 
-    pub fn missing_tracks(&self, isrcs: HashSet<Isrc>) -> Vec<FullTrack> {
+    pub fn missing_tracks(&self, isrcs: HashSet<Isrc>) -> Vec<MissingTrack> {
         let spotify_isrcs = self.isrc_list();
         let diff = spotify_isrcs.difference(&isrcs).collect::<HashSet<_>>();
 
         self.all_tracks
             .iter()
             .cloned()
-            .filter_map(|track| {
+            .enumerate()
+            .filter_map(|(index, track)| {
                 if let Some(isrc) = track.external_ids.get("isrc") {
-                    if diff.contains(&&Isrc(isrc.to_string())) {
-                        Some(track)
+                    if diff.contains::<Isrc>(&isrc.into()) {
+                        Some(MissingTrack { track, index })
                     } else {
                         None
                     }
@@ -136,7 +201,7 @@ impl SpotifyFullPlaylist {
                     None
                 }
             })
-            .collect::<Vec<FullTrack>>()
+            .collect::<Vec<MissingTrack>>()
     }
 
     pub fn track_count(&self) -> usize {
@@ -159,8 +224,7 @@ impl From<rspotify::ClientError> for Error {
     }
 }
 
-pub async fn wait_for_auth() {
-    let hello = warp::path!("callback" / String).map(|name| format!("Hello, {}!", name));
-
-    warp::serve(hello).run(([127, 0, 0, 1], 8080)).await;
+pub struct MissingTrack {
+    pub track: FullTrack,
+    pub index: usize,
 }
