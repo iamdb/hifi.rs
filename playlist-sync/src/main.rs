@@ -54,12 +54,15 @@ async fn main() -> Result<()> {
     spinner.success("Playlist retreived from Qobuz.");
 
     let spinner = Spinner::new(Spinners::Dots, "Analyzing...", Color::Blue);
+
     let qobuz_isrcs = qobuz_playlist.irsc_list();
     let missing_tracks = spotify_playlist.missing_tracks(qobuz_isrcs.clone());
+
     spinner.stop_with_message(&format!(
-        "\n\nTotal Spotify Tracks: {}\nTotal Qobuz Tracks {}\n",
+        "\nTotal Spotify Tracks: {}\nTotal Qobuz Tracks {}\nMissing Tracks {}\n",
         spotify_playlist.track_count(),
-        qobuz_playlist.track_count()
+        qobuz_playlist.track_count(),
+        missing_tracks.len()
     ));
 
     println!("Searching for missing tracks");
@@ -76,7 +79,7 @@ async fn main() -> Result<()> {
                     );
 
                     qobuz
-                        .add_track(found.id.to_string(), qobuz_playlist.id())
+                        .add_track(qobuz_playlist.id(), found.id.to_string())
                         .await;
 
                     if missing.index < qobuz_playlist.track_count() {

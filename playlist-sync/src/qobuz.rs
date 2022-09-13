@@ -55,10 +55,14 @@ impl Qobuz {
     }
 
     pub async fn add_track(&self, playlist_id: String, track_id: String) {
-        self.client
-            .playlist_add_track(playlist_id, vec![track_id])
+        match self
+            .client
+            .playlist_add_track(playlist_id, vec![track_id.clone()])
             .await
-            .expect("failed to add track to playlist");
+        {
+            Ok(_) => debug!("track added"),
+            Err(error) => error!("failed to add track {}", error.to_string()),
+        }
     }
 
     pub async fn update_track_position(&self, playlist_id: String, track_id: String, index: usize) {

@@ -1083,7 +1083,6 @@ dependencies = [
  "pretty_env_logger",
  "qobuz-client",
  "regex",
- "reqwest",
  "serde",
  "serde_json",
  "sled",

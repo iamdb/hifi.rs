@@ -1,7 +1,6 @@
 use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
-    multipart::Form,
     Method, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
@@ -71,17 +70,11 @@ impl From<reqwest::Error> for Error {
         let status = error.status();
 
         match status {
-            Some(StatusCode::BAD_REQUEST) => Error::Api {
-                message: "Bad request".to_string(),
+            Some(status) => Error::Api {
+                message: status.to_string(),
             },
-            Some(StatusCode::UNAUTHORIZED) => Error::Api {
-                message: "Unauthorized request".to_string(),
-            },
-            Some(StatusCode::NOT_FOUND) => Error::Api {
-                message: "Item not found".to_string(),
-            },
-            Some(_) | None => Error::Api {
-                message: "Error calling the API.".to_string(),
+            None => Error::Api {
+                message: "Error calling the API".to_string(),
             },
         }
     }
@@ -148,7 +141,6 @@ pub async fn new(
 }
 
 #[non_exhaustive]
-#[allow(unused)]
 enum Endpoint {
     Album,
     Artist,
@@ -387,10 +379,13 @@ impl Client {
         track_ids: Vec<String>,
     ) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
-        let form_data = Form::new()
-            .text("playlist_id", playlist_id)
-            .text("track_ids", track_ids.join(","))
-            .text("no_duplicate", "true");
+
+        let track_ids = track_ids.join(",");
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("track_ids", track_ids.as_str());
+        form_data.insert("no_duplicate", "true");
 
         post!(self, endpoint, form_data)
     }
@@ -401,10 +396,17 @@ impl Client {
         playlist_id: String,
         playlist_track_ids: Vec<String>,
     ) -> Result<Playlist> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
-        let form_data = Form::new()
-            .text("playlist_id", playlist_id)
-            .text("playlist_track_ids", playlist_track_ids.join(","));
+        let endpoint = format!(
+            "{}{}",
+            self.base_url,
+            Endpoint::PlaylistDeleteTracks.as_str()
+        );
+
+        let playlist_track_ids = playlist_track_ids.join(",");
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("playlist_track_ids", playlist_track_ids.as_str());
 
         post!(self, endpoint, form_data)
     }
@@ -421,10 +423,13 @@ impl Client {
             self.base_url,
             Endpoint::PlaylistUpdatePosition.as_str()
         );
-        let form_data = Form::new()
-            .text("playlist_id", playlist_id)
-            .text("playlist_track_ids", track_id)
-            .text("insert_before", index.to_string());
+
+        let index = index.to_string();
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("playlist_track_ids", track_id.as_str());
+        form_data.insert("insert_before", index.as_str());
 
         post!(self, endpoint, form_data)
     }
@@ -586,12 +591,7 @@ impl Client {
         self.default_quality = quality;
     }
 
-    // Make a GET call to the API with the provided parameters
-    async fn make_get_call(
-        &self,
-        endpoint: String,
-        params: Option<Vec<(&str, &str)>>,
-    ) -> Result<String> {
+    fn client_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
         if let Some(app_id) = &self.app_id {
@@ -608,6 +608,17 @@ impl Client {
                 HeaderValue::from_str(token.as_str()).unwrap(),
             );
         }
+
+        headers
+    }
+
+    // Make a GET call to the API with the provided parameters
+    async fn make_get_call(
+        &self,
+        endpoint: String,
+        params: Option<Vec<(&str, &str)>>,
+    ) -> Result<String> {
+        let headers = self.client_headers();
 
         debug!("calling {} endpoint", endpoint);
         let request = self.client.request(Method::GET, endpoint).headers(headers);
@@ -622,30 +633,19 @@ impl Client {
     }
 
     // Make a POST call to the API with form data
-    async fn make_post_call(&self, endpoint: String, form: Form) -> Result<String> {
-        let mut headers = HeaderMap::new();
+    async fn make_post_call(
+        &self,
+        endpoint: String,
+        params: HashMap<&str, &str>,
+    ) -> Result<String> {
+        let headers = self.client_headers();
 
-        if let Some(app_id) = &self.app_id {
-            info!("adding app_id to request headers: {}", app_id);
-            headers.insert("X-App-Id", HeaderValue::from_str(app_id.as_str()).unwrap());
-        } else {
-            error!("no app_id");
-        }
-
-        if let Some(token) = &self.user_token {
-            info!("adding token to request headers: {}", token);
-            headers.insert(
-                "X-User-Auth-Token",
-                HeaderValue::from_str(token.as_str()).unwrap(),
-            );
-        }
-
-        debug!("calling {} endpoint", endpoint);
+        debug!("calling {} endpoint, with params {params:?}", endpoint);
         let response = self
             .client
             .request(Method::POST, endpoint)
             .headers(headers)
-            .form(&form.boundary())
+            .form(&params)
             .send()
             .await?;
 
@@ -654,21 +654,13 @@ impl Client {
 
     // Handle a response retrieved from the api
     async fn handle_response(&self, response: Response) -> Result<String> {
-        match response.status() {
-            StatusCode::BAD_REQUEST => Err(Error::Api {
-                message: "Bad request".to_string(),
-            }),
-            StatusCode::UNAUTHORIZED => Err(Error::Api {
-                message: "Unauthorized request".to_string(),
-            }),
-            StatusCode::NOT_FOUND => Err(Error::Api {
-                message: "Item not found".to_string(),
-            }),
-            StatusCode::OK => {
-                let res = response.text().await.unwrap();
-                Ok(res)
-            }
-            _ => unreachable!(),
+        if response.status() == StatusCode::OK {
+            let res = response.text().await.unwrap();
+            Ok(res)
+        } else {
+            Err(Error::Api {
+                message: response.status().to_string(),
+            })
         }
     }
 

@@ -1,6 +1,6 @@
 use snafu::prelude::*;
 extern crate pretty_env_logger;
-//#[macro_use]
+#[macro_use]
 extern crate log;
 
 pub mod qobuz;
