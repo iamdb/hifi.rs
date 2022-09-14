@@ -105,14 +105,14 @@ impl Spotify {
             });
 
         debug!("creating temp http server for auth callback");
-        print!("Starting a temporary web server to retreive the authorization code from Spotify");
+        println!("Starting a temporary web server to retreive the authorization code from Spotify");
         let server_handle = tokio::spawn(warp::serve(oauth_callback).run(([127, 0, 0, 1], 8080)));
 
         loop {
             select! {
                 Ok(code) = rx.recv_async() => {
                     debug!("received code: {}", code);
-                    print!("Received an authorization code from Spotify, shutting down termporary web server");
+                    println!("Received an authorization code from Spotify, shutting down termporary web server");
 
                     self.client.request_token(code.as_str()).await.expect("failed to get auth token");
                     server_handle.abort();

@@ -151,6 +151,8 @@ enum Endpoint {
     SearchAlbums,
     TrackURL,
     Playlist,
+    PlaylistCreate,
+    PlaylistDelete,
     PlaylistAddTracks,
     PlaylistDeleteTracks,
     PlaylistUpdatePosition,
@@ -164,6 +166,8 @@ impl Endpoint {
             Endpoint::Artist => "artist/get",
             Endpoint::Login => "user/login",
             Endpoint::Playlist => "playlist/get",
+            Endpoint::PlaylistCreate => "playlist/create",
+            Endpoint::PlaylistDelete => "playlist/delete",
             Endpoint::PlaylistAddTracks => "playlist/addTracks",
             Endpoint::PlaylistDeleteTracks => "playlist/deleteTracks",
             Endpoint::PlaylistUpdatePosition => "playlist/updateTracksPosition",
@@ -370,6 +374,50 @@ impl Client {
         }
 
         Ok(playlist)
+    }
+
+    pub async fn create_playlist(
+        &self,
+        name: String,
+        is_public: bool,
+        description: Option<String>,
+        is_collaborative: Option<bool>,
+    ) -> Result<Playlist> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistCreate.as_str());
+
+        let mut form_data = HashMap::new();
+        form_data.insert("name", name.as_str());
+
+        let is_collaborative = if !is_public || is_collaborative.is_none() {
+            "false".to_string()
+        } else if let Some(is_collaborative) = is_collaborative {
+            is_collaborative.to_string()
+        } else {
+            "false".to_string()
+        };
+
+        form_data.insert("is_collaborative", is_collaborative.as_str());
+
+        let is_public = is_public.to_string();
+        form_data.insert("is_public", is_public.as_str());
+
+        let description = if let Some(description) = description {
+            description
+        } else {
+            "".to_string()
+        };
+        form_data.insert("description", description.as_str());
+
+        post!(self, endpoint, form_data)
+    }
+
+    pub async fn delete_playlist(&self, playlist_id: String) -> Result<()> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDelete.as_str());
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+
+        post!(self, endpoint, form_data)
     }
 
     /// Add new track to playlist
