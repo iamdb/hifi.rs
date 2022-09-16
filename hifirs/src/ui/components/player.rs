@@ -78,13 +78,14 @@ pub(crate) fn current_track<B>(
         .fg(Color::Indexed(81))
         .add_modifier(Modifier::BOLD);
 
-    let mut current_track_text = vec![
-        Spans::from(vec![Span::styled(
-            playlist_track.track.title.clone(),
-            title_style,
-        )]),
-        Spans::from(vec![Span::from(playlist_track.track.performer.name)]),
-    ];
+    let mut current_track_text = vec![Spans::from(vec![Span::styled(
+        playlist_track.track.title.clone(),
+        title_style,
+    )])];
+
+    if let Some(performer) = playlist_track.track.performer {
+        current_track_text.push(Spans::from(vec![Span::from(performer.name)]))
+    }
 
     if playlist_track.track.title.len() <= chunks[2].width as usize {
         current_track_text.insert(0, Spans::from(""));

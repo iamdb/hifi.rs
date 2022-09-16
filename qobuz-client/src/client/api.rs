@@ -70,17 +70,11 @@ impl From<reqwest::Error> for Error {
         let status = error.status();
 
         match status {
-            Some(StatusCode::BAD_REQUEST) => Error::Api {
-                message: "Bad request".to_string(),
+            Some(status) => Error::Api {
+                message: status.to_string(),
             },
-            Some(StatusCode::UNAUTHORIZED) => Error::Api {
-                message: "Unauthorized request".to_string(),
-            },
-            Some(StatusCode::NOT_FOUND) => Error::Api {
-                message: "Item not found".to_string(),
-            },
-            Some(_) | None => Error::Api {
-                message: "Error calling the API.".to_string(),
+            None => Error::Api {
+                message: "Error calling the API".to_string(),
             },
         }
     }
@@ -157,6 +151,11 @@ enum Endpoint {
     SearchAlbums,
     TrackURL,
     Playlist,
+    PlaylistCreate,
+    PlaylistDelete,
+    PlaylistAddTracks,
+    PlaylistDeleteTracks,
+    PlaylistUpdatePosition,
     Search,
 }
 
@@ -166,20 +165,41 @@ impl Endpoint {
             Endpoint::Album => "album/get",
             Endpoint::Artist => "artist/get",
             Endpoint::Login => "user/login",
-            Endpoint::Track => "track/get",
-            Endpoint::SearchArtists => "artist/search",
-            Endpoint::UserPlaylist => "playlist/getUserPlaylists",
-            Endpoint::SearchAlbums => "album/search",
-            Endpoint::Search => "catalog/search",
-            Endpoint::TrackURL => "track/getFileUrl",
             Endpoint::Playlist => "playlist/get",
+            Endpoint::PlaylistCreate => "playlist/create",
+            Endpoint::PlaylistDelete => "playlist/delete",
+            Endpoint::PlaylistAddTracks => "playlist/addTracks",
+            Endpoint::PlaylistDeleteTracks => "playlist/deleteTracks",
+            Endpoint::PlaylistUpdatePosition => "playlist/updateTracksPosition",
+            Endpoint::Search => "catalog/search",
+            Endpoint::SearchAlbums => "album/search",
+            Endpoint::SearchArtists => "artist/search",
+            Endpoint::Track => "track/get",
+            Endpoint::TrackURL => "track/getFileUrl",
+            Endpoint::UserPlaylist => "playlist/getUserPlaylists",
         }
     }
 }
 
-macro_rules! call {
+macro_rules! get {
     ($self:ident, $endpoint:expr, $params:expr) => {
-        match $self.make_call($endpoint, $params).await {
+        match $self.make_get_call($endpoint, $params).await {
+            Ok(response) => match serde_json::from_str(response.as_str()) {
+                Ok(item) => Ok(item),
+                Err(error) => Err(Error::DeserializeJSON {
+                    message: error.to_string(),
+                }),
+            },
+            Err(error) => Err(Error::Api {
+                message: error.to_string(),
+            }),
+        }
+    };
+}
+
+macro_rules! post {
+    ($self:ident, $endpoint:expr, $form:expr) => {
+        match $self.make_post_call($endpoint, $form).await {
             Ok(response) => match serde_json::from_str(response.as_str()) {
                 Ok(item) => Ok(item),
                 Err(error) => Err(Error::DeserializeJSON {
@@ -256,7 +276,7 @@ impl Client {
             ("app_id", app_id.as_str()),
         ];
 
-        match self.make_call(endpoint, Some(params)).await {
+        match self.make_get_call(endpoint, Some(params)).await {
             Ok(response) => {
                 let json: Value = serde_json::from_str(response.as_str()).unwrap();
                 info!("Successfully logged in");
@@ -276,20 +296,190 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     /// Retrieve a playlist
     pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
-        let params = vec![
+        let mut params = vec![
             ("limit", "500"),
             ("extra", "tracks"),
             ("playlist_id", playlist_id.as_str()),
             ("offset", "0"),
         ];
+        let mut fetched_tracks = 0;
 
-        call!(self, endpoint, Some(params))
+        let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
+
+        if let Ok(mut playlist) = playlist {
+            if let Ok(all_items_playlist) =
+                self.playlist_items(&mut playlist, endpoint, params).await
+            {
+                Ok(all_items_playlist.clone())
+            } else {
+                Err(Error::Api {
+                    message: "error fetching playlist".to_string(),
+                })
+            }
+        } else {
+            Err(Error::Api {
+                message: "error fetching playlist".to_string(),
+            })
+        }
+    }
+
+    async fn playlist_items<'p>(
+        &self,
+        mut playlist: &'p mut Playlist,
+        endpoint: String,
+        params: Vec<(&str, &str)>,
+    ) -> Result<&'p Playlist> {
+        let mut params = params.clone();
+        let total_tracks = playlist.tracks_count as usize;
+        let mut all_tracks: Vec<Track> = Vec::new();
+
+        if let Some(mut tracks) = playlist.tracks.clone() {
+            all_tracks.append(&mut tracks.items);
+
+            while all_tracks.len() < total_tracks {
+                let id = playlist.id.to_string();
+                let limit_string = (total_tracks - all_tracks.len()).to_string();
+                let offset_string = all_tracks.len().to_string();
+
+                let mut params = vec![
+                    ("limit", limit_string.as_str()),
+                    ("extra", "tracks"),
+                    ("playlist_id", id.as_str()),
+                    ("offset", offset_string.as_str()),
+                ];
+
+                let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
+
+                match &playlist {
+                    Ok(playlist) => {
+                        debug!("appending tracks to playlist");
+                        if let Some(new_tracks) = &playlist.tracks {
+                            all_tracks.append(&mut new_tracks.clone().items);
+                        }
+                    }
+                    Err(error) => error!("{}", error.to_string()),
+                }
+            }
+
+            if !all_tracks.is_empty() {
+                tracks.items = all_tracks;
+                playlist.set_tracks(tracks);
+            }
+        }
+
+        Ok(playlist)
+    }
+
+    pub async fn create_playlist(
+        &self,
+        name: String,
+        is_public: bool,
+        description: Option<String>,
+        is_collaborative: Option<bool>,
+    ) -> Result<Playlist> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistCreate.as_str());
+
+        let mut form_data = HashMap::new();
+        form_data.insert("name", name.as_str());
+
+        let is_collaborative = if !is_public || is_collaborative.is_none() {
+            "false".to_string()
+        } else if let Some(is_collaborative) = is_collaborative {
+            is_collaborative.to_string()
+        } else {
+            "false".to_string()
+        };
+
+        form_data.insert("is_collaborative", is_collaborative.as_str());
+
+        let is_public = is_public.to_string();
+        form_data.insert("is_public", is_public.as_str());
+
+        let description = if let Some(description) = description {
+            description
+        } else {
+            "".to_string()
+        };
+        form_data.insert("description", description.as_str());
+
+        post!(self, endpoint, form_data)
+    }
+
+    pub async fn delete_playlist(&self, playlist_id: String) -> Result<SuccessfulResponse> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDelete.as_str());
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+
+        post!(self, endpoint, form_data)
+    }
+
+    /// Add new track to playlist
+    pub async fn playlist_add_track(
+        &self,
+        playlist_id: String,
+        track_ids: Vec<String>,
+    ) -> Result<Playlist> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
+
+        let track_ids = track_ids.join(",");
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("track_ids", track_ids.as_str());
+        form_data.insert("no_duplicate", "true");
+
+        post!(self, endpoint, form_data)
+    }
+
+    /// Add new track to playlist
+    pub async fn playlist_delete_track(
+        &self,
+        playlist_id: String,
+        playlist_track_ids: Vec<String>,
+    ) -> Result<Playlist> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url,
+            Endpoint::PlaylistDeleteTracks.as_str()
+        );
+
+        let playlist_track_ids = playlist_track_ids.join(",");
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("playlist_track_ids", playlist_track_ids.as_str());
+
+        post!(self, endpoint, form_data)
+    }
+
+    /// Update track position in playlist
+    pub async fn playlist_track_position(
+        &self,
+        index: usize,
+        playlist_id: String,
+        track_id: String,
+    ) -> Result<Playlist> {
+        let endpoint = format!(
+            "{}{}",
+            self.base_url,
+            Endpoint::PlaylistUpdatePosition.as_str()
+        );
+
+        let index = index.to_string();
+
+        let mut form_data = HashMap::new();
+        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("playlist_track_ids", track_id.as_str());
+        form_data.insert("insert_before", index.as_str());
+
+        post!(self, endpoint, form_data)
     }
 
     /// Retrieve track information
@@ -298,7 +488,7 @@ impl Client {
         let track_id_string = track_id.to_string();
         let params = vec![("track_id", track_id_string.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     /// Retrieve url information for a track's audio file
@@ -344,14 +534,14 @@ impl Client {
             ("intent", "stream"),
         ];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
-    pub async fn search_all(&self, query: String) -> Result<String> {
+    pub async fn search_all(&self, query: String) -> Result<SearchAllResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
         let params = vec![("query", query.as_str()), ("limit", "500")];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an album
@@ -359,7 +549,7 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
         let params = vec![("album_id", album_id.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Search the database for albums
@@ -376,7 +566,7 @@ impl Client {
         };
         let params = vec![("query", query.as_str()), ("limit", limit.as_str())];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Retrieve information about an artist
@@ -405,7 +595,7 @@ impl Client {
             ("extra", "albums"),
         ];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Search the database for artists
@@ -422,7 +612,7 @@ impl Client {
         };
         let params = vec![("query", query.as_str()), ("limit", &limit)];
 
-        call!(self, endpoint, Some(params))
+        get!(self, endpoint, Some(params))
     }
 
     // Set a user access token for authentication
@@ -449,12 +639,7 @@ impl Client {
         self.default_quality = quality;
     }
 
-    // Call the api and retrieve the JSON payload
-    async fn make_call(
-        &self,
-        endpoint: String,
-        params: Option<Vec<(&str, &str)>>,
-    ) -> Result<String> {
+    fn client_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
         if let Some(app_id) = &self.app_id {
@@ -472,6 +657,17 @@ impl Client {
             );
         }
 
+        headers
+    }
+
+    // Make a GET call to the API with the provided parameters
+    async fn make_get_call(
+        &self,
+        endpoint: String,
+        params: Option<Vec<(&str, &str)>>,
+    ) -> Result<String> {
+        let headers = self.client_headers();
+
         debug!("calling {} endpoint", endpoint);
         let request = self.client.request(Method::GET, endpoint).headers(headers);
 
@@ -484,23 +680,35 @@ impl Client {
         }
     }
 
+    // Make a POST call to the API with form data
+    async fn make_post_call(
+        &self,
+        endpoint: String,
+        params: HashMap<&str, &str>,
+    ) -> Result<String> {
+        let headers = self.client_headers();
+
+        debug!("calling {} endpoint, with params {params:?}", endpoint);
+        let response = self
+            .client
+            .request(Method::POST, endpoint)
+            .headers(headers)
+            .form(&params)
+            .send()
+            .await?;
+
+        self.handle_response(response).await
+    }
+
     // Handle a response retrieved from the api
     async fn handle_response(&self, response: Response) -> Result<String> {
-        match response.status() {
-            StatusCode::BAD_REQUEST => Err(Error::Api {
-                message: "Bad request".to_string(),
-            }),
-            StatusCode::UNAUTHORIZED => Err(Error::Api {
-                message: "Unauthorized request".to_string(),
-            }),
-            StatusCode::NOT_FOUND => Err(Error::Api {
-                message: "Item not found".to_string(),
-            }),
-            StatusCode::OK => {
-                let res = response.text().await.unwrap();
-                Ok(res)
-            }
-            _ => unreachable!(),
+        if response.status() == StatusCode::OK {
+            let res = response.text().await.unwrap();
+            Ok(res)
+        } else {
+            Err(Error::Api {
+                message: response.status().to_string(),
+            })
         }
     }
 
@@ -600,19 +808,27 @@ impl Client {
     }
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SuccessfulResponse {
+    status: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum OutputFormat {
     Json,
     Tsv,
 }
 
-use crate::client::artist::{Artist, ArtistSearchResults};
 use crate::client::playlist::{Playlist, UserPlaylistsResult};
 use crate::client::track::Track;
 use crate::client::TrackURL;
 use crate::client::{
     album::{Album, AlbumSearchResults},
     AudioQuality,
+};
+use crate::client::{
+    artist::{Artist, ArtistSearchResults},
+    search_results::SearchAllResults,
 };
 
 #[tokio::test]
@@ -631,25 +847,70 @@ async fn can_use_methods() {
     client.refresh().await;
     client.login().await.expect("failed to login");
 
-    assert_ok!(client.user_playlists().await);
+    assert_ok!(
+        client.user_playlists().await,
+        "fetching the user's playlists"
+    );
     let album_response = assert_ok!(
         client
             .search_albums("a love supreme".to_string(), Some(10))
-            .await
+            .await,
+        "searching for albums"
     );
-    assert_eq!(album_response.albums.items.len(), 10);
-    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await);
+    assert_eq!(
+        album_response.albums.items.len(),
+        10,
+        "length of albums is same as limit"
+    );
+    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await, "get album");
     let artist_response = assert_ok!(
         client
             .search_artists("pink floyd".to_string(), Some(10))
-            .await
+            .await,
+        "searching for artists"
     );
-    assert_eq!(artist_response.artists.items.len(), 10);
-    assert_ok!(client.artist(148745, Some(10)).await);
-    assert_ok!(client.track(155999429).await);
+    assert_eq!(
+        artist_response.artists.items.len(),
+        10,
+        "length of artists is same as limit"
+    );
+    assert_ok!(client.artist(148745, Some(10)).await, "get artist");
+    assert_ok!(client.track(155999429).await, "get track");
     assert_ok!(
         client
             .track_url(155999429, Some(AudioQuality::Mp3), None)
-            .await
+            .await,
+        "get track url"
+    );
+
+    let new_playlist: Playlist = assert_ok!(
+        client
+            .create_playlist(
+                "test".to_string(),
+                false,
+                Some("This is a description".to_string()),
+                Some(false)
+            )
+            .await,
+        "creating a new playlist"
+    );
+
+    assert_ok!(
+        client
+            .playlist_add_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+            .await,
+        "adding a track to newly created playlist"
+    );
+
+    assert_ok!(
+        client
+            .playlist_delete_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+            .await,
+        "deleting track from the newly created playlist"
+    );
+
+    assert_ok!(
+        client.delete_playlist(new_playlist.id.to_string()).await,
+        "deleting the newly created playlist"
     );
 }
