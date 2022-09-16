@@ -411,7 +411,7 @@ impl Client {
         post!(self, endpoint, form_data)
     }
 
-    pub async fn delete_playlist(&self, playlist_id: String) -> Result<()> {
+    pub async fn delete_playlist(&self, playlist_id: String) -> Result<SuccessfulResponse> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDelete.as_str());
 
         let mut form_data = HashMap::new();
@@ -808,6 +808,11 @@ impl Client {
     }
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SuccessfulResponse {
+    status: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum OutputFormat {
     Json,
@@ -842,25 +847,70 @@ async fn can_use_methods() {
     client.refresh().await;
     client.login().await.expect("failed to login");
 
-    assert_ok!(client.user_playlists().await);
+    assert_ok!(
+        client.user_playlists().await,
+        "fetching the user's playlists"
+    );
     let album_response = assert_ok!(
         client
             .search_albums("a love supreme".to_string(), Some(10))
-            .await
+            .await,
+        "searching for albums"
     );
-    assert_eq!(album_response.albums.items.len(), 10);
-    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await);
+    assert_eq!(
+        album_response.albums.items.len(),
+        10,
+        "length of albums is same as limit"
+    );
+    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await, "get album");
     let artist_response = assert_ok!(
         client
             .search_artists("pink floyd".to_string(), Some(10))
-            .await
+            .await,
+        "searching for artists"
     );
-    assert_eq!(artist_response.artists.items.len(), 10);
-    assert_ok!(client.artist(148745, Some(10)).await);
-    assert_ok!(client.track(155999429).await);
+    assert_eq!(
+        artist_response.artists.items.len(),
+        10,
+        "length of artists is same as limit"
+    );
+    assert_ok!(client.artist(148745, Some(10)).await, "get artist");
+    assert_ok!(client.track(155999429).await, "get track");
     assert_ok!(
         client
             .track_url(155999429, Some(AudioQuality::Mp3), None)
-            .await
+            .await,
+        "get track url"
+    );
+
+    let new_playlist: Playlist = assert_ok!(
+        client
+            .create_playlist(
+                "test".to_string(),
+                false,
+                Some("This is a description".to_string()),
+                Some(false)
+            )
+            .await,
+        "creating a new playlist"
+    );
+
+    assert_ok!(
+        client
+            .playlist_add_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+            .await,
+        "adding a track to newly created playlist"
+    );
+
+    assert_ok!(
+        client
+            .playlist_delete_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+            .await,
+        "deleting track from the newly created playlist"
+    );
+
+    assert_ok!(
+        client.delete_playlist(new_playlist.id.to_string()).await,
+        "deleting the newly created playlist"
     );
 }

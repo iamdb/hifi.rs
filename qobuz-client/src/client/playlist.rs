@@ -3,6 +3,7 @@ use crate::client::{
     AudioQuality, User,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UserPlaylistsResult {
@@ -48,7 +49,7 @@ pub struct Playlist {
     pub updated_at: i64,
     pub published_to: Option<i64>,
     pub tracks_count: i64,
-    pub public_at: i64,
+    pub public_at: Option<Value>,
     pub name: String,
     pub is_public: bool,
     pub published_from: Option<i64>,
