@@ -32,5 +32,5 @@ textwrap = "0.15"
 tokio = { version = "1.0", features = ["full"]} 
 tokio-stream = "0.1"
 tui = { version = "0.19", default-features = false, features = ["termion"] }
-url = "2.2"
+url = "2.3"
 zbus = { version = "3", default-features = false, features = ["tokio"] }
