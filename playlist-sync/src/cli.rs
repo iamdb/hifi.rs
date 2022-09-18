@@ -1,9 +1,8 @@
 use crate::{qobuz, spotify, Result};
 use clap::Parser;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rspotify::model::PlaylistId;
 use snafu::Snafu;
-use spinoff::{Color, Spinner, Spinners};
 use std::{str::FromStr, time::Duration};
 
 const TITLE: &str = r#"
@@ -50,54 +49,36 @@ impl From<qobuz::Error> for Error {
 }
 
 pub async fn run() -> Result<(), Error> {
+    pretty_env_logger::init();
     let cli = Cli::parse();
 
-    pretty_env_logger::init();
+    let prog = MultiProgress::new();
 
-    println!("spotify ⟶ qobuz one-way sync\n");
-    std::thread::sleep(Duration::from_millis(500));
+    let spotify_prog = ProgressBar::new_spinner();
+    spotify_prog.set_style(ProgressStyle::with_template("[{bar:40.cyan/blue}]\n{msg}").unwrap());
+    prog.add(spotify_prog.clone());
 
-    println!("█▓▒▒░░░ Building api clients ░░░▒▒▓█\n");
-    let spinner = Spinner::new(Spinners::Dots, "Building Spotify client...", Color::Green);
-    let mut spotify = spotify::new().await;
+    let mut spotify = spotify::new(&spotify_prog).await;
     spotify.auth().await;
-    spinner.success("Spotify client built.");
 
-    let spinner = Spinner::new(Spinners::Dots, "Building Qobuz client...", Color::Green);
     let qobuz = qobuz::new().await;
-    spinner.success("Qobuz client built.");
 
-    println!("\n\n█▓▒▒░░░ Synchronizing playlists ░░░▒▒▓█\n");
-
-    println!("Fetching playlists");
-    let spinner = Spinner::new(Spinners::Dots, "Spotify", Color::Green);
     let spotify_playlist = spotify
         .playlist(
             PlaylistId::from_str(cli.spotify_playlist_id.as_str())
                 .expect("invalid spotify playlist id"),
         )
         .await?;
-    spinner.success("Playlist retrieved from Spotify");
 
-    let spinner = Spinner::new(Spinners::Dots, "Qobuz", Color::Blue);
     let qobuz_playlist = qobuz.playlist(cli.qobuz_playlist_id).await?;
-    spinner.success("Playlist retreived from Qobuz.");
-
-    let spinner = Spinner::new(Spinners::Dots, "Analyzing...", Color::Blue);
 
     let qobuz_isrcs = qobuz_playlist.irsc_list();
     let missing_tracks = spotify_playlist.missing_tracks(qobuz_isrcs.clone());
 
-    spinner.stop_with_message(&format!(
-        "\nTotal Spotify Tracks: {}\nTotal Qobuz Tracks {}\nMissing Tracks {}\n",
-        spotify_playlist.track_count(),
-        qobuz_playlist.track_count(),
-        missing_tracks.len()
-    ));
-
-    println!("Searching for missing tracks");
     let progress = ProgressBar::new(missing_tracks.len() as u64);
     progress.set_style(ProgressStyle::with_template("[{bar:40.cyan/blue}]\n{msg}").unwrap());
+
+    prog.add(progress.clone());
 
     for missing in missing_tracks {
         if let Some(isrc) = missing.track.external_ids.get("isrc") {

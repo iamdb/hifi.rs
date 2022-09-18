@@ -1,5 +1,6 @@
 use crate::Isrc;
 use futures::stream::TryStreamExt;
+use indicatif::ProgressBar;
 use log::debug;
 use rspotify::{
     model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, PlaylistItem, SimplifiedPlaylist},
@@ -23,11 +24,12 @@ pub struct SpotifyFullPlaylist {
     all_tracks: Vec<FullTrack>,
 }
 
-pub struct Spotify {
+pub struct Spotify<'s> {
     client: AuthCodeSpotify,
+    progress: &'s ProgressBar,
 }
 
-pub async fn new() -> Spotify {
+pub async fn new<'s>(progress: &'_ ProgressBar) -> Spotify<'_> {
     let creds = SpotifyCredentials::from_env().unwrap();
 
     // Using every possible scope
@@ -49,11 +51,12 @@ pub async fn new() -> Spotify {
 
     let client = AuthCodeSpotify::with_config(creds, oauth, config);
 
-    Spotify { client }
+    Spotify { client, progress }
 }
 
-impl Spotify {
+impl<'s> Spotify<'s> {
     pub async fn auth(&mut self) {
+        self.progress.set_message("Signing into Spotify");
         if let Ok(Some(token)) = self.client.read_token_cache(true).await {
             debug!("found token in cache: {:?}", token);
             let expired = token.is_expired();
@@ -89,6 +92,7 @@ impl Spotify {
                 self.wait_for_auth().await;
             }
         }
+        self.progress.set_message("Signed into Spotify");
     }
 
     pub async fn wait_for_auth(&mut self) {

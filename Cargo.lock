@@ -257,17 +257,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "colored"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
-]
-
-[[package]]
 name = "combine"
 version = "4.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1328,12 +1317,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maplit"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
-
-[[package]]
 name = "matches"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1824,10 +1807,9 @@ dependencies = [
  "qobuz-client",
  "rspotify",
  "snafu",
- "spinoff",
  "tokio",
  "warp",
- "webbrowser 0.8.0",
+ "webbrowser",
 ]
 
 [[package]]
@@ -2120,7 +2102,6 @@ dependencies = [
  "sha2",
  "thiserror",
  "url",
- "webbrowser 0.6.0",
 ]
 
 [[package]]
@@ -2454,18 +2435,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
 dependencies = [
  "lock_api",
-]
-
-[[package]]
-name = "spinoff"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "812db6f40551bdcdb10e1d2070ec33f69805d2bfb7e59426c7d14e7e1b4194dd"
-dependencies = [
- "colored",
- "maplit",
- "once_cell",
- "strum",
 ]
 
 [[package]]
@@ -3113,20 +3082,6 @@ checksum = "ed055ab27f941423197eb86b2035720b1a3ce40504df082cac2ecc6ed73335a1"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "webbrowser"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c28b6b6a78440b02647358625e3febc90724126480b9da6a967b5f674b3554"
-dependencies = [
- "jni",
- "ndk-glue",
- "url",
- "web-sys",
- "widestring",
- "winapi",
 ]
 
 [[package]]
