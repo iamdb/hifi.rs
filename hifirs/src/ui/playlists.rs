@@ -36,6 +36,8 @@ pub struct MyPlaylistsScreen<'m> {
     show_popup: bool,
     popup_selection: usize,
     show_selected_playlist: bool,
+    screen_height: usize,
+    screen_width: usize,
 }
 
 impl<'m> MyPlaylistsScreen<'m> {
@@ -46,6 +48,8 @@ impl<'m> MyPlaylistsScreen<'m> {
         let mut screen = MyPlaylistsScreen {
             controls,
             popup_selection: 0,
+            screen_height: 0,
+            screen_width: 0,
             app_state,
             client,
             mylist_results: None,
@@ -78,6 +82,9 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
     fn render(&mut self, terminal: &mut Console) {
         terminal
             .draw(|f| {
+                self.screen_height = f.size().height as usize;
+                self.screen_width = f.size().width as usize;
+
                 let layout = Layout::default()
                     .direction(Direction::Vertical)
                     .constraints([
@@ -143,7 +150,110 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
     }
 
     fn key_events(&mut self, key: Key) -> bool {
+        if self.show_popup {
+            match key {
+                Key::Right | Key::Left | Key::Char('h') | Key::Char('l') => {
+                    if self.show_popup {
+                        if self.popup_selection == 0 {
+                            self.popup_selection = 1;
+                        } else if self.popup_selection == 1 {
+                            self.popup_selection = 0;
+                        }
+
+                        return true;
+                    }
+                }
+                Key::Char('\n') => {
+                    if let (Some(selected), Some(r)) = (
+                        self.selected_playlist_table.selected(),
+                        self.selected_playlist_result.as_ref(),
+                    ) {
+                        if let Some(tracks) = &r.tracks {
+                            if let Some(track) = tracks.items.get(selected) {
+                                if self.popup_selection == 0 {
+                                    if let Some(album) = &track.album {
+                                        if let Ok(album) =
+                                            executor::block_on(self.client.album(album.id.clone()))
+                                        {
+                                            executor::block_on(self.controls.play_album(album));
+                                            self.show_popup = false;
+
+                                            let app_state = self.app_state.clone();
+                                            switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                        }
+                                    }
+                                } else if self.popup_selection == 1 {
+                                    executor::block_on(self.controls.play_track(track.clone()));
+                                    self.show_popup = false;
+
+                                    let app_state = self.app_state.clone();
+                                    switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                }
+                            }
+                        }
+                    }
+
+                    return true;
+                }
+                Key::Esc => {
+                    self.show_popup = false;
+                    return true;
+                }
+                _ => (),
+            }
+
+            return false;
+        }
+
+        if self.show_selected_playlist {
+            match key {
+                Key::Down | Key::Char('j') => {
+                    self.selected_playlist_table.next();
+                    return true;
+                }
+                Key::Up | Key::Char('k') => {
+                    self.selected_playlist_table.previous();
+                    return true;
+                }
+                Key::Esc => {
+                    self.show_selected_playlist = false;
+                    return true;
+                }
+                Key::Home => {
+                    self.selected_playlist_table.select(0);
+                    return true;
+                }
+                Key::End => {
+                    self.selected_playlist_table
+                        .select(self.selected_playlist_table.len() - 1);
+                    return true;
+                }
+                Key::Char('\n') => {
+                    self.show_popup = true;
+                }
+                _ => (),
+            }
+
+            return false;
+        }
+
         match key {
+            Key::Down | Key::Char('j') => {
+                self.mylists.next();
+                return true;
+            }
+            Key::Up | Key::Char('k') => {
+                self.mylists.previous();
+                return true;
+            }
+            Key::Home => {
+                self.mylists.select(0);
+                return true;
+            }
+            Key::End => {
+                self.mylists.select(self.mylists.len() - 1);
+                return true;
+            }
             Key::Char(char) => match char {
                 'r' => {
                     self.refresh_lists();
@@ -152,42 +262,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                 '\n' => {
                     debug!("made selection");
 
-                    if self.show_popup {
-                        if let (Some(selected), Some(r)) = (
-                            self.selected_playlist_table.selected(),
-                            self.selected_playlist_result.as_ref(),
-                        ) {
-                            if let Some(tracks) = &r.tracks {
-                                if let Some(track) = tracks.items.get(selected) {
-                                    if self.popup_selection == 0 {
-                                        if let Some(album) = &track.album {
-                                            if let Ok(album) = executor::block_on(
-                                                self.client.album(album.id.clone()),
-                                            ) {
-                                                executor::block_on(self.controls.play_album(album));
-                                                self.show_popup = false;
-
-                                                let app_state = self.app_state.clone();
-                                                switch_screen!(app_state, ActiveScreen::NowPlaying);
-                                            }
-                                        }
-                                    } else if self.popup_selection == 1 {
-                                        executor::block_on(self.controls.play_track(track.clone()));
-                                        self.show_popup = false;
-
-                                        let app_state = self.app_state.clone();
-                                        switch_screen!(app_state, ActiveScreen::NowPlaying);
-                                    }
-                                }
-                            }
-                        }
-
-                        return true;
-                    }
-
-                    if self.show_selected_playlist {
-                        self.show_popup = true;
-                    } else if let (Some(selected), Some(r)) =
+                    if let (Some(selected), Some(r)) =
                         (self.mylists.selected(), self.mylist_results.as_ref())
                     {
                         debug!("selected item {}", selected);
@@ -219,72 +294,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                 }
                 _ => (),
             },
-            Key::Esc => {
-                if self.show_popup {
-                    self.show_popup = false;
-                } else if self.show_selected_playlist {
-                    self.show_selected_playlist = false;
-                }
-                return true;
-            }
-            Key::Right | Key::Left => {
-                if self.show_popup {
-                    if self.popup_selection == 0 {
-                        self.popup_selection = 1;
-                    } else if self.popup_selection == 1 {
-                        self.popup_selection = 0;
-                    }
 
-                    return true;
-                }
-            }
-            Key::Down => {
-                if self.show_popup {
-                    return false;
-                }
-
-                if self.show_selected_playlist {
-                    self.selected_playlist_table.next();
-                } else if !self.show_popup {
-                    self.mylists.next();
-                }
-                return true;
-            }
-            Key::Up => {
-                if self.show_popup {
-                    return false;
-                }
-
-                if self.show_selected_playlist {
-                    self.selected_playlist_table.previous();
-                } else {
-                    self.mylists.previous();
-                }
-                return true;
-            }
-            Key::Home => {
-                if self.show_popup {
-                    return false;
-                }
-
-                if self.show_selected_playlist {
-                    self.selected_playlist_table.select(0);
-                } else {
-                    self.mylists.select(0);
-                }
-            }
-            Key::End => {
-                if self.show_popup {
-                    return false;
-                }
-
-                if self.show_selected_playlist {
-                    self.selected_playlist_table
-                        .select(self.selected_playlist_table.len() - 1);
-                } else {
-                    self.mylists.select(self.mylists.len() - 1);
-                }
-            }
             _ => (),
         }
 
@@ -292,7 +302,24 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
     }
 
     fn mouse_events(&mut self, event: MouseEvent) -> bool {
-        debug!("mouse event, {:?}", event);
+        match event {
+            MouseEvent::Press(button, x, y) => match button {
+                termion::event::MouseButton::Left => {
+                    if y > 8 && (y as usize) < self.screen_height - 1 {
+                        debug!("left mouse button, {x} {y}");
+                        self.selected_playlist_table.select((y as usize) - 8);
+                    }
+                }
+                termion::event::MouseButton::Right => todo!(),
+                termion::event::MouseButton::Middle => todo!(),
+                termion::event::MouseButton::WheelUp => todo!(),
+                termion::event::MouseButton::WheelDown => todo!(),
+            },
+            MouseEvent::Release(x, y) => {
+                debug!("button released {x} {y} {}", self.screen_height);
+            }
+            MouseEvent::Hold(_, _) => debug!("mouse hold"),
+        }
         true
     }
 }
