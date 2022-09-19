@@ -29,7 +29,7 @@ sled = { version = "0.34", features = ["compression"] }
 snafu = "0.7"
 termion = "1.5"
 textwrap = "0.15"
-tokio = { version = "1.0", features = ["full"]} 
+tokio = { version = "1.21", features = ["full"]} 
 tokio-stream = "0.1"
 tui = { version = "0.19", default-features = false, features = ["termion"] }
 url = "2.2"
