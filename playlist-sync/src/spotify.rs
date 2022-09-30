@@ -1,5 +1,6 @@
 use crate::Isrc;
 use futures::stream::TryStreamExt;
+use indicatif::ProgressBar;
 use log::debug;
 use rspotify::{
     model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, PlaylistItem, SimplifiedPlaylist},
@@ -23,11 +24,12 @@ pub struct SpotifyFullPlaylist {
     all_tracks: Vec<FullTrack>,
 }
 
-pub struct Spotify {
+pub struct Spotify<'s> {
     client: AuthCodeSpotify,
+    progress: &'s ProgressBar,
 }
 
-pub async fn new() -> Spotify {
+pub async fn new<'s>(progress: &'_ ProgressBar) -> Spotify<'_> {
     let creds = SpotifyCredentials::from_env().unwrap();
 
     // Using every possible scope
@@ -49,11 +51,12 @@ pub async fn new() -> Spotify {
 
     let client = AuthCodeSpotify::with_config(creds, oauth, config);
 
-    Spotify { client }
+    Spotify { client, progress }
 }
 
-impl Spotify {
+impl<'s> Spotify<'s> {
     pub async fn auth(&mut self) {
+        self.progress.set_message("signing into Spotify");
         if let Ok(Some(token)) = self.client.read_token_cache(true).await {
             debug!("found token in cache: {:?}", token);
             let expired = token.is_expired();
@@ -89,6 +92,7 @@ impl Spotify {
                 self.wait_for_auth().await;
             }
         }
+        self.progress.set_message("signed into Spotify");
     }
 
     pub async fn wait_for_auth(&mut self) {
@@ -105,14 +109,13 @@ impl Spotify {
             });
 
         debug!("creating temp http server for auth callback");
-        println!("Starting a temporary web server to retreive the authorization code from Spotify");
+        self.progress.set_message("waiting for authorization");
         let server_handle = tokio::spawn(warp::serve(oauth_callback).run(([127, 0, 0, 1], 8080)));
 
         loop {
             select! {
                 Ok(code) = rx.recv_async() => {
                     debug!("received code: {}", code);
-                    println!("Received an authorization code from Spotify, shutting down termporary web server");
 
                     self.client.request_token(code.as_str()).await.expect("failed to get auth token");
                     server_handle.abort();
@@ -120,9 +123,12 @@ impl Spotify {
                 }
             }
         }
+
+        self.progress.set_message("authorization received");
     }
 
     pub async fn user_playlists(&self) -> Vec<SimplifiedPlaylist> {
+        self.progress.set_message("fetching user's playlists");
         let mut playlists = self.client.current_user_playlists();
         let mut all_playlists: Vec<SimplifiedPlaylist> = vec![];
 
@@ -130,10 +136,14 @@ impl Spotify {
             all_playlists.push(list);
         }
 
+        self.progress.set_message("user's playlists retrieved");
+
         all_playlists
     }
 
     pub async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
+        self.progress
+            .set_message(format!("fetching playlist: {playlist_id}"));
         debug!("fetching playlist {}", playlist_id.to_string());
 
         let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
@@ -144,6 +154,8 @@ impl Spotify {
         match items.try_collect::<Vec<PlaylistItem>>().await {
             Ok(full_list) => {
                 debug!("list size: {}", full_list.len());
+
+                self.progress.set_message("playlist tracks retrieved");
 
                 let all_tracks = full_list
                     .iter()

@@ -1,10 +1,10 @@
 # hifi.rs
 
-### A terminal-based (tui), high resolution audio player for the discerning listener.<super>\*</super>
+### A terminal-based (tui), high resolution audio player for the discerning listener.<sup>\*</sup>
 
 Powered by [Qobuz](https://www.qobuz.com). Requires a paid subscription. This does not allow you to listen for free.
 
-As a linux user who enjoys the Qobuz music service, I was frustrated that there isn't more support for the OS. You can use [Squeezelite](https://github.com/ralph-irving/squeezelite), [Roon](https://roonlabs.com/) or similar apps to stream music from the service, but they typically either require a separate interface, have an ineffective interface, or require you to run a server which make it less than ideal to search and play music quickly while working.
+Qobuz only officially supports Linux through the browser. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great<sup>\*</sup>, but I wanted something simpler that just focused on playing music from Qobuz that I could play in a terminal or as a background service.
 
 ## Features
 
@@ -20,4 +20,6 @@ As a linux user who enjoys the Qobuz music service, I was frustrated that there 
 
 I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
 
-<super>\*</super>/s
+<sup>\*</sup>Squeezelite is less refined, but free and has been well tested. Roon is more refined, but younger and requires you to pay to host the app on your own hardware or buy expensive hardware to host the server.
+
+<sup>\*</sup>/s

@@ -30,8 +30,8 @@ impl TableHeaders for Track {
 impl TableWidths for Track {
     fn widths() -> Vec<ColumnWidth> {
         vec![
-            ColumnWidth::new(4),
-            ColumnWidth::new(46),
+            ColumnWidth::new(6),
+            ColumnWidth::new(44),
             ColumnWidth::new(36),
             ColumnWidth::new(14),
         ]

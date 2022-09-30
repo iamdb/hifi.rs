@@ -52,6 +52,7 @@ pub enum Action {
     PlayAlbum { album: Box<Album> },
     PlayTrack { track: Box<Track> },
     PlayUri { uri: String },
+    PlayPlaylist { playlist: Box<Playlist> },
 }
 
 /// A player handles playing media to a device.
@@ -683,6 +684,7 @@ impl Player {
                         Action::PlayAlbum { album } => self.play_album(*album, None).await,
                         Action::PlayTrack { track } => self.play_track(*track, None).await,
                         Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await,
+                        Action::PlayPlaylist { playlist } => self.play_playlist(*playlist, Some(self.client.quality())).await,
                         Action::Quit => self.app_state.quit(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
@@ -1034,6 +1036,14 @@ impl Controls {
                 track: Box::new(track)
             }
         );
+    }
+    pub async fn play_playlist(&self, playlist: Playlist) {
+        action!(
+            self,
+            Action::PlayPlaylist {
+                playlist: Box::new(playlist)
+            }
+        )
     }
     pub async fn position(&self) -> Option<ClockValue> {
         let tree = &self.state.player;

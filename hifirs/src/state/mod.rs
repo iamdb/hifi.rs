@@ -342,7 +342,7 @@ pub enum TrackListType {
     Playlist,
 }
 
-/// A playlist is a list of tracks.
+/// A tracklist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TrackListValue {
     queue: VecDeque<TrackListTrack>,
@@ -354,7 +354,7 @@ pub struct TrackListValue {
 impl From<Bytes> for TrackListValue {
     fn from(bytes: Bytes) -> Self {
         let deserialized: TrackListValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
+            bincode::deserialize(&bytes.vec()).expect("failed to deserialize tracklist value");
 
         deserialized
     }

@@ -174,26 +174,30 @@ where
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
 /// https://github.com/fdehau/tui-rs/blob/master/examples/popup.rs
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
+    let height_percent = 100 - ((height / r.height) * 100);
+
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Percentage((100 - percent_y) / 2),
-                Constraint::Percentage(percent_y),
-                Constraint::Percentage((100 - percent_y) / 2),
+                Constraint::Percentage(height_percent / 2),
+                Constraint::Length(height),
+                Constraint::Percentage(height_percent / 2),
             ]
             .as_ref(),
         )
         .split(r);
 
+    let width_percent = 100. - ((width as f64 / r.width as f64) * 100.);
+
     Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
             [
-                Constraint::Percentage((100 - percent_x) / 2),
-                Constraint::Percentage(percent_x),
-                Constraint::Percentage((100 - percent_x) / 2),
+                Constraint::Percentage((width_percent as u16) / 2),
+                Constraint::Length(width),
+                Constraint::Percentage((width_percent as u16) / 2),
             ]
             .as_ref(),
         )
@@ -422,17 +426,20 @@ impl Table {
         items: Option<Vec<Row>>,
         widths: Option<Vec<ColumnWidth>>,
     ) -> Table {
+        let mut state = TableState::default();
+        state.select(Some(0));
+
         if let (Some(i), Some(header), Some(widths)) = (items, header, widths) {
             Table {
                 rows: i,
-                state: TableState::default(),
+                state,
                 header,
                 widths,
             }
         } else {
             Table {
                 rows: Vec::new(),
-                state: TableState::default(),
+                state,
                 header: vec![],
                 widths: vec![],
             }
@@ -506,6 +513,22 @@ impl Table {
 
     pub fn select(&mut self, num: usize) {
         self.state.select(Some(num));
+    }
+
+    pub fn home(&mut self) {
+        self.state.select(Some(0));
+    }
+
+    pub fn end(&mut self) {
+        self.state.select(Some(self.rows.len() - 1));
+    }
+
+    pub fn at_end(&self) -> bool {
+        if let Some(selected) = self.selected() {
+            selected == self.rows.len() - 1
+        } else {
+            false
+        }
     }
 
     pub fn len(&self) -> usize {

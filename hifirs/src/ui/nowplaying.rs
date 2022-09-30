@@ -11,13 +11,14 @@ use crate::{
 };
 use futures::executor;
 use qobuz_client::client::track::Track;
-use termion::event::{Key, MouseEvent};
+use termion::event::Key;
 use tui::layout::{Constraint, Direction, Layout};
 
 pub struct NowPlayingScreen {
     track_list: Table,
     app_state: AppState,
     controls: Controls,
+    list_height: usize,
 }
 
 impl NowPlayingScreen {
@@ -28,6 +29,7 @@ impl NowPlayingScreen {
             track_list,
             app_state,
             controls,
+            list_height: 0,
         }
     }
 }
@@ -46,6 +48,8 @@ impl Screen for NowPlayingScreen {
                     .margin(0);
 
                 let split_layout = layout.split(f.size());
+
+                self.list_height = (split_layout[1].height - split_layout[1].y) as usize;
 
                 components::player(f, split_layout[0], self.app_state.clone());
 
@@ -91,6 +95,65 @@ impl Screen for NowPlayingScreen {
 
     fn key_events(&mut self, key: Key) -> bool {
         match key {
+            Key::Down | Key::Char('j') => {
+                self.track_list.next();
+                return true;
+            }
+            Key::Up | Key::Char('k') => {
+                self.track_list.previous();
+                return true;
+            }
+            Key::Right | Key::Char('h') => {
+                executor::block_on(self.controls.jump_forward());
+                return true;
+            }
+            Key::Left | Key::Char('l') => {
+                executor::block_on(self.controls.jump_backward());
+                return true;
+            }
+            Key::Home => {
+                self.track_list.home();
+                return true;
+            }
+            Key::End => {
+                self.track_list.end();
+                return true;
+            }
+            Key::PageDown => {
+                let page_height = (self.list_height / 2) as usize;
+
+                if let Some(selected) = self.track_list.selected() {
+                    if selected == 0 {
+                        self.track_list.select(page_height * 2);
+                        return true;
+                    } else if selected + page_height > self.track_list.len() - 1 {
+                        self.track_list.select(self.track_list.len() - 1);
+                        return true;
+                    } else {
+                        self.track_list.select(selected + page_height);
+                        return true;
+                    }
+                } else {
+                    self.track_list.select(page_height);
+                    return true;
+                }
+            }
+            Key::PageUp => {
+                let page_height = (self.list_height / 2) as usize;
+
+                if let Some(selected) = self.track_list.selected() {
+                    if selected < page_height {
+                        self.track_list.select(0);
+                        return true;
+                    } else {
+                        self.track_list.select(selected - page_height);
+                        return true;
+                    }
+                } else {
+                    self.track_list.select(page_height);
+                    return true;
+                }
+            }
             Key::Char(c) => match c {
                 ' ' => {
                     executor::block_on(self.controls.play_pause());
@@ -114,40 +177,10 @@ impl Screen for NowPlayingScreen {
                 }
                 _ => (),
             },
-            Key::Down => {
-                self.track_list.next();
-                return true;
-            }
-            Key::Up => {
-                self.track_list.previous();
-                return true;
-            }
-            Key::Right => {
-                executor::block_on(self.controls.jump_forward());
-                return true;
-            }
-            Key::Left => {
-                executor::block_on(self.controls.jump_backward());
-                return true;
-            }
+
             _ => (),
         }
 
-        false
-    }
-
-    fn mouse_events(&mut self, _event: MouseEvent) -> bool {
-        // match event {
-        //     MouseEvent::Press(button, _, _) => match button {
-        //         termion::event::MouseButton::Left => todo!(),
-        //         termion::event::MouseButton::Right => todo!(),
-        //         termion::event::MouseButton::Middle => todo!(),
-        //         termion::event::MouseButton::WheelUp => todo!(),
-        //         termion::event::MouseButton::WheelDown => todo!(),
-        //     },
-        //     MouseEvent::Release(_, _) => todo!(),
-        //     MouseEvent::Hold(_, _) => todo!(),
-        // };
         false
     }
 }

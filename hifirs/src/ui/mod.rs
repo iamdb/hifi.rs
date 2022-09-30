@@ -46,7 +46,6 @@ macro_rules! switch_screen {
 pub trait Screen {
     fn render(&mut self, terminal: &mut Console);
     fn key_events(&mut self, key: Key) -> bool;
-    fn mouse_events(&mut self, event: MouseEvent) -> bool;
 }
 
 #[allow(unused)]
@@ -292,19 +291,11 @@ impl Tui {
                     };
                 }
             },
-            Event::Mouse(m) => {
-                let app_tree = &self.app_state.app;
-                if let Some(active_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
-                {
-                    if let Some(screen) = self.screens.get(&active_screen) {
-                        if screen.borrow_mut().mouse_events(m) {
-                            self.tick().await;
-                        }
-                    }
-                }
+            Event::Mouse(_) => {
+                debug!("mouse not supported");
             }
             Event::Unsupported(_) => {
-                error!("unsupported input");
+                debug!("unsupported input");
             }
         }
     }
