@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::Isrc;
+use indicatif::ProgressBar;
 use qobuz_client::client::{
     api::{Client, Credentials as QobuzCredentials},
     playlist::Playlist,
@@ -23,46 +24,68 @@ impl From<qobuz_client::client::api::Error> for Error {
     }
 }
 
-pub struct Qobuz {
+pub struct Qobuz<'q> {
     client: Client,
+    progress: &'q ProgressBar,
 }
 
-pub async fn new() -> Qobuz {
+pub async fn new<'q>(progress: &'_ ProgressBar) -> Qobuz<'_> {
     let creds = QobuzCredentials {
         username: Some(env!("QOBUZ_USERNAME").to_string()),
         password: Some(env!("QOBUZ_PASSWORD").to_string()),
     };
 
-    let mut client = qobuz_client::client::api::new(Some(creds.clone()), None, None, None, None)
+    let client = qobuz_client::client::api::new(Some(creds.clone()), None, None, None, None)
         .await
         .expect("failed to create client");
 
-    client.refresh().await;
-    client.login().await.expect("failed to login");
-
-    Qobuz { client }
+    Qobuz { client, progress }
 }
 
-impl Qobuz {
+impl<'q> Qobuz<'q> {
+    pub async fn auth(&mut self) {
+        self.progress.set_message("signing into Qobuz");
+        self.client.refresh().await;
+        self.client.login().await.expect("failed to login");
+        self.progress.set_message("signed into Qobuz");
+    }
+
     pub async fn playlist(&self, playlist_id: String) -> Result<QobuzPlaylist> {
-        Ok(QobuzPlaylist(self.client.playlist(playlist_id).await?))
+        self.progress
+            .set_message(format!("fetching playlist: {}", playlist_id));
+
+        let playlist = self.client.playlist(playlist_id).await?;
+
+        self.progress.set_message("playlist tracks retrieved");
+        Ok(QobuzPlaylist(playlist))
     }
 
     pub async fn search(&self, query: String) -> Vec<Track> {
-        let results = self.client.search_all(query).await.unwrap();
+        self.progress.set_message(format!("{query} searching"));
+        let results = self.client.search_all(query.clone()).await.unwrap();
+
+        if results.tracks.items.is_empty() {
+            self.progress.set_message(format!("{query} not found"));
+        } else {
+            self.progress.set_message(format!("{query} found"));
+        }
 
         results.tracks.items
     }
 
     pub async fn add_track(&self, playlist_id: String, track_id: String) {
+        self.progress
+            .set_message(format!("adding {track_id} to {playlist_id}"));
         match self
             .client
-            .playlist_add_track(playlist_id, vec![track_id.clone()])
+            .playlist_add_track(playlist_id.clone(), vec![track_id.clone()])
             .await
         {
             Ok(_) => debug!("track added"),
             Err(error) => error!("failed to add track {}", error.to_string()),
         }
+        self.progress
+            .set_message(format!("added {track_id} to {playlist_id}"));
     }
 
     pub async fn update_track_position(&self, playlist_id: String, track_id: String, index: usize) {

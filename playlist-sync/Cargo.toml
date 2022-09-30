@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "3.2", features = ["derive", "env"] }
+clap = { version = "4", features = ["derive", "env"] }
 flume = "0.10"
 futures = "0.3"
 indicatif = "0.17"
@@ -16,3 +16,4 @@ snafu = "0.7"
 tokio = { version = "1.0", features = ["full"] }
 warp = "0.3"
 webbrowser = "0.8"
+console = "0.15"

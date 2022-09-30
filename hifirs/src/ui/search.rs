@@ -13,7 +13,7 @@ use qobuz_client::client::{
     album::{Album, AlbumSearchResults},
     api::Client,
 };
-use termion::event::{Key, MouseButton, MouseEvent};
+use termion::event::Key;
 use tui::layout::{Constraint, Direction, Layout};
 
 pub struct SearchScreen {
@@ -25,6 +25,7 @@ pub struct SearchScreen {
     search_query: Vec<char>,
     enter_search: bool,
     screen_width: u16,
+    results_height: usize,
 }
 
 impl SearchScreen {
@@ -62,6 +63,7 @@ impl SearchScreen {
             search_query,
             results_table,
             screen_width,
+            results_height: 0,
         }
     }
 
@@ -120,6 +122,8 @@ impl Screen for SearchScreen {
                     .margin(0)
                     .split(f.size());
 
+                self.results_height = (layout[2].height - layout[2].y) as usize;
+
                 components::player(f, layout[0], self.app_state.clone());
 
                 let text = String::from_iter(&self.search_query);
@@ -167,6 +171,49 @@ impl Screen for SearchScreen {
                     return true;
                 }
             }
+            Key::Home => {
+                self.results_table.home();
+                return true;
+            }
+            Key::End => {
+                self.results_table.end();
+                return true;
+            }
+            Key::PageDown => {
+                let page_height = (self.results_height / 2) as usize;
+
+                if let Some(selected) = self.results_table.selected() {
+                    if selected == 0 {
+                        self.results_table.select(page_height * 2);
+                        return true;
+                    } else if selected + page_height > self.results_table.len() - 1 {
+                        self.results_table.select(self.results_table.len() - 1);
+                        return true;
+                    } else {
+                        self.results_table.select(selected + page_height);
+                        return true;
+                    }
+                } else {
+                    self.results_table.select(page_height);
+                    return true;
+                }
+            }
+            Key::PageUp => {
+                let page_height = (self.results_height / 2) as usize;
+
+                if let Some(selected) = self.results_table.selected() {
+                    if selected < page_height {
+                        self.results_table.select(0);
+                        return true;
+                    } else {
+                        self.results_table.select(selected - page_height);
+                        return true;
+                    }
+                } else {
+                    self.results_table.select(page_height);
+                    return true;
+                }
+            }
             Key::Char(char) => match char {
                 '\n' => {
                     if self.enter_search {
@@ -201,40 +248,6 @@ impl Screen for SearchScreen {
             },
             _ => (),
         };
-
-        false
-    }
-    fn mouse_events(&mut self, event: MouseEvent) -> bool {
-        match event {
-            MouseEvent::Press(button, _, y) => match button {
-                MouseButton::Left => {
-                    if y == 8 && !self.enter_search {
-                        self.enter_search = true;
-                        return true;
-                    }
-                }
-                MouseButton::Right => {
-                    debug!("right")
-                }
-                MouseButton::Middle => {
-                    debug!("middle")
-                }
-                MouseButton::WheelUp => {
-                    debug!("wheel up");
-                    self.results_table.previous();
-                    return true;
-                }
-                MouseButton::WheelDown => {
-                    debug!("wheel down");
-                    self.results_table.next();
-                    return true;
-                }
-            },
-            MouseEvent::Release(_, _) => {
-                debug!("released")
-            }
-            MouseEvent::Hold(_, _) => debug!("held"),
-        }
 
         false
     }

@@ -1,6 +1,7 @@
 use crate::{qobuz, spotify, Result};
 use clap::Parser;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use console::Term;
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use rspotify::model::PlaylistId;
 use snafu::Snafu;
 use std::{str::FromStr, time::Duration};
@@ -52,16 +53,39 @@ pub async fn run() -> Result<(), Error> {
     pretty_env_logger::init();
     let cli = Cli::parse();
 
-    let prog = MultiProgress::new();
+    let term = Term::stdout();
+    let draw_target = ProgressDrawTarget::term(term.clone(), 15);
+    let prog = MultiProgress::with_draw_target(draw_target);
 
-    let spotify_prog = ProgressBar::new_spinner();
-    spotify_prog.set_style(ProgressStyle::with_template("[{bar:40.cyan/blue}]\n{msg}").unwrap());
+    term.clear_screen().unwrap();
+
+    println!("{TITLE}");
+
+    let spotify_prog = ProgressBar::new_spinner().with_prefix("spotify");
+    spotify_prog.enable_steady_tick(Duration::from_secs(1));
+    spotify_prog.set_style(
+        ProgressStyle::default_spinner()
+            .template("{prefix} {spinner} {wide_msg}")
+            .unwrap(),
+    );
+
     prog.add(spotify_prog.clone());
 
     let mut spotify = spotify::new(&spotify_prog).await;
     spotify.auth().await;
 
-    let qobuz = qobuz::new().await;
+    let qobuz_prog = ProgressBar::new_spinner().with_prefix("qobuz  ");
+    qobuz_prog.enable_steady_tick(Duration::from_secs(1));
+    qobuz_prog.set_style(
+        ProgressStyle::default_spinner()
+            .template("{prefix} {spinner} {wide_msg}")
+            .unwrap(),
+    );
+
+    prog.add(qobuz_prog.clone());
+
+    let mut qobuz = qobuz::new(&qobuz_prog).await;
+    qobuz.auth().await;
 
     let spotify_playlist = spotify
         .playlist(
@@ -75,14 +99,19 @@ pub async fn run() -> Result<(), Error> {
     let qobuz_isrcs = qobuz_playlist.irsc_list();
     let missing_tracks = spotify_playlist.missing_tracks(qobuz_isrcs.clone());
 
-    let progress = ProgressBar::new(missing_tracks.len() as u64);
-    progress.set_style(ProgressStyle::with_template("[{bar:40.cyan/blue}]\n{msg}").unwrap());
+    let progress = ProgressBar::new(missing_tracks.len() as u64).with_prefix("syncing");
+    progress.set_style(
+        ProgressStyle::default_bar()
+            .template("{prefix} {wide_bar:.cyan/blue} [{pos}/{len}]")
+            .unwrap(),
+    );
 
     prog.add(progress.clone());
 
+    spotify_prog.finish_and_clear();
+
     for missing in missing_tracks {
         if let Some(isrc) = missing.track.external_ids.get("isrc") {
-            progress.set_message(format!("Searching for track isrc: {}", isrc.to_lowercase()));
             let results = qobuz.search(isrc.to_lowercase()).await;
             if !results.is_empty() {
                 if let Some(found) = results.get(0) {
@@ -100,20 +129,14 @@ pub async fn run() -> Result<(), Error> {
                             .await;
                     }
                 }
-            } else {
-                progress.set_message(format!(
-                    "Spotify track isrc not found: {}",
-                    isrc.to_lowercase()
-                ));
             }
-
             std::thread::sleep(Duration::from_millis(125));
         }
 
         progress.inc(1);
     }
 
-    progress.finish();
-
+    progress.set_style(ProgressStyle::default_bar().template("{msg}").unwrap());
+    progress.finish_with_message("complete!");
     Ok(())
 }

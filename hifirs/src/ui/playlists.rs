@@ -8,7 +8,7 @@ use qobuz_client::client::{
     playlist::{Playlist, UserPlaylistsResult},
     track::Track,
 };
-use termion::event::{Key, MouseEvent};
+use termion::event::Key;
 use tui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
@@ -33,8 +33,10 @@ pub struct MyPlaylistsScreen<'m> {
     mylists: List<'m>,
     selected_playlist_result: Option<Playlist>,
     selected_playlist_table: Table,
-    show_popup: bool,
-    popup_selection: usize,
+    show_album_or_track_popup: bool,
+    show_play_or_open_popup: bool,
+    show_album_or_track_selection: usize,
+    show_play_or_open_popup_selection: usize,
     show_selected_playlist: bool,
     screen_height: usize,
     screen_width: usize,
@@ -47,7 +49,7 @@ impl<'m> MyPlaylistsScreen<'m> {
 
         let mut screen = MyPlaylistsScreen {
             controls,
-            popup_selection: 0,
+            show_album_or_track_selection: 0,
             screen_height: 0,
             screen_width: 0,
             app_state,
@@ -56,7 +58,9 @@ impl<'m> MyPlaylistsScreen<'m> {
             mylists,
             selected_playlist_result: None,
             selected_playlist_table: selected_playlist,
-            show_popup: false,
+            show_album_or_track_popup: false,
+            show_play_or_open_popup: false,
+            show_play_or_open_popup_selection: 0,
             show_selected_playlist: false,
         };
         screen.refresh_lists();
@@ -112,7 +116,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     components::list(f, &mut self.mylists, "Your Playlists", layout[1]);
                 }
 
-                if self.show_popup {
+                if self.show_album_or_track_popup {
                     let block = Block::default()
                         .title("Play album or track?")
                         .borders(Borders::ALL)
@@ -139,9 +143,41 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                 .fg(Color::Indexed(235))
                                 .add_modifier(Modifier::BOLD),
                         )
-                        .select(self.popup_selection);
+                        .select(self.show_album_or_track_selection);
 
-                    components::popup(f, tabs, 60, 10);
+                    components::popup(f, tabs, f.size().width - (padding as u16), 3);
+                }
+
+                if self.show_play_or_open_popup {
+                    let block = Block::default()
+                        .title("Play album or track?")
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded)
+                        .border_style(Style::default().fg(Color::Indexed(250)));
+
+                    let padding = ((f.size().width as f64 * 0.6) as usize / 2) - 3;
+
+                    let titles = ["Open", "Play"]
+                        .iter()
+                        .cloned()
+                        .map(|t| {
+                            let text = format!("{:^padding$}", t);
+                            Spans::from(text)
+                        })
+                        .collect();
+
+                    let tabs = Tabs::new(titles)
+                        .block(block)
+                        .style(Style::default().fg(Color::White))
+                        .highlight_style(
+                            Style::default()
+                                .bg(Color::Indexed(81))
+                                .fg(Color::Indexed(235))
+                                .add_modifier(Modifier::BOLD),
+                        )
+                        .select(self.show_play_or_open_popup_selection);
+
+                    components::popup(f, tabs, f.size().width - (padding as u16), 3);
                 }
 
                 components::tabs(2, f, layout[2]);
@@ -150,54 +186,127 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
     }
 
     fn key_events(&mut self, key: Key) -> bool {
-        if self.show_popup {
+        if self.show_album_or_track_popup || self.show_play_or_open_popup {
             match key {
                 Key::Right | Key::Left | Key::Char('h') | Key::Char('l') => {
-                    if self.show_popup {
-                        if self.popup_selection == 0 {
-                            self.popup_selection = 1;
-                        } else if self.popup_selection == 1 {
-                            self.popup_selection = 0;
+                    if self.show_album_or_track_popup {
+                        if self.show_album_or_track_selection == 0 {
+                            self.show_album_or_track_selection = 1;
+                        } else if self.show_album_or_track_selection == 1 {
+                            self.show_album_or_track_selection = 0;
+                        }
+
+                        return true;
+                    } else if self.show_play_or_open_popup {
+                        if self.show_play_or_open_popup_selection == 0 {
+                            self.show_play_or_open_popup_selection = 1;
+                        } else if self.show_play_or_open_popup_selection == 1 {
+                            self.show_play_or_open_popup_selection = 0;
                         }
 
                         return true;
                     }
                 }
+                Key::Esc => {
+                    if self.show_play_or_open_popup {
+                        self.show_play_or_open_popup = false;
+                        return true;
+                    }
+
+                    if self.show_album_or_track_popup {
+                        self.show_album_or_track_popup = false;
+                        return true;
+                    }
+                }
                 Key::Char('\n') => {
-                    if let (Some(selected), Some(r)) = (
-                        self.selected_playlist_table.selected(),
-                        self.selected_playlist_result.as_ref(),
-                    ) {
-                        if let Some(tracks) = &r.tracks {
-                            if let Some(track) = tracks.items.get(selected) {
-                                if self.popup_selection == 0 {
-                                    if let Some(album) = &track.album {
-                                        if let Ok(album) =
-                                            executor::block_on(self.client.album(album.id.clone()))
-                                        {
-                                            executor::block_on(self.controls.play_album(album));
-                                            self.show_popup = false;
+                    if self.show_album_or_track_popup {
+                        if let (Some(selected), Some(r)) = (
+                            self.selected_playlist_table.selected(),
+                            self.selected_playlist_result.as_ref(),
+                        ) {
+                            if let Some(tracks) = &r.tracks {
+                                if let Some(track) = tracks.items.get(selected) {
+                                    if self.show_album_or_track_selection == 0 {
+                                        if let Some(album) = &track.album {
+                                            if let Ok(album) = executor::block_on(
+                                                self.client.album(album.id.clone()),
+                                            ) {
+                                                executor::block_on(self.controls.play_album(album));
+                                                self.show_album_or_track_popup = false;
 
-                                            let app_state = self.app_state.clone();
-                                            switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                                let app_state = self.app_state.clone();
+                                                switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                            }
                                         }
-                                    }
-                                } else if self.popup_selection == 1 {
-                                    executor::block_on(self.controls.play_track(track.clone()));
-                                    self.show_popup = false;
+                                    } else if self.show_album_or_track_selection == 1 {
+                                        executor::block_on(self.controls.play_track(track.clone()));
+                                        self.show_album_or_track_popup = false;
 
-                                    let app_state = self.app_state.clone();
-                                    switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                        let app_state = self.app_state.clone();
+                                        switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                    }
+                                }
+                            }
+                        }
+
+                        return true;
+                    } else if self.show_play_or_open_popup {
+                        if self.show_play_or_open_popup_selection == 0 {
+                            debug!("made selection");
+
+                            if let (Some(selected), Some(r)) =
+                                (self.mylists.selected(), self.mylist_results.as_ref())
+                            {
+                                debug!("selected item {}", selected);
+                                if let Some(list) = r.playlists.items.get(selected) {
+                                    debug!(
+                                        "retrieved the playlist information {}-{}",
+                                        list.name, list.id
+                                    );
+                                    debug!("fetching tracks for selected playlist");
+                                    if let Ok(mut playlist_info) = executor::block_on(
+                                        self.client.playlist(list.id.to_string()),
+                                    ) {
+                                        debug!("received playlist, adding to table");
+                                        playlist_info.reverse();
+
+                                        self.selected_playlist_table.set_rows(playlist_info.rows());
+                                        self.selected_playlist_table.set_header(Track::headers());
+                                        self.selected_playlist_table.set_widths(Track::widths());
+                                        self.selected_playlist_table.select(0);
+
+                                        self.selected_playlist_result = Some(playlist_info);
+
+                                        self.show_selected_playlist = true;
+                                        self.show_play_or_open_popup = false;
+
+                                        return true;
+                                    }
+                                }
+                            }
+                        } else if self.show_play_or_open_popup_selection == 1 {
+                            if let (Some(results), Some(selected)) =
+                                (&self.mylist_results, self.mylists.selected())
+                            {
+                                if let Some(playlist) = results.playlists.items.get(selected) {
+                                    if let Ok(full_playlist) = executor::block_on(
+                                        self.client.playlist(playlist.id.to_string()),
+                                    ) {
+                                        executor::block_on(
+                                            self.controls.play_playlist(full_playlist),
+                                        );
+
+                                        self.show_play_or_open_popup = false;
+
+                                        let app_state = self.app_state.clone();
+                                        switch_screen!(app_state, ActiveScreen::NowPlaying);
+
+                                        return true;
+                                    }
                                 }
                             }
                         }
                     }
-
-                    return true;
-                }
-                Key::Esc => {
-                    self.show_popup = false;
-                    return true;
                 }
                 _ => (),
             }
@@ -220,16 +329,51 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     return true;
                 }
                 Key::Home => {
-                    self.selected_playlist_table.select(0);
+                    self.selected_playlist_table.home();
                     return true;
                 }
                 Key::End => {
-                    self.selected_playlist_table
-                        .select(self.selected_playlist_table.len() - 1);
+                    self.selected_playlist_table.end();
                     return true;
                 }
+                Key::PageDown => {
+                    let page_height = (self.screen_height / 2) as usize;
+
+                    if let Some(selected) = self.selected_playlist_table.selected() {
+                        if selected == 0 {
+                            self.selected_playlist_table.select(page_height * 2);
+                            return true;
+                        } else if selected + page_height > self.selected_playlist_table.len() - 1 {
+                            self.selected_playlist_table
+                                .select(self.selected_playlist_table.len() - 1);
+                            return true;
+                        } else {
+                            self.selected_playlist_table.select(selected + page_height);
+                            return true;
+                        }
+                    } else {
+                        self.selected_playlist_table.select(page_height);
+                        return true;
+                    }
+                }
+                Key::PageUp => {
+                    let page_height = (self.screen_height / 2) as usize;
+
+                    if let Some(selected) = self.selected_playlist_table.selected() {
+                        if selected < page_height {
+                            self.selected_playlist_table.select(0);
+                            return true;
+                        } else {
+                            self.selected_playlist_table.select(selected - page_height);
+                            return true;
+                        }
+                    } else {
+                        self.selected_playlist_table.select(page_height);
+                        return true;
+                    }
+                }
                 Key::Char('\n') => {
-                    self.show_popup = true;
+                    self.show_album_or_track_popup = true;
                 }
                 _ => (),
             }
@@ -260,37 +404,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     return true;
                 }
                 '\n' => {
-                    debug!("made selection");
-
-                    if let (Some(selected), Some(r)) =
-                        (self.mylists.selected(), self.mylist_results.as_ref())
-                    {
-                        debug!("selected item {}", selected);
-                        if let Some(list) = r.playlists.items.get(selected) {
-                            debug!(
-                                "retrieved the playlist information {}-{}",
-                                list.name, list.id
-                            );
-                            debug!("fetching tracks for selected playlist");
-                            if let Ok(mut playlist_info) =
-                                executor::block_on(self.client.playlist(list.id.to_string()))
-                            {
-                                debug!("received playlist, adding to table");
-                                playlist_info.reverse();
-
-                                self.selected_playlist_table.set_rows(playlist_info.rows());
-                                self.selected_playlist_table.set_header(Track::headers());
-                                self.selected_playlist_table.set_widths(Track::widths());
-                                self.selected_playlist_table.select(0);
-
-                                self.selected_playlist_result = Some(playlist_info);
-
-                                self.show_selected_playlist = true;
-
-                                return true;
-                            }
-                        }
-                    }
+                    self.show_play_or_open_popup = true;
                 }
                 _ => (),
             },
@@ -299,27 +413,5 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
         }
 
         false
-    }
-
-    fn mouse_events(&mut self, event: MouseEvent) -> bool {
-        match event {
-            MouseEvent::Press(button, x, y) => match button {
-                termion::event::MouseButton::Left => {
-                    if y > 8 && (y as usize) < self.screen_height - 1 {
-                        debug!("left mouse button, {x} {y}");
-                        self.selected_playlist_table.select((y as usize) - 8);
-                    }
-                }
-                termion::event::MouseButton::Right => todo!(),
-                termion::event::MouseButton::Middle => todo!(),
-                termion::event::MouseButton::WheelUp => todo!(),
-                termion::event::MouseButton::WheelDown => todo!(),
-            },
-            MouseEvent::Release(x, y) => {
-                debug!("button released {x} {y} {}", self.screen_height);
-            }
-            MouseEvent::Hold(_, _) => debug!("mouse hold"),
-        }
-        true
     }
 }
