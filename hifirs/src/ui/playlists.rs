@@ -118,21 +118,11 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
 
                 if self.show_album_or_track_popup {
                     let block = Block::default()
-                        .title("Play album or track?")
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
                         .border_style(Style::default().fg(Color::Indexed(250)));
 
-                    let padding = ((f.size().width as f64 * 0.6) as usize / 2) - 3;
-
-                    let titles = ["Album", "Track"]
-                        .iter()
-                        .cloned()
-                        .map(|t| {
-                            let text = format!("{:^padding$}", t);
-                            Spans::from(text)
-                        })
-                        .collect();
+                    let titles = ["Album", "Track"].map(Spans::from).to_vec();
 
                     let tabs = Tabs::new(titles)
                         .block(block)
@@ -145,26 +135,16 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                         )
                         .select(self.show_album_or_track_selection);
 
-                    components::popup(f, tabs, f.size().width - (padding as u16), 3);
+                    components::popup(f, tabs, 17, 3);
                 }
 
                 if self.show_play_or_open_popup {
                     let block = Block::default()
-                        .title("Play album or track?")
                         .borders(Borders::ALL)
                         .border_type(BorderType::Rounded)
                         .border_style(Style::default().fg(Color::Indexed(250)));
 
-                    let padding = ((f.size().width as f64 * 0.6) as usize / 2) - 3;
-
-                    let titles = ["Open", "Play"]
-                        .iter()
-                        .cloned()
-                        .map(|t| {
-                            let text = format!("{:^padding$}", t);
-                            Spans::from(text)
-                        })
-                        .collect();
+                    let titles = ["Open", "Play"].map(Spans::from).to_vec();
 
                     let tabs = Tabs::new(titles)
                         .block(block)
@@ -177,7 +157,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                         )
                         .select(self.show_play_or_open_popup_selection);
 
-                    components::popup(f, tabs, f.size().width - (padding as u16), 3);
+                    components::popup(f, tabs, 15, 3);
                 }
 
                 components::tabs(2, f, layout[2]);

@@ -161,12 +161,12 @@ where
 
     f.render_widget(tabs, rect);
 }
-pub fn popup<B, W>(f: &mut Frame<B>, widget: W, x: u16, y: u16)
+pub fn popup<B, W>(f: &mut Frame<B>, widget: W, width: u16, height: u16)
 where
     B: Backend,
     W: Widget,
 {
-    let area = centered_rect(x, y, f.size());
+    let area = centered_rect(width, height, f.size());
 
     f.render_widget(Clear, area);
     f.render_widget(widget, area);
