@@ -1,10 +1,10 @@
 # hifi.rs
 
-### A terminal-based (tui), high resolution audio player for the discerning listener.<sup>\*</sup>
+### A terminal-based (tui), high resolution audio player backed by Qobuz
 
 Powered by [Qobuz](https://www.qobuz.com). Requires a paid subscription. This does not allow you to listen for free.
 
-Qobuz only officially supports Linux through the browser. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on playing music from Qobuz that I could play in a terminal or as a background service.
+Qobuz only officially supports Linux through the browser. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on being able to quickly find and play an album inside the console.
 
 ## Features
 
