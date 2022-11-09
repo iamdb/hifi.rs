@@ -1,12 +1,8 @@
 use crate::{
     player,
     qobuz::{self, SearchResults},
-    state::{
-        self,
-        app::{ClientKey, StateKey},
-        StringValue,
-    },
-    switch_screen, ui, wait, REFRESH_RESOLUTION,
+    sql::db,
+    state, switch_screen, ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -170,6 +166,7 @@ pub async fn run() -> Result<(), Error> {
 
     // SETUP DATABASE
     let app_state = state::app::new(base_dir).expect("failed to setup database");
+    let data = db::new().await;
 
     let creds = Credentials {
         username: cli.username.clone(),
@@ -180,7 +177,7 @@ pub async fn run() -> Result<(), Error> {
 
     if cli.username.is_none() && cli.password.is_none() {
         debug!("setting up qobuz client");
-        client = qobuz::setup_client(client.clone(), app_state.clone()).await;
+        client = qobuz::setup_client(client.clone(), data.clone()).await;
     }
 
     // CLI COMMANDS
@@ -374,10 +371,7 @@ pub async fn run() -> Result<(), Error> {
                     .interact_text()
                     .expect("failed to get username");
 
-                app_state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::Username),
-                    username.into(),
-                );
+                data.set_username(username).await;
 
                 println!("Username saved.");
 
@@ -393,20 +387,14 @@ pub async fn run() -> Result<(), Error> {
 
                 debug!("saving password to database: {}", md5_pw);
 
-                app_state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::Password),
-                    md5_pw.into(),
-                );
+                data.set_password(md5_pw).await;
 
                 println!("Password saved.");
 
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
-                app_state.config.insert::<String, AudioQuality>(
-                    StateKey::Client(ClientKey::DefaultQuality),
-                    quality,
-                );
+                data.set_default_quality(quality).await;
 
                 println!("Default quality saved.");
 

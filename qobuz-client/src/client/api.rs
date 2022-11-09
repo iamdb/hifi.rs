@@ -213,14 +213,13 @@ macro_rules! post {
     };
 }
 
-#[allow(unused)]
 impl Client {
     pub fn quality(&self) -> AudioQuality {
         self.default_quality.clone()
     }
 
     /// Setup app_id, secret and user credentials for authentication
-    pub async fn setup(&mut self) -> Result<Self> {
+    pub async fn setup(&mut self) -> Result<&Self> {
         info!("setting up the api client");
 
         let mut refresh_config = false;
@@ -238,7 +237,7 @@ impl Client {
             error!("credentials missing");
         }
 
-        Ok(self.clone())
+        Ok(self)
     }
 
     pub async fn refresh(&mut self) {
@@ -302,20 +301,14 @@ impl Client {
     /// Retrieve a playlist
     pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
-        let mut params = vec![
-            ("limit", "500"),
-            ("extra", "tracks"),
-            ("playlist_id", playlist_id.as_str()),
-            ("offset", "0"),
-        ];
-        let mut fetched_tracks = 0;
-
-        let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
+        let playlist: Result<Playlist> = get!(
+            self,
+            endpoint.clone(),
+            Some(vec![("playlist_id", playlist_id.as_str())])
+        );
 
         if let Ok(mut playlist) = playlist {
-            if let Ok(all_items_playlist) =
-                self.playlist_items(&mut playlist, endpoint, params).await
-            {
+            if let Ok(all_items_playlist) = self.playlist_items(&mut playlist, endpoint).await {
                 Ok(all_items_playlist.clone())
             } else {
                 Err(Error::Api {
@@ -331,11 +324,9 @@ impl Client {
 
     async fn playlist_items<'p>(
         &self,
-        mut playlist: &'p mut Playlist,
+        playlist: &'p mut Playlist,
         endpoint: String,
-        params: Vec<(&str, &str)>,
     ) -> Result<&'p Playlist> {
-        let mut params = params.clone();
         let total_tracks = playlist.tracks_count as usize;
         let mut all_tracks: Vec<Track> = Vec::new();
 
@@ -347,14 +338,14 @@ impl Client {
                 let limit_string = (total_tracks - all_tracks.len()).to_string();
                 let offset_string = all_tracks.len().to_string();
 
-                let mut params = vec![
+                let params = vec![
                     ("limit", limit_string.as_str()),
                     ("extra", "tracks"),
                     ("playlist_id", id.as_str()),
                     ("offset", offset_string.as_str()),
                 ];
 
-                let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
+                let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params));
 
                 match &playlist {
                     Ok(playlist) => {
@@ -637,6 +628,18 @@ impl Client {
 
     pub fn set_default_quality(&mut self, quality: AudioQuality) {
         self.default_quality = quality;
+    }
+
+    pub fn get_token(&self) -> Option<String> {
+        self.user_token.clone()
+    }
+
+    pub fn get_active_secret(&self) -> Option<String> {
+        self.active_secret.clone()
+    }
+
+    pub fn get_app_id(&self) -> Option<String> {
+        self.app_id.clone()
     }
 
     fn client_headers(&self) -> HeaderMap {

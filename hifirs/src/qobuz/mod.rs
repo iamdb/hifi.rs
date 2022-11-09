@@ -1,15 +1,11 @@
 use crate::{
-    get_client,
-    state::{
-        app::{AppState, ClientKey, StateKey},
-        StringValue,
-    },
+    sql::db::Database,
     ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use enum_as_inner::EnumAsInner;
 use qobuz_client::client::{
     album::{Album, AlbumSearchResults},
-    api::Client,
+    api::{Client, Credentials},
     artist::{Artist, ArtistSearchResults},
     playlist::{Playlist, Playlists, UserPlaylistsResult},
     track::Track,
@@ -23,28 +19,31 @@ pub mod playlist;
 pub mod track;
 
 /// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(mut client: Client, app_state: AppState) -> Client {
+pub async fn setup_client(mut client: Client, db: Database) -> Client {
     info!("setting up the api client");
 
-    let tree = app_state.config.clone();
+    let config = db.get_config().await;
     let mut refresh_config = false;
 
-    if let Some(app_id) = get_client!(ClientKey::AppID, tree, StringValue) {
-        info!("using app_id from cache: {}", app_id);
-        client.set_app_id(app_id.to_string());
-    } else {
-        refresh_config = true;
-    }
-
-    if let Some(quality) = get_client!(ClientKey::DefaultQuality, tree, AudioQuality) {
+    if let Some(quality) = config.default_quality {
         info!("using default quality from cache: {}", quality);
+        let quality: AudioQuality = quality.into();
         client.set_default_quality(quality);
     }
 
-    if let Some(active_secret) = get_client!(ClientKey::ActiveSecret, tree, StringValue) {
-        info!("using app_secret from cache: {}", active_secret);
-        client.set_active_secret(active_secret.to_string());
+    if let Some(app_id) = config.app_id {
+        debug!("using app_id from cache");
+        client.set_app_id(app_id);
     } else {
+        debug!("app_id not found, will have to refresh config");
+        refresh_config = true;
+    }
+
+    if let Some(secret) = config.active_secret {
+        debug!("using active secret from cache");
+        client.set_active_secret(secret);
+    } else {
+        debug!("active_secret not found, will have to refresh config");
         refresh_config = true;
     }
 
@@ -53,21 +52,30 @@ pub async fn setup_client(mut client: Client, app_state: AppState) -> Client {
         client.refresh().await;
     }
 
-    if let Some(token) = get_client!(ClientKey::Token, tree, StringValue) {
+    if let Some(token) = config.user_token {
         info!("using token from cache");
-        client.set_token(token.to_string());
-    } else if let (Some(username), Some(password)) = (
-        get_client!(ClientKey::Username, tree, StringValue),
-        get_client!(ClientKey::Password, tree, StringValue),
-    ) {
+        client.set_token(token);
+    } else if let (Some(username), Some(password)) = (config.username, config.password) {
         info!("using username and password from cache");
-        client.set_credentials(qobuz_client::client::api::Credentials {
-            username: Some(username.to_string()),
-            password: Some(password.to_string()),
+        client.set_credentials(Credentials {
+            username: Some(username),
+            password: Some(password),
         });
 
         info!("signing in");
         client.login().await.expect("failed to login");
+
+        if let Some(app_id) = client.get_app_id() {
+            db.set_app_id(app_id).await;
+        }
+
+        if let Some(secret) = client.get_active_secret() {
+            db.set_active_secret(secret).await;
+        }
+
+        if let Some(token) = client.get_token() {
+            db.set_user_token(token).await;
+        }
     }
 
     client

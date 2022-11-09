@@ -10,6 +10,7 @@ byteorder = "1.4"
 chrono = "0.4"
 clap = { version = "3.2", features = ["derive", "env"] }
 comfy-table = "6.0"
+crossbeam = "0.8"
 ctrlc = { version = "3.0", features = ["termination"] }
 dialoguer = { version = "0.10.1", features = ["fuzzy-select"] }
 dirs = "4.0"
@@ -27,7 +28,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sled = { version = "0.34", features = ["compression"] }
 snafu = "0.7"
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "macros", "chrono", "json", "migrate" ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "all-types", "default", "offline" ] }
 termion = "1.5"
 textwrap = "0.15"
 tokio = { version = "1.0", features = ["full"]} 
