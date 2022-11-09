@@ -240,9 +240,11 @@ impl Client {
         Ok(self)
     }
 
-    pub async fn refresh(&mut self) {
-        self.get_config().await.expect("failed to get config");
-        self.test_secrets().await.expect("failed to get secrets");
+    pub async fn refresh(&mut self) -> Result<()> {
+        self.get_config().await?;
+        self.test_secrets().await?;
+
+        Ok(())
     }
 
     /// Login a user
@@ -847,7 +849,7 @@ async fn can_use_methods() {
         .await
         .expect("failed to create client");
 
-    client.refresh().await;
+    client.refresh().await.expect("failed to refresh config");
     client.login().await.expect("failed to login");
 
     assert_ok!(

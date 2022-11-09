@@ -49,7 +49,16 @@ pub async fn setup_client(mut client: Client, db: Database) -> Client {
 
     if refresh_config {
         debug!("refreshing app secret and id");
-        client.refresh().await;
+        if client.refresh().await.is_ok() {
+            debug!("config refreshed, storing for future use");
+            if let Some(app_id) = client.get_app_id() {
+                db.set_app_id(app_id).await;
+            }
+
+            if let Some(secret) = client.get_active_secret() {
+                db.set_active_secret(secret).await;
+            }
+        };
     }
 
     if let Some(token) = config.user_token {
@@ -65,14 +74,7 @@ pub async fn setup_client(mut client: Client, db: Database) -> Client {
         info!("signing in");
         client.login().await.expect("failed to login");
 
-        if let Some(app_id) = client.get_app_id() {
-            db.set_app_id(app_id).await;
-        }
-
-        if let Some(secret) = client.get_active_secret() {
-            db.set_active_secret(secret).await;
-        }
-
+        info!("signed in successfully, storing user token for future use");
         if let Some(token) = client.get_token() {
             db.set_user_token(token).await;
         }
