@@ -1,9 +1,13 @@
 mod player;
 
-use crate::state::{
-    app::{AppState, PlayerKey, StateKey},
-    ClockValue, FloatValue, StatusValue,
+use crate::{
+    sql::db::Database,
+    state::{
+        app::{PlayerKey, StateKey},
+        ClockValue, FloatValue, StatusValue,
+    },
 };
+use futures::executor;
 use qobuz_client::client::track::TrackListTrack;
 use textwrap::fill;
 use tui::{
@@ -19,14 +23,16 @@ use tui::{
     Frame,
 };
 
-pub fn player<B>(f: &mut Frame<B>, rect: Rect, state: AppState)
+pub fn player<B>(f: &mut Frame<B>, rect: Rect, db: Database)
 where
     B: Backend,
 {
-    let tree = state.player;
-
-    if let Some(track) = get_player!(PlayerKey::NextUp, tree, TrackListTrack) {
-        if let Some(status) = get_player!(PlayerKey::Status, tree, StatusValue) {
+    if let Some(track) =
+        executor::block_on(db.get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp)))
+    {
+        if let Some(status) =
+            executor::block_on(db.get::<String, StatusValue>(StateKey::Player(PlayerKey::Status)))
+        {
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Max(5), Constraint::Length(1)])
@@ -36,9 +42,15 @@ where
             player::current_track(track, status, f, layout[0]);
 
             if let (Some(position), Some(duration), Some(prog)) = (
-                get_player!(PlayerKey::Position, tree, ClockValue),
-                get_player!(PlayerKey::Duration, tree, ClockValue),
-                get_player!(PlayerKey::Progress, tree, FloatValue),
+                executor::block_on(
+                    db.get::<String, ClockValue>(StateKey::Player(PlayerKey::Position)),
+                ),
+                executor::block_on(
+                    db.get::<String, ClockValue>(StateKey::Player(PlayerKey::Duration)),
+                ),
+                executor::block_on(
+                    db.get::<String, FloatValue>(StateKey::Player(PlayerKey::Progress)),
+                ),
             ) {
                 player::progress(position, duration, prog, f, layout[1]);
             }

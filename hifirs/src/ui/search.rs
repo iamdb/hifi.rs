@@ -1,8 +1,11 @@
 use crate::{
     player::Controls,
     qobuz::SearchResults,
-    state::app::AppState,
-    switch_screen,
+    sql::db::Database,
+    state::{
+        app::{AppKey, StateKey},
+        ActiveScreen,
+    },
     ui::{
         components::{self, ColumnWidth, Table, TableHeaders, TableRows, TableWidths},
         Console, Screen,
@@ -19,7 +22,7 @@ use tui::layout::{Constraint, Direction, Layout};
 pub struct SearchScreen {
     client: Client,
     results_table: Table,
-    app_state: AppState,
+    db: Database,
     search_results: Option<SearchResults>,
     controls: Controls,
     search_query: Vec<char>,
@@ -30,7 +33,7 @@ pub struct SearchScreen {
 
 impl SearchScreen {
     pub fn new(
-        app_state: AppState,
+        db: Database,
         controls: Controls,
         client: Client,
         search_results: Option<SearchResults>,
@@ -56,7 +59,7 @@ impl SearchScreen {
 
         SearchScreen {
             search_results,
-            app_state,
+            db,
             client,
             controls,
             enter_search,
@@ -73,7 +76,10 @@ impl SearchScreen {
             SearchResults::Albums(results) => {
                 if let Some(album) = results.albums.items.get(selected) {
                     executor::block_on(self.controls.play_album(album.clone()));
-                    switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                    executor::block_on(self.db.insert::<String, ActiveScreen>(
+                        StateKey::App(AppKey::ActiveScreen),
+                        ActiveScreen::NowPlaying,
+                    ));
                     return true;
                 };
             }
@@ -124,7 +130,7 @@ impl Screen for SearchScreen {
 
                 self.results_height = (layout[2].height - layout[2].y) as usize;
 
-                components::player(f, layout[0], self.app_state.clone());
+                components::player(f, layout[0], self.db.clone());
 
                 let text = String::from_iter(&self.search_query);
                 components::text_box(f, text, Some("Search Artists"), layout[1]);

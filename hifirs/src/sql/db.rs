@@ -2,6 +2,7 @@ use qobuz_client::client::{ApiConfig, AudioQuality};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite, SqlitePool};
 use std::{path::PathBuf, str::FromStr};
+use tokio::sync::broadcast::{Receiver, Sender};
 
 use crate::{
     acquire, get_one, query,
@@ -11,6 +12,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Database {
     pool: Pool<Sqlite>,
+    quit_sender: Sender<bool>,
 }
 
 pub async fn new() -> Database {
@@ -28,7 +30,9 @@ pub async fn new() -> Database {
         .await
         .expect("failed to open database");
 
-    let db = Database { pool };
+    let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
+
+    let db = Database { pool, quit_sender };
     db.create_config().await;
 
     db
@@ -48,6 +52,8 @@ impl Database {
                 r#"
                 INSERT INTO state (key,value)
                 VALUES (?1, ?2)
+                ON CONFLICT(key) DO UPDATE
+                SET value=?2
                 "#,
                 key,
                 serialized
@@ -186,5 +192,15 @@ impl Database {
             ApiConfig,
             conn
         )
+    }
+
+    pub fn quitter(&self) -> Receiver<bool> {
+        self.quit_sender.subscribe()
+    }
+
+    pub fn quit(&self) {
+        self.quit_sender
+            .send(true)
+            .expect("failed to send quit message");
     }
 }
