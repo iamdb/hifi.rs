@@ -157,11 +157,11 @@ impl Screen for SearchScreen {
     }
     fn key_events(&mut self, key: Key) -> bool {
         match key {
-            Key::Up => {
+            Key::Up | Key::Char('k') => {
                 self.results_table.previous();
                 return true;
             }
-            Key::Down => {
+            Key::Down | Key::Char('j') => {
                 self.results_table.next();
                 return true;
             }

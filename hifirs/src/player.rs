@@ -269,7 +269,7 @@ impl Player {
     pub async fn clear(&mut self) {
         self.tracklist.lock().await.clear();
         self.previous_tracklist.lock().await.clear();
-        //TODO: CLEAR DB STATE
+        self.db.clear_state().await;
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub async fn jump_forward(&self) {

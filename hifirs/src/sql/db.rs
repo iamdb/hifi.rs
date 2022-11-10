@@ -1,6 +1,6 @@
 use qobuz_client::client::{ApiConfig, AudioQuality};
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Sqlite, SqlitePool};
+use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 use std::{path::PathBuf, str::FromStr};
 use tokio::sync::broadcast::{Receiver, Sender};
 
@@ -17,7 +17,7 @@ pub struct Database {
 
 pub async fn new() -> Database {
     let database_url = if let Ok(url) = std::env::var("DATABASE_URL") {
-        PathBuf::from(url)
+        PathBuf::from(url.replace("sqlite://", ""))
     } else {
         let mut url = dirs::data_local_dir().unwrap();
         url.push("hifi-rs");
@@ -26,9 +26,18 @@ pub async fn new() -> Database {
         url
     };
 
-    let pool = SqlitePool::connect(database_url.to_str().unwrap())
+    let options = SqliteConnectOptions::new()
+        .filename(database_url)
+        .create_if_missing(true);
+
+    let pool = SqlitePool::connect_with(options)
         .await
         .expect("failed to open database");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migration failed");
 
     let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
@@ -39,6 +48,14 @@ pub async fn new() -> Database {
 }
 
 impl Database {
+    pub async fn clear_state(&self) {
+        let mut conn = acquire!(self);
+
+        sqlx::query!("DELETE FROM state WHERE state.key != 'active_screen'")
+            .execute(&mut conn)
+            .await
+            .expect("failed to clear state");
+    }
     pub async fn insert<K, T>(&self, key: StateKey, value: T)
     where
         K: FromStr,

@@ -360,8 +360,10 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        // TODO: reimpliment clear
-        Commands::Reset => Ok(()),
+        Commands::Reset => {
+            data.clear_state().await;
+            Ok(())
+        }
         Commands::Config { command } => match command {
             ConfigCommands::Username {} => {
                 let username: String = Input::new()
@@ -404,7 +406,7 @@ pub async fn run() -> Result<(), Error> {
                     .interact()
                     .expect("failed to get response")
                 {
-                    // TODO: reimpliment clear
+                    data.clear_state().await;
                     println!("Database cleared.");
 
                     Ok(())
