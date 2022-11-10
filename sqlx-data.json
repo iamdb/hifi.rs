@@ -1,5 +1,15 @@
 {
   "db": "SQLite",
+  "16129780f2803fa7659f0d6a601f3154f87a13ac7117065e36e42f6df96cc9c3": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "DELETE FROM state WHERE state.key != 'active_screen'"
+  },
   "26fb84a813da028a0eb78a0403751ab7deb516ddedb62f4f8ef6b7140ab6d29c": {
     "describe": {
       "columns": [],
@@ -20,7 +30,7 @@
     },
     "query": "\n            UPDATE config\n            SET default_quality=?1\n            WHERE ROWID = 1\n            "
   },
-  "7eba1046119434a49419e494dfae1bec2f66cc3ef19861feb82824604be33468": {
+  "85927249c2b29c8c139943f410da960e0488d4fd98930b56be7f687b34b26b9f": {
     "describe": {
       "columns": [],
       "nullable": [],
@@ -28,7 +38,7 @@
         "Right": 2
       }
     },
-    "query": "\n                INSERT INTO state (key,value)\n                VALUES (?1, ?2)\n                "
+    "query": "\n                INSERT INTO state (key,value)\n                VALUES (?1, ?2)\n                ON CONFLICT(key) DO UPDATE\n                SET value=?2\n                "
   },
   "b5343e80f499af892e1632ff03d0fc58c84187bea1df62a4230f27086cf16b32": {
     "describe": {
