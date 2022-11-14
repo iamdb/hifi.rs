@@ -1,5 +1,9 @@
 use crate::{
-    switch_screen,
+    sql::db::Database,
+    state::{
+        app::{AppKey, StateKey},
+        ActiveScreen,
+    },
     ui::components::{Table, TableHeaders, TableRows, TableWidths},
 };
 use futures::executor;
@@ -18,7 +22,6 @@ use tui::{
 
 use crate::{
     player::Controls,
-    state::app::AppState,
     ui::{
         components::{self, Item, List},
         Console, Screen,
@@ -27,7 +30,7 @@ use crate::{
 
 pub struct MyPlaylistsScreen<'m> {
     controls: Controls,
-    app_state: AppState,
+    db: Database,
     client: Client,
     mylist_results: Option<UserPlaylistsResult>,
     mylists: List<'m>,
@@ -43,7 +46,7 @@ pub struct MyPlaylistsScreen<'m> {
 }
 
 impl<'m> MyPlaylistsScreen<'m> {
-    pub fn new(app_state: AppState, client: Client, controls: Controls) -> Self {
+    pub fn new(db: Database, client: Client, controls: Controls) -> Self {
         let mylists = List::new(None);
         let selected_playlist = Table::new(None, None, None);
 
@@ -52,7 +55,7 @@ impl<'m> MyPlaylistsScreen<'m> {
             show_album_or_track_selection: 0,
             screen_height: 0,
             screen_width: 0,
-            app_state,
+            db,
             client,
             mylist_results: None,
             mylists,
@@ -99,7 +102,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     .margin(0)
                     .split(f.size());
 
-                components::player(f, layout[0], self.app_state.clone());
+                components::player(f, layout[0], self.db.clone());
 
                 if self.show_selected_playlist {
                     components::table(
@@ -214,16 +217,22 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                                 executor::block_on(self.controls.play_album(album));
                                                 self.show_album_or_track_popup = false;
 
-                                                let app_state = self.app_state.clone();
-                                                switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                                executor::block_on(
+                                                    self.db.insert::<String, ActiveScreen>(
+                                                        StateKey::App(AppKey::ActiveScreen),
+                                                        ActiveScreen::NowPlaying,
+                                                    ),
+                                                );
                                             }
                                         }
                                     } else if self.show_album_or_track_selection == 1 {
                                         executor::block_on(self.controls.play_track(track.clone()));
                                         self.show_album_or_track_popup = false;
 
-                                        let app_state = self.app_state.clone();
-                                        switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                        executor::block_on(self.db.insert::<String, ActiveScreen>(
+                                            StateKey::App(AppKey::ActiveScreen),
+                                            ActiveScreen::NowPlaying,
+                                        ));
                                     }
                                 }
                             }
@@ -278,8 +287,10 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
 
                                         self.show_play_or_open_popup = false;
 
-                                        let app_state = self.app_state.clone();
-                                        switch_screen!(app_state, ActiveScreen::NowPlaying);
+                                        executor::block_on(self.db.insert::<String, ActiveScreen>(
+                                            StateKey::App(AppKey::ActiveScreen),
+                                            ActiveScreen::NowPlaying,
+                                        ));
 
                                         return true;
                                     }

@@ -1,9 +1,7 @@
 use crate::{
     player::Controls,
-    state::{
-        app::{AppState, PlayerKey},
-        TrackListValue,
-    },
+    sql::db::Database,
+    state::{app::PlayerKey, TrackListValue},
     ui::{
         components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
         Console, Screen, StateKey,
@@ -16,18 +14,18 @@ use tui::layout::{Constraint, Direction, Layout};
 
 pub struct NowPlayingScreen {
     track_list: Table,
-    app_state: AppState,
+    db: Database,
     controls: Controls,
     list_height: usize,
 }
 
 impl NowPlayingScreen {
-    pub fn new(app_state: AppState, controls: Controls) -> NowPlayingScreen {
+    pub fn new(db: Database, controls: Controls) -> NowPlayingScreen {
         let track_list = Table::new(None, None, None);
 
         NowPlayingScreen {
             track_list,
-            app_state,
+            db,
             controls,
             list_height: 0,
         }
@@ -51,16 +49,20 @@ impl Screen for NowPlayingScreen {
 
                 self.list_height = (split_layout[1].height - split_layout[1].y) as usize;
 
-                components::player(f, split_layout[0], self.app_state.clone());
+                components::player(f, split_layout[0], self.db.clone());
 
-                let tree = self.app_state.player.clone();
                 let mut title = "Now Playing".to_string();
 
-                if let Some(tracklist) = get_player!(PlayerKey::Playlist, tree, TrackListValue) {
+                if let Some(tracklist) = executor::block_on(
+                    self.db
+                        .get::<String, TrackListValue>(StateKey::Player(PlayerKey::Playlist)),
+                ) {
                     let mut rows = tracklist.rows();
 
                     if let Some(prev_playlist) =
-                        get_player!(PlayerKey::PreviousPlaylist, tree, TrackListValue)
+                        executor::block_on(self.db.get::<String, TrackListValue>(StateKey::Player(
+                            PlayerKey::PreviousPlaylist,
+                        )))
                     {
                         let prev_rows = prev_playlist.rows();
                         rows.append(

@@ -45,7 +45,10 @@ pub async fn new<'q>(progress: &'_ ProgressBar) -> Qobuz<'_> {
 impl<'q> Qobuz<'q> {
     pub async fn auth(&mut self) {
         self.progress.set_message("signing into Qobuz");
-        self.client.refresh().await;
+        self.client
+            .refresh()
+            .await
+            .expect("failed to refresh config");
         self.client.login().await.expect("failed to login");
         self.progress.set_message("signed into Qobuz");
     }

@@ -2,3 +2,4 @@
 /db
 .envrc
 out
+dev.db

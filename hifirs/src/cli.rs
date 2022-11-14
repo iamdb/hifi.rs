@@ -1,11 +1,7 @@
 use crate::{
     player,
     qobuz::{self, SearchResults},
-    state::{
-        self,
-        app::{ClientKey, StateKey},
-        StringValue,
-    },
+    sql::db,
     switch_screen, ui, wait, REFRESH_RESOLUTION,
 };
 use clap::{Parser, Subcommand};
@@ -169,7 +165,7 @@ pub async fn run() -> Result<(), Error> {
     base_dir.push("hifi-rs");
 
     // SETUP DATABASE
-    let app_state = state::app::new(base_dir).expect("failed to setup database");
+    let data = db::new().await;
 
     let creds = Credentials {
         username: cli.username.clone(),
@@ -180,34 +176,34 @@ pub async fn run() -> Result<(), Error> {
 
     if cli.username.is_none() && cli.password.is_none() {
         debug!("setting up qobuz client");
-        client = qobuz::setup_client(client.clone(), app_state.clone()).await;
+        client = qobuz::setup_client(client.clone(), data.clone()).await;
     }
 
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let player = player::new(app_state.clone(), client.clone(), true).await;
+            let player = player::new(data.clone(), client.clone(), true).await;
 
             player.play();
 
             if no_tui {
-                wait!(app_state);
+                wait!(data);
             } else {
-                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
 
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let mut player = player::new(app_state.clone(), client.clone(), true).await;
+            let mut player = player::new(data.clone(), client.clone(), true).await;
 
             player.play_uri(uri, Some(client.quality())).await;
 
             if no_tui {
-                wait!(app_state);
+                wait!(data);
             } else {
-                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
             Ok(())
@@ -238,18 +234,19 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(data.clone(), client.clone(), true).await;
 
                 if no_tui {
-                    wait!(app_state);
+                    wait!(data);
                 } else {
                     let mut tui = ui::new(
-                        app_state,
+                        data.clone(),
                         player.controls(),
                         client,
                         Some(results),
                         Some(query),
-                    )?;
+                    )
+                    .await?;
                     tui.event_loop().await?;
                 }
             }
@@ -268,18 +265,19 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(data.clone(), client.clone(), true).await;
 
                 if no_tui {
-                    wait!(app_state);
+                    wait!(data);
                 } else {
                     let mut tui = ui::new(
-                        app_state,
+                        data.clone(),
                         player.controls(),
                         client,
                         Some(results),
                         Some(query),
-                    )?;
+                    )
+                    .await?;
                     tui.event_loop().await?;
                 }
             }
@@ -294,14 +292,14 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let player = player::new(app_state.clone(), client.clone(), true).await;
+                let player = player::new(data.clone(), client.clone(), true).await;
 
                 if no_tui {
-                    wait!(app_state);
+                    wait!(data);
                 } else {
                     let mut tui =
-                        ui::new(app_state.clone(), player.controls(), client, None, None)?;
-                    switch_screen!(app_state, ActiveScreen::Playlists);
+                        ui::new(data.clone(), player.controls(), client, None, None).await?;
+                    switch_screen!(data, ActiveScreen::Playlists);
                     tui.event_loop().await?;
                 }
             }
@@ -321,16 +319,16 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let mut player = player::new(app_state.clone(), client.clone(), false).await;
+            let mut player = player::new(data.clone(), client.clone(), false).await;
 
             let track = client.track(track_id).await?;
 
             player.play_track(track, Some(quality.unwrap())).await;
 
             if no_tui {
-                wait!(app_state);
+                wait!(data);
             } else {
-                let mut tui = ui::new(app_state, player.controls(), client, None, None)?;
+                let mut tui = ui::new(data, player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
 
@@ -349,22 +347,21 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let mut player = player::new(app_state.clone(), client.clone(), false).await;
+            let mut player = player::new(data.clone(), client.clone(), false).await;
             player.play_album(album, Some(quality)).await;
 
             if no_tui {
-                wait!(app_state);
+                wait!(data);
             } else {
-                let mut tui = ui::new(app_state.clone(), player.controls(), client, None, None)?;
-                switch_screen!(app_state, ActiveScreen::NowPlaying);
+                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
+                switch_screen!(data, ActiveScreen::NowPlaying);
                 tui.event_loop().await?;
             }
 
             Ok(())
         }
         Commands::Reset => {
-            app_state.player.clear();
-            app_state.player.flush();
+            data.clear_state().await;
             Ok(())
         }
         Commands::Config { command } => match command {
@@ -374,10 +371,7 @@ pub async fn run() -> Result<(), Error> {
                     .interact_text()
                     .expect("failed to get username");
 
-                app_state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::Username),
-                    username.into(),
-                );
+                data.set_username(username).await;
 
                 println!("Username saved.");
 
@@ -393,20 +387,14 @@ pub async fn run() -> Result<(), Error> {
 
                 debug!("saving password to database: {}", md5_pw);
 
-                app_state.config.insert::<String, StringValue>(
-                    StateKey::Client(ClientKey::Password),
-                    md5_pw.into(),
-                );
+                data.set_password(md5_pw).await;
 
                 println!("Password saved.");
 
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
-                app_state.config.insert::<String, AudioQuality>(
-                    StateKey::Client(ClientKey::DefaultQuality),
-                    quality,
-                );
+                data.set_default_quality(quality).await;
 
                 println!("Default quality saved.");
 
@@ -418,8 +406,7 @@ pub async fn run() -> Result<(), Error> {
                     .interact()
                     .expect("failed to get response")
                 {
-                    app_state.config.clear();
-
+                    data.clear_state().await;
                     println!("Database cleared.");
 
                     Ok(())

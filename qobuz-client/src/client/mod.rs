@@ -9,6 +9,16 @@ pub mod playlist;
 pub mod search_results;
 pub mod track;
 
+#[derive(Default, Debug)]
+pub struct ApiConfig {
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub default_quality: Option<i64>,
+    pub user_token: Option<String>,
+    pub app_id: Option<String>,
+    pub active_secret: Option<String>,
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Composer {
     pub id: i64,
@@ -49,12 +59,26 @@ pub enum UrlType {
 }
 
 /// The audio quality as defined by the Qobuz API.
-#[derive(Clone, Debug, Serialize, Deserialize, ValueEnum)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum AudioQuality {
+    #[default]
     Mp3 = 5,
     CD = 6,
     HIFI96 = 7,
     HIFI192 = 27,
+    Unknown,
+}
+
+impl From<i64> for AudioQuality {
+    fn from(quality_id: i64) -> Self {
+        match quality_id {
+            5 => Self::Mp3,
+            6 => Self::CD,
+            7 => Self::HIFI96,
+            27 => Self::HIFI192,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 impl Display for AudioQuality {

@@ -4,11 +4,11 @@ pub mod playlists;
 pub mod search;
 
 use crate::{
-    get_app,
     player::Controls,
     qobuz::SearchResults,
+    sql::db::Database,
     state::{
-        app::{AppKey, AppState, StateKey},
+        app::{AppKey, StateKey},
         ActiveScreen,
     },
     switch_screen,
@@ -32,14 +32,13 @@ use tui::{backend::TermionBackend, Terminal};
 
 #[macro_export]
 macro_rules! switch_screen {
-    ($app_state:expr, $screen:path) => {
+    ($db:expr, $screen:path) => {
         use $crate::state::app::AppKey;
         use $crate::state::app::StateKey;
         use $crate::state::ActiveScreen;
 
-        $app_state
-            .app
-            .insert::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen), $screen);
+        $db.insert::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen), $screen)
+            .await;
     };
 }
 
@@ -52,7 +51,7 @@ pub trait Screen {
 pub struct Tui {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    app_state: AppState,
+    db: Database,
     controls: Controls,
     terminal: Console,
     screens: HashMap<ActiveScreen, Rc<RefCell<dyn Screen>>>,
@@ -97,8 +96,8 @@ impl From<std::io::Error> for Error {
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-pub fn new(
-    app_state: AppState,
+pub async fn new(
+    db: Database,
     controls: Controls,
     client: Client,
     search_results: Option<SearchResults>,
@@ -116,10 +115,10 @@ pub fn new(
     if let Some(search_results) = &search_results {
         match search_results {
             SearchResults::UserPlaylists(_) => {
-                switch_screen!(app_state, ActiveScreen::Playlists);
+                switch_screen!(db, ActiveScreen::Playlists);
             }
             _ => {
-                switch_screen!(app_state, ActiveScreen::Search);
+                switch_screen!(db, ActiveScreen::Search);
             }
         }
     }
@@ -128,7 +127,7 @@ pub fn new(
     screens.insert(
         ActiveScreen::Search,
         Rc::new(RefCell::new(SearchScreen::new(
-            app_state.clone(),
+            db.clone(),
             controls.clone(),
             client.clone(),
             search_results,
@@ -139,7 +138,7 @@ pub fn new(
     screens.insert(
         ActiveScreen::NowPlaying,
         Rc::new(RefCell::new(NowPlayingScreen::new(
-            app_state.clone(),
+            db.clone(),
             controls.clone(),
         ))) as Rc<RefCell<dyn Screen>>,
     );
@@ -147,14 +146,14 @@ pub fn new(
     screens.insert(
         ActiveScreen::Playlists,
         Rc::new(RefCell::new(MyPlaylistsScreen::new(
-            app_state.clone(),
+            db.clone(),
             client,
             controls.clone(),
         ))) as Rc<RefCell<dyn Screen>>,
     );
 
     Ok(Tui {
-        app_state,
+        db,
         controls,
         rx,
         terminal,
@@ -170,13 +169,15 @@ impl Tui {
         }
     }
     async fn render(&mut self) {
-        let app_tree = self.app_state.app.clone();
-        let screen =
-            if let Some(saved_screen) = get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen) {
-                saved_screen
-            } else {
-                ActiveScreen::NowPlaying
-            };
+        let screen = if let Some(saved_screen) = self
+            .db
+            .get::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen))
+            .await
+        {
+            saved_screen
+        } else {
+            ActiveScreen::NowPlaying
+        };
 
         if let Some(screen) = self.screens.get(&screen) {
             screen.borrow_mut().render(&mut self.terminal);
@@ -186,7 +187,7 @@ impl Tui {
         // Watches stdin for input events and sends them to the
         // router for handling.
         let event_sender = self.tx.clone();
-        let mut q = self.app_state.quitter();
+        let mut q = self.db.quitter();
         thread::spawn(move || {
             let stdin = std::io::stdin();
             for event in stdin.events().flatten() {
@@ -205,7 +206,7 @@ impl Tui {
         // Sends a tick whose interval is defined by
         // REFRESH_RESOLUTION
         let event_sender = self.tx.clone();
-        let mut q = self.app_state.quitter();
+        let mut q = self.db.quitter();
         thread::spawn(move || loop {
             if let Ok(quit) = q.try_recv() {
                 if quit {
@@ -223,7 +224,7 @@ impl Tui {
 
         let event_receiver = self.rx.clone();
         let mut event_stream = event_receiver.stream();
-        let mut quitter = self.app_state.quitter();
+        let mut quitter = self.db.quitter();
 
         loop {
             select! {
@@ -247,21 +248,22 @@ impl Tui {
             }
             Event::Key(key) => match key {
                 Key::Char('\t') => {
-                    let app_tree = &self.app_state.app;
-                    if let Some(active_screen) =
-                        get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
+                    if let Some(active_screen) = self
+                        .db
+                        .get::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen))
+                        .await
                     {
                         match active_screen {
                             ActiveScreen::NowPlaying => {
-                                switch_screen!(self.app_state, ActiveScreen::Search);
+                                switch_screen!(self.db, ActiveScreen::Search);
                                 self.tick().await;
                             }
                             ActiveScreen::Search => {
-                                switch_screen!(self.app_state, ActiveScreen::Playlists);
+                                switch_screen!(self.db, ActiveScreen::Playlists);
                                 self.tick().await;
                             }
                             ActiveScreen::Playlists => {
-                                switch_screen!(self.app_state, ActiveScreen::NowPlaying);
+                                switch_screen!(self.db, ActiveScreen::NowPlaying);
                                 self.tick().await;
                             }
                         }
@@ -276,12 +278,13 @@ impl Tui {
                     }
                     self.controls.stop().await;
                     std::thread::sleep(Duration::from_millis(500));
-                    self.app_state.quit();
+                    self.db.quit();
                 }
                 _ => {
-                    let app_tree = &self.app_state.app;
-                    if let Some(active_screen) =
-                        get_app!(AppKey::ActiveScreen, app_tree, ActiveScreen)
+                    if let Some(active_screen) = self
+                        .db
+                        .get::<String, ActiveScreen>(StateKey::App(AppKey::ActiveScreen))
+                        .await
                     {
                         if let Some(screen) = self.screens.get(&active_screen) {
                             if screen.borrow_mut().key_events(key) {

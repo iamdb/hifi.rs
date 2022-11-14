@@ -1,8 +1,9 @@
 use crate::{
-    action, get_player,
+    action,
     mpris::{self, MprisPlayer, MprisTrackList},
+    sql::db::Database,
     state::{
-        app::{AppState, PlayerKey, StateKey},
+        app::{PlayerKey, StateKey},
         ClockValue, FloatValue, StatusValue, TrackListValue,
     },
     REFRESH_RESOLUTION,
@@ -65,7 +66,7 @@ pub struct Player {
     /// List of tracks that have played.
     previous_tracklist: Arc<Mutex<TrackListValue>>,
     /// The app state to save player inforamtion into.
-    app_state: AppState,
+    db: Database,
     /// Qobuz client
     client: Client,
     controls: Controls,
@@ -74,10 +75,10 @@ pub struct Player {
     resume: bool,
 }
 
-pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
+pub async fn new(db: Database, client: Client, resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
-    let controls = Controls::new(app_state.clone());
+    let controls = Controls::new(db.clone());
     let tracklist = Arc::new(Mutex::new(TrackListValue::new()));
     let previous_tracklist = Arc::new(Mutex::new(TrackListValue::new()));
 
@@ -106,12 +107,12 @@ pub async fn new(app_state: AppState, client: Client, resume: bool) -> Player {
     });
 
     let mut player = Player {
+        db,
         connection,
         client,
         playbin,
         tracklist,
         previous_tracklist,
-        app_state,
         controls,
         is_buffering: false,
         resume,
@@ -212,10 +213,12 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
-                self.app_state.player.insert::<String, ClockValue>(
-                    StateKey::Player(PlayerKey::Position),
-                    time.clone(),
-                );
+                self.db
+                    .insert::<String, ClockValue>(
+                        StateKey::Player(PlayerKey::Position),
+                        time.clone(),
+                    )
+                    .await;
 
                 self.dbus_seeked_signal(time).await;
 
@@ -228,11 +231,13 @@ impl Player {
         }
     }
     pub async fn resume(&mut self) -> Result<()> {
-        let tree = self.app_state.player.clone();
-
         if let (Some(playlist), Some(next_up)) = (
-            get_player!(PlayerKey::Playlist, tree, TrackListValue),
-            get_player!(PlayerKey::NextUp, tree, TrackListTrack),
+            self.db
+                .get::<String, TrackListValue>(StateKey::Player(PlayerKey::Playlist))
+                .await,
+            self.db
+                .get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp))
+                .await,
         ) {
             let next_track = self.attach_track_url(next_up).await?;
 
@@ -240,8 +245,10 @@ impl Player {
                 self.set_playlist(playlist);
                 self.set_uri(track_url);
 
-                if let Some(prev_playlist) =
-                    get_player!(PlayerKey::PreviousPlaylist, tree, TrackListValue)
+                if let Some(prev_playlist) = self
+                    .db
+                    .get::<String, TrackListValue>(StateKey::Player(PlayerKey::PreviousPlaylist))
+                    .await
                 {
                     self.set_prev_playlist(prev_playlist);
 
@@ -262,7 +269,7 @@ impl Player {
     pub async fn clear(&mut self) {
         self.tracklist.lock().await.clear();
         self.previous_tracklist.lock().await.clear();
-        self.app_state.player.clear();
+        self.db.clear_state().await;
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub async fn jump_forward(&self) {
@@ -309,8 +316,6 @@ impl Player {
     }
     /// Skip forward to the next track in the playlist.
     pub async fn skip_forward(&self, num: Option<usize>) -> Result<()> {
-        let tree = self.app_state.player.clone();
-
         let mut playlist = self.tracklist.lock().await;
         let mut prev_playlist = self.previous_tracklist.lock().await;
 
@@ -321,7 +326,11 @@ impl Player {
             return Ok(());
         }
 
-        if let Some(previous_track) = get_player!(PlayerKey::NextUp, tree, TrackListTrack) {
+        if let Some(previous_track) = self
+            .db
+            .get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp))
+            .await
+        {
             prev_playlist.push_back(previous_track);
         }
 
@@ -343,20 +352,26 @@ impl Player {
                 debug!("skipping forward to next track");
                 self.ready();
 
-                self.app_state.player.insert::<String, TrackListTrack>(
-                    StateKey::Player(PlayerKey::NextUp),
-                    next_track_to_play,
-                );
+                self.db
+                    .insert::<String, TrackListTrack>(
+                        StateKey::Player(PlayerKey::NextUp),
+                        next_track_to_play.clone(),
+                    )
+                    .await;
 
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
-                );
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::Playlist),
+                        playlist.clone(),
+                    )
+                    .await;
 
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
-                );
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::PreviousPlaylist),
+                        prev_playlist.clone(),
+                    )
+                    .await;
 
                 self.playbin.set_property("uri", Some(track_url.url));
                 self.play();
@@ -389,8 +404,6 @@ impl Player {
             }
         }
 
-        let tree = &self.app_state.player;
-
         let mut playlist = self.tracklist.lock().await;
         let mut prev_playlist = self.previous_tracklist.lock().await;
 
@@ -401,7 +414,10 @@ impl Player {
             return Ok(());
         }
 
-        if let Some(previously_played_track) = get_player!(PlayerKey::NextUp, tree, TrackListTrack)
+        if let Some(previously_played_track) = self
+            .db
+            .get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp))
+            .await
         {
             playlist.push_front(previously_played_track);
         }
@@ -427,19 +443,26 @@ impl Player {
                 debug!("skipping backward to previous track");
                 self.ready();
 
-                self.app_state.player.insert::<String, TrackListTrack>(
-                    StateKey::Player(PlayerKey::NextUp),
-                    next_track_to_play,
-                );
+                self.db
+                    .insert::<String, TrackListTrack>(
+                        StateKey::Player(PlayerKey::NextUp),
+                        next_track_to_play.clone(),
+                    )
+                    .await;
 
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
-                );
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
-                );
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::Playlist),
+                        playlist.clone(),
+                    )
+                    .await;
+
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::PreviousPlaylist),
+                        prev_playlist.clone(),
+                    )
+                    .await;
 
                 self.dbus_metadata_changed().await;
                 self.dbus_seeked_signal(ClockValue::default()).await;
@@ -494,7 +517,6 @@ impl Player {
             TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
         self.tracklist.lock().await.push_back(playlist_track);
 
-        self.app_state.player.clear();
         self.start(quality).await;
     }
     /// Plays a full album.
@@ -623,15 +645,19 @@ impl Player {
             playbin.set_property("uri", Some(track_url.url.as_str()));
             next_track.set_track_url(track_url);
 
-            self.app_state.player.insert::<String, TrackListTrack>(
-                StateKey::Player(PlayerKey::NextUp),
-                next_track.clone(),
-            );
+            self.db
+                .insert::<String, TrackListTrack>(
+                    StateKey::Player(PlayerKey::NextUp),
+                    next_track.clone(),
+                )
+                .await;
 
-            self.app_state.player.insert::<String, TrackListValue>(
-                StateKey::Player(PlayerKey::Playlist),
-                tracklist.clone(),
-            );
+            self.db
+                .insert::<String, TrackListValue>(
+                    StateKey::Player(PlayerKey::Playlist),
+                    tracklist.clone(),
+                )
+                .await;
 
             self.play();
         }
@@ -644,7 +670,7 @@ impl Player {
     ) {
         let action_rx = self.controls.action_receiver();
         let mut messages = self.message_stream().await;
-        let mut quitter = self.app_state.quitter();
+        let mut quitter = self.db.quitter();
         let mut actions = action_rx.stream();
         let mut about_to_finish = about_to_finish_rx.stream();
 
@@ -685,7 +711,7 @@ impl Player {
                         Action::PlayTrack { track } => self.play_track(*track, None).await,
                         Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await,
                         Action::PlayPlaylist { playlist } => self.play_playlist(*playlist, Some(self.client.quality())).await,
-                        Action::Quit => self.app_state.quit(),
+                        Action::Quit => self.db.quit(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                     }
@@ -696,7 +722,7 @@ impl Player {
                             debug!("END OF STREAM");
 
                             self.stop();
-                            self.app_state.quit();
+                            self.db.quit();
                             break;
                         },
                         MessageView::StreamStart(_) => {
@@ -704,7 +730,7 @@ impl Player {
                         }
                         MessageView::DurationChanged(_) => {
                             if let Some(duration) = self.duration() {
-                                self.app_state.player.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration),duration);
+                                self.db.insert::<String, ClockValue>(StateKey::Player(PlayerKey::Duration), duration.clone()).await;
                             }
 
                         }
@@ -716,9 +742,7 @@ impl Player {
                             // If the player is resuming from a previous session,
                             // seek to the last position saved to the state.
                             if self.resume {
-                                let tree = &self.app_state.player;
-
-                                if let Some(position) = get_player!(PlayerKey::Position, tree, ClockValue) {
+                                if let Some(position) = self.db.get::<String, ClockValue>(StateKey::Player(PlayerKey::Position)).await {
                                     self.resume = false;
                                     self.seek(position, None).await.expect("seek failure");
                                 }
@@ -744,7 +768,8 @@ impl Player {
                                     GstState::Playing => {
                                         debug!("player state changed to Playing");
                                         self.is_buffering = false;
-                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into());
+
+                                        self.db.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Playing.into()).await;
 
                                         iface
                                             .playback_status_changed(iface_ref.signal_context())
@@ -755,7 +780,8 @@ impl Player {
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
                                         self.is_buffering = false;
-                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into());
+
+                                        self.db.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Paused.into()).await;
 
                                         iface
                                             .playback_status_changed(iface_ref.signal_context())
@@ -765,7 +791,8 @@ impl Player {
                                     GstState::Ready => {
                                         debug!("player state changed to Ready");
                                         self.is_buffering = false;
-                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
+
+                                        self.db.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into()).await;
 
                                         iface
                                             .playback_status_changed(iface_ref.signal_context())
@@ -776,7 +803,8 @@ impl Player {
                                     GstState::VoidPending => {
                                         debug!("player state changed to VoidPending");
                                         self.is_buffering = false;
-                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
+
+                                        self.db.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into()).await;
 
                                         iface
                                             .playback_status_changed(iface_ref.signal_context())
@@ -787,7 +815,8 @@ impl Player {
                                     GstState::Null => {
                                         debug!("player state changed to Null");
                                         self.is_buffering = false;
-                                        self.app_state.player.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into());
+
+                                        self.db.insert::<String, StatusValue>(StateKey::Player(PlayerKey::Status),GstState::Ready.into()).await;
 
                                         iface
                                             .playback_status_changed(iface_ref.signal_context())
@@ -818,7 +847,7 @@ impl Player {
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
     async fn clock_loop(&self) {
-        let mut quit_receiver = self.app_state.quitter();
+        let mut quit_receiver = self.db.quitter();
 
         loop {
             if let Ok(quit) = quit_receiver.try_recv() {
@@ -831,15 +860,19 @@ impl Player {
                 || self.current_state() != GstState::Null.into()
             {
                 if let (Some(position), Some(duration)) = (self.position(), self.duration()) {
-                    self.app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Position),
-                        position.clone(),
-                    );
+                    self.db
+                        .insert::<String, ClockValue>(
+                            StateKey::Player(PlayerKey::Position),
+                            position.clone(),
+                        )
+                        .await;
 
-                    self.app_state.player.insert::<String, ClockValue>(
-                        StateKey::Player(PlayerKey::Duration),
-                        duration.clone(),
-                    );
+                    self.db
+                        .insert::<String, ClockValue>(
+                            StateKey::Player(PlayerKey::Duration),
+                            duration.clone(),
+                        )
+                        .await;
 
                     if position >= ClockTime::from_seconds(0).into() && position <= duration {
                         let duration = duration.inner_clocktime();
@@ -848,14 +881,19 @@ impl Player {
                         let remaining = duration - position;
                         let progress = position.seconds() as f64 / duration.seconds() as f64;
 
-                        self.app_state.player.insert::<String, FloatValue>(
-                            StateKey::Player(PlayerKey::Progress),
-                            progress.into(),
-                        );
-                        self.app_state.player.insert::<String, ClockValue>(
-                            StateKey::Player(PlayerKey::DurationRemaining),
-                            remaining.into(),
-                        );
+                        self.db
+                            .insert::<String, FloatValue>(
+                                StateKey::Player(PlayerKey::Progress),
+                                progress.into(),
+                            )
+                            .await;
+
+                        self.db
+                            .insert::<String, ClockValue>(
+                                StateKey::Player(PlayerKey::DurationRemaining),
+                                remaining.into(),
+                            )
+                            .await;
                     }
                 }
 
@@ -913,29 +951,36 @@ impl Player {
             if let Ok(next_playlist_track_url) =
                 self.client.track_url(next_track.track.id, None, None).await
             {
-                let player_tree = self.app_state.player.clone();
-                if let Some(previous_track) =
-                    get_player!(PlayerKey::NextUp, player_tree, TrackListTrack)
+                if let Some(previous_track) = self
+                    .db
+                    .get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp))
+                    .await
                 {
                     prev_playlist.push_back(previous_track);
                 }
 
                 next_track.set_track_url(next_playlist_track_url.clone());
 
-                self.app_state.player.insert::<String, TrackListTrack>(
-                    StateKey::Player(PlayerKey::NextUp),
-                    next_track,
-                );
+                self.db
+                    .insert::<String, TrackListTrack>(
+                        StateKey::Player(PlayerKey::NextUp),
+                        next_track.clone(),
+                    )
+                    .await;
 
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::Playlist),
-                    playlist.clone(),
-                );
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::Playlist),
+                        playlist.clone(),
+                    )
+                    .await;
 
-                self.app_state.player.insert::<String, TrackListValue>(
-                    StateKey::Player(PlayerKey::PreviousPlaylist),
-                    prev_playlist.clone(),
-                );
+                self.db
+                    .insert::<String, TrackListValue>(
+                        StateKey::Player(PlayerKey::PreviousPlaylist),
+                        prev_playlist.clone(),
+                    )
+                    .await;
 
                 self.dbus_metadata_changed().await;
 
@@ -969,17 +1014,17 @@ impl Player {
 pub struct Controls {
     action_tx: Sender<Action>,
     action_rx: Receiver<Action>,
-    state: AppState,
+    db: Database,
 }
 
 impl Controls {
-    fn new(state: AppState) -> Controls {
+    fn new(db: Database) -> Controls {
         let (action_tx, action_rx) = flume::bounded::<Action>(10);
 
         Controls {
             action_rx,
             action_tx,
-            state,
+            db,
         }
     }
     pub fn action_receiver(&self) -> Receiver<Action> {
@@ -1046,25 +1091,25 @@ impl Controls {
         )
     }
     pub async fn position(&self) -> Option<ClockValue> {
-        let tree = &self.state.player;
-
-        get_player!(PlayerKey::Position, tree, ClockValue)
+        self.db
+            .get::<String, ClockValue>(StateKey::Player(PlayerKey::Position))
+            .await
     }
     pub async fn status(&self) -> Option<StatusValue> {
-        let tree = &self.state.player;
-
-        get_player!(PlayerKey::Status, tree, StatusValue)
+        self.db
+            .get::<String, StatusValue>(StateKey::Player(PlayerKey::Status))
+            .await
     }
     pub async fn currently_playing_track(&self) -> Option<TrackListTrack> {
-        let tree = &self.state.player;
-
-        get_player!(PlayerKey::NextUp, tree, TrackListTrack)
+        self.db
+            .get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp))
+            .await
     }
 
     pub async fn remaining_tracks(&self) -> Option<TrackListValue> {
-        let tree = &self.state.player;
-
-        get_player!(PlayerKey::Playlist, tree, TrackListValue)
+        self.db
+            .get::<String, TrackListValue>(StateKey::Player(PlayerKey::Playlist))
+            .await
     }
 }
 
