@@ -22,61 +22,62 @@ pub mod track;
 pub async fn setup_client(mut client: Client, db: Database) -> Client {
     info!("setting up the api client");
 
-    let config = db.get_config().await;
-    let mut refresh_config = false;
+    if let Some(config) = db.get_config().await {
+        let mut refresh_config = false;
 
-    if let Some(quality) = config.default_quality {
-        info!("using default quality from cache: {}", quality);
-        let quality: AudioQuality = quality.into();
-        client.set_default_quality(quality);
-    }
+        if let Some(quality) = config.default_quality {
+            info!("using default quality from cache: {}", quality);
+            let quality: AudioQuality = quality.into();
+            client.set_default_quality(quality);
+        }
 
-    if let Some(app_id) = config.app_id {
-        debug!("using app_id from cache");
-        client.set_app_id(app_id);
-    } else {
-        debug!("app_id not found, will have to refresh config");
-        refresh_config = true;
-    }
+        if let Some(app_id) = config.app_id {
+            debug!("using app_id from cache");
+            client.set_app_id(app_id);
+        } else {
+            debug!("app_id not found, will have to refresh config");
+            refresh_config = true;
+        }
 
-    if let Some(secret) = config.active_secret {
-        debug!("using active secret from cache");
-        client.set_active_secret(secret);
-    } else {
-        debug!("active_secret not found, will have to refresh config");
-        refresh_config = true;
-    }
+        if let Some(secret) = config.active_secret {
+            debug!("using active secret from cache");
+            client.set_active_secret(secret);
+        } else {
+            debug!("active_secret not found, will have to refresh config");
+            refresh_config = true;
+        }
 
-    if refresh_config {
-        debug!("refreshing app secret and id");
-        if client.refresh().await.is_ok() {
-            debug!("config refreshed, storing for future use");
-            if let Some(app_id) = client.get_app_id() {
-                db.set_app_id(app_id).await;
+        if refresh_config {
+            debug!("refreshing app secret and id");
+            if client.refresh().await.is_ok() {
+                debug!("config refreshed, storing for future use");
+                if let Some(app_id) = client.get_app_id() {
+                    db.set_app_id(app_id).await;
+                }
+
+                if let Some(secret) = client.get_active_secret() {
+                    db.set_active_secret(secret).await;
+                }
+            };
+        }
+
+        if let Some(token) = config.user_token {
+            info!("using token from cache");
+            client.set_token(token);
+        } else if let (Some(username), Some(password)) = (config.username, config.password) {
+            info!("using username and password from cache");
+            client.set_credentials(Credentials {
+                username: Some(username),
+                password: Some(password),
+            });
+
+            info!("signing in");
+            client.login().await.expect("failed to login");
+
+            info!("signed in successfully, storing user token for future use");
+            if let Some(token) = client.get_token() {
+                db.set_user_token(token).await;
             }
-
-            if let Some(secret) = client.get_active_secret() {
-                db.set_active_secret(secret).await;
-            }
-        };
-    }
-
-    if let Some(token) = config.user_token {
-        info!("using token from cache");
-        client.set_token(token);
-    } else if let (Some(username), Some(password)) = (config.username, config.password) {
-        info!("using username and password from cache");
-        client.set_credentials(Credentials {
-            username: Some(username),
-            password: Some(password),
-        });
-
-        info!("signing in");
-        client.login().await.expect("failed to login");
-
-        info!("signed in successfully, storing user token for future use");
-        if let Some(token) = client.get_token() {
-            db.set_user_token(token).await;
         }
     }
 

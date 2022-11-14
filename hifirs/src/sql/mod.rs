@@ -4,11 +4,7 @@ pub mod db;
 #[macro_export]
 macro_rules! acquire {
     ($self:ident) => {
-        $self
-            .pool
-            .acquire()
-            .await
-            .expect("failed to acquire connection to database")
+        $self.pool.acquire().await
     };
 }
 

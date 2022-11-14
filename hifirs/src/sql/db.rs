@@ -49,12 +49,12 @@ pub async fn new() -> Database {
 
 impl Database {
     pub async fn clear_state(&self) {
-        let mut conn = acquire!(self);
-
-        sqlx::query!("DELETE FROM state WHERE state.key != 'active_screen'")
-            .execute(&mut conn)
-            .await
-            .expect("failed to clear state");
+        if let Ok(mut conn) = acquire!(self) {
+            sqlx::query!("DELETE FROM state WHERE state.key != 'active_screen'")
+                .execute(&mut conn)
+                .await
+                .expect("failed to clear state");
+        }
     }
     pub async fn insert<K, T>(&self, key: StateKey, value: T)
     where
@@ -62,22 +62,23 @@ impl Database {
         T: Serialize,
     {
         if let Ok(serialized) = bincode::serialize(&value) {
-            let mut conn = acquire!(self);
-            let key = key.as_str();
+            if let Ok(mut conn) = acquire!(self) {
+                let key = key.as_str();
 
-            sqlx::query!(
-                r#"
+                sqlx::query!(
+                    r#"
                 INSERT INTO state (key,value)
                 VALUES (?1, ?2)
                 ON CONFLICT(key) DO UPDATE
                 SET value=?2
                 "#,
-                key,
-                serialized
-            )
-            .execute(&mut conn)
-            .await
-            .expect("database failure");
+                    key,
+                    serialized
+                )
+                .execute(&mut conn)
+                .await
+                .expect("database failure");
+            }
         }
     }
 
@@ -86,129 +87,145 @@ impl Database {
         K: FromStr,
         T: Into<T> + From<Bytes> + Deserialize<'a>,
     {
-        let mut conn = acquire!(self);
-        let key = key.as_str();
+        if let Ok(mut conn) = acquire!(self) {
+            let key = key.as_str();
 
-        if let Ok(rec) = sqlx::query!(
-            r#"
+            if let Ok(rec) = sqlx::query!(
+                r#"
             SELECT value FROM state
             WHERE key=?1
             "#,
-            key,
-        )
-        .fetch_one(&mut conn)
-        .await
-        {
-            let bytes: Bytes = rec.value.into();
-            Some(bytes.into())
+                key,
+            )
+            .fetch_one(&mut conn)
+            .await
+            {
+                let bytes: Bytes = rec.value.into();
+                Some(bytes.into())
+            } else {
+                None
+            }
         } else {
             None
         }
     }
 
     pub async fn set_username(&self, username: String) {
-        let mut conn = acquire!(self);
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            query!(
+                r#"
             UPDATE config
             SET username=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            username
-        );
+                conn,
+                username
+            );
+        }
     }
 
     pub async fn set_password(&self, password: String) {
-        let mut conn = acquire!(self);
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            query!(
+                r#"
             UPDATE config
             SET password=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            password
-        );
+                conn,
+                password
+            );
+        }
     }
 
     pub async fn set_user_token(&self, token: String) {
-        let mut conn = acquire!(self);
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            query!(
+                r#"
             UPDATE config
             SET user_token=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            token
-        );
+                conn,
+                token
+            );
+        }
     }
 
     pub async fn set_app_id(&self, id: String) {
-        let mut conn = acquire!(self);
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            query!(
+                r#"
             UPDATE config
             SET app_id=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            id
-        );
+                conn,
+                id
+            );
+        }
     }
 
     pub async fn set_active_secret(&self, secret: String) {
-        let mut conn = acquire!(self);
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            query!(
+                r#"
             UPDATE config
             SET active_secret=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            secret
-        );
+                conn,
+                secret
+            );
+        }
     }
 
     pub async fn set_default_quality(&self, quality: AudioQuality) {
-        let mut conn = acquire!(self);
+        if let Ok(mut conn) = acquire!(self) {
+            let quality_id = quality as i32;
 
-        let quality_id = quality as i32;
-
-        query!(
-            r#"
+            query!(
+                r#"
             UPDATE config
             SET default_quality=?1
             WHERE ROWID = 1
             "#,
-            conn,
-            quality_id
-        );
+                conn,
+                quality_id
+            );
+        }
     }
 
     pub async fn create_config(&self) {
-        let mut conn = acquire!(self);
-        let rowid = 1;
-        query!(
-            r#"
+        if let Ok(mut conn) = acquire!(self) {
+            let rowid = 1;
+            query!(
+                r#"
             INSERT OR IGNORE INTO config (ROWID) VALUES (?1);
             "#,
-            conn,
-            rowid
-        );
+                conn,
+                rowid
+            );
+        }
     }
 
-    pub async fn get_config(&self) -> ApiConfig {
-        let mut conn = acquire!(self);
-        get_one!(
-            r#"
+    pub async fn get_config(&self) -> Option<ApiConfig> {
+        if let Ok(mut conn) = acquire!(self) {
+            Some(get_one!(
+                r#"
             SELECT * FROM config
             WHERE ROWID = 1;
             "#,
-            ApiConfig,
-            conn
-        )
+                ApiConfig,
+                conn
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub async fn close(&self) {
+        self.pool.close().await;
     }
 
     pub fn quitter(&self) -> Receiver<bool> {
@@ -219,5 +236,9 @@ impl Database {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
+
+        futures::executor::block_on(async {
+            self.pool.close().await;
+        });
     }
 }
