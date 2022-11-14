@@ -21,7 +21,12 @@ pub async fn new() -> Database {
     } else {
         let mut url = dirs::data_local_dir().unwrap();
         url.push("hifi-rs");
-        url.set_file_name("data.db");
+
+        if !url.exists() {
+            std::fs::create_dir_all(url.clone()).expect("failed to create database directory");
+        }
+
+        url.push("data.db");
 
         url
     };
@@ -50,7 +55,7 @@ pub async fn new() -> Database {
 impl Database {
     pub async fn clear_state(&self) {
         if let Ok(mut conn) = acquire!(self) {
-            sqlx::query!("DELETE FROM state WHERE state.key != 'active_screen'")
+            sqlx::query("DELETE FROM state WHERE state.key != 'active_screen'")
                 .execute(&mut conn)
                 .await
                 .expect("failed to clear state");
@@ -65,16 +70,16 @@ impl Database {
             if let Ok(mut conn) = acquire!(self) {
                 let key = key.as_str();
 
-                sqlx::query!(
+                sqlx::query(
                     r#"
                 INSERT INTO state (key,value)
                 VALUES (?1, ?2)
                 ON CONFLICT(key) DO UPDATE
                 SET value=?2
                 "#,
-                    key,
-                    serialized
                 )
+                .bind(key)
+                .bind(serialized)
                 .execute(&mut conn)
                 .await
                 .expect("database failure");
