@@ -1,0 +1,358 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.album(\"lhrak0dpdxcbc\".to_string()).await.expect(\"failed to get album\")"
+---
+artist:
+  image: ~
+  name: Parliament
+  id: 70781
+  albums_count: 42
+  slug: parliament
+  albums: ~
+artists:
+  - id: 70781
+    name: Parliament
+    roles:
+      - main-artist
+catchline: ""
+composer:
+  id: 573076
+  name: Various Composers
+  slug: various-composers
+  albums_count: 583621
+  image: ~
+copyright: "© 1978 UMG Recordings, Inc. ℗ 2021 UMG Recordings, Inc."
+created_at: 1632009676
+description: "By this point Parliament was one of the most accomplished and intelligent bands in music. With albums like Mothership Connection and The Clones of Dr. Funkenstein, George Clinton's druggy and patently eccentric humor often obscured the enviable musicianship throughout. Motor Booty Affair is no doubt another classic album and the perfect follow-up to 1977's Funkentelechy Vs. the Placebo Syndrome. On Motor Booty Affair, Clinton decides to yuck it up more with a great underwater concept and a few of his stronger alter egos, including the rhythmically challenged Sir Nose D' Void of Funk and his friend Rumpofsteelskin. The deft and airy \"Mr. Wiggles\" has Clinton taking on the persona of Wiggles, the \"DJ of the affair\" as he says: \"Mr. Wiggles here on roller skates and a yo-yo/Acting a fool.\" The hypnotic \"Rumpofsteelskin\" has a great bassline and inventive and infectious background vocals. The closest thing to a ballad here is the astrologically savvy \"(You're a Fish and I'm A) Water Sign.\" The well-produced \"Aqua Boogie (A Psychoalphadiscobetabioaquadoloop)\" with its handclaps and high-pitched basslines basically set the standards for the sound of R&B in the coming decade. The sleeper of the album, \"One of Those Funky Things,\" is filled with timbales, congas, and Bernie Worrell's great synth signatures. The last track, \"Deep,\" has great, understated riffs from the Horny Horns. Although many Parliament efforts can't be fully appreciated unless the whole catalogue is nearby, Motor Booty Affair stands on its own merits and sustains the laugh throughout.\n<br />&copy  Jason Elias /TiVo"
+displayable: true
+downloadable: true
+duration: 2770
+genre:
+  path:
+    - 127
+    - 132
+  color: "#5eabc1"
+  name: R&B
+  id: 132
+  slug: rb
+genres_list:
+  - Soul/Funk/R&B
+  - Soul/Funk/R&B→R&B
+hires: true
+hires_streamable: true
+id: lhrak0dpdxcbc
+image:
+  small: "https://static.qobuz.com/images/covers/bc/xc/lhrak0dpdxcbc_230.jpg"
+  thumbnail: "https://static.qobuz.com/images/covers/bc/xc/lhrak0dpdxcbc_50.jpg"
+  large: "https://static.qobuz.com/images/covers/bc/xc/lhrak0dpdxcbc_600.jpg"
+  back: ~
+is_official: true
+label:
+  name: Mercury Records
+  id: 17487
+  albums_count: 729
+  supplier_id: 1
+  slug: mercury-records
+maximum_bit_depth: 24
+maximum_channel_count: 2
+maximum_sampling_rate: 192
+maximum_technical_specifications: 24 bits / 192.0 kHz - Stereo
+media_count: 1
+parental_warning: false
+popularity: 0
+previewable: true
+product_sales_factors_monthly: 0
+product_sales_factors_weekly: 0
+product_sales_factors_yearly: 4.2
+product_type: album
+product_url: /fr-fr/album/motor-booty-affair-parliament/lhrak0dpdxcbc
+purchasable: true
+purchasable_at: 1667113200
+qobuz_id: 131792380
+recording_information: ""
+relative_url: /album/motor-booty-affair-parliament/lhrak0dpdxcbc
+release_date_download: 1978-11-20
+release_date_original: 1978-11-20
+release_date_stream: 1978-11-20
+release_tags: []
+release_type: album
+released_at: 280364400
+sampleable: true
+slug: motor-booty-affair-parliament
+streamable: true
+streamable_at: 1667113200
+subtitle: Parliament
+title: Motor-Booty Affair
+tracks:
+  offset: 0
+  limit: 500
+  total: 8
+  items:
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -2.41
+        replaygain_track_peak: 1
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 402
+      hires: true
+      hires_streamable: true
+      id: 131792381
+      isrc: USWWW0135200
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "George Clinton, Producer, ComposerLyricist - Bernie Worrell, ComposerLyricist - Parliament, MainArtist - M. Hampton, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: Mr. Wiggles
+      track_number: 1
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -3.68
+        replaygain_track_peak: 0.965302
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 333
+      hires: true
+      hires_streamable: true
+      id: 131792382
+      isrc: USWWW0127825
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: Rumpofsteelskin
+      track_number: 2
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -4.28
+        replaygain_track_peak: 0.963623
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 281
+      hires: true
+      hires_streamable: true
+      id: 131792383
+      isrc: USWWW0127826
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "George Clinton, Producer, ComposerLyricist - Garry Marshall Shider, ComposerLyricist - Parliament, MainArtist - Griffith, ComposerLyricist - J.S. Theracon, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: "(You're A Fish And I'm A) Water Sign"
+      track_number: 3
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -4.3
+        replaygain_track_peak: 1
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 400
+      hires: true
+      hires_streamable: true
+      id: 131792384
+      isrc: USPR37800029
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, Recording Arranger, AssociatedPerformer, ComposerLyricist - Bernie Worrell, ComposerLyricist - Parliament, MainArtist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: Aquaboogie (A Psychoalphadiscobetabioaquadoloop)
+      track_number: 4
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -6.11
+        replaygain_track_peak: 1
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 225
+      hires: true
+      hires_streamable: true
+      id: 131792385
+      isrc: USWWW0127828
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - Ronald Alfred Banks, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: One Of Those Funky Thangs
+      track_number: 5
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -4.38
+        replaygain_track_peak: 0.980103
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 263
+      hires: true
+      hires_streamable: true
+      id: 131792386
+      isrc: USWWW0127829
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "Nicky Brown, ComposerLyricist - Bishop, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - Vitti, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: Liquid Sunshine
+      track_number: 6
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -3.94
+        replaygain_track_peak: 0.968109
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 315
+      hires: true
+      hires_streamable: true
+      id: 131792387
+      isrc: USWWW0127830
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "Ronald Ford, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Garry Marshall Shider, ComposerLyricist - Parliament, MainArtist - J.S. Theracon, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: The Motor-Booty Affair
+      track_number: 7
+      version: ~
+    - album: ~
+      audio_info:
+        replaygain_track_gain: -3.84
+        replaygain_track_peak: 1
+      copyright: ℗ 1978 The Island Def Jam Music Group
+      displayable: true
+      downloadable: true
+      duration: 551
+      hires: true
+      hires_streamable: true
+      id: 131792388
+      isrc: USWWW0127831
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      media_number: 1
+      parental_warning: false
+      performer:
+        id: 70781
+        name: Parliament
+      performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - J.S. Theracon, ComposerLyricist"
+      previewable: true
+      purchasable: true
+      purchasable_at: 1667113200
+      release_date_download: ~
+      release_date_original: ~
+      release_date_stream: ~
+      sampleable: true
+      streamable: true
+      streamable_at: 1667113200
+      title: Deep
+      track_number: 8
+      version: ~
+tracks_count: 8
+upc: "0602435861524"
+url: "https://www.qobuz.com/fr-fr/album/motor-booty-affair-parliament/lhrak0dpdxcbc"
+version: ~

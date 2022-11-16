@@ -840,7 +840,7 @@ use crate::client::{
 
 #[tokio::test]
 async fn can_use_methods() {
-    use tokio_test::assert_ok;
+    use insta::assert_yaml_snapshot;
 
     let creds = Credentials {
         username: Some(env!("QOBUZ_USERNAME").to_string()),
@@ -854,70 +854,60 @@ async fn can_use_methods() {
     client.refresh().await.expect("failed to refresh config");
     client.login().await.expect("failed to login");
 
-    assert_ok!(
-        client.user_playlists().await,
-        "fetching the user's playlists"
-    );
-    let album_response = assert_ok!(
-        client
-            .search_albums("a love supreme".to_string(), Some(10))
-            .await,
-        "searching for albums"
-    );
-    assert_eq!(
-        album_response.albums.items.len(),
-        10,
-        "length of albums is same as limit"
-    );
-    assert_ok!(client.album("lhrak0dpdxcbc".to_string()).await, "get album");
-    let artist_response = assert_ok!(
-        client
-            .search_artists("pink floyd".to_string(), Some(10))
-            .await,
-        "searching for artists"
-    );
-    assert_eq!(
-        artist_response.artists.items.len(),
-        10,
-        "length of artists is same as limit"
-    );
-    assert_ok!(client.artist(148745, Some(10)).await, "get artist");
-    assert_ok!(client.track(155999429).await, "get track");
-    assert_ok!(
-        client
-            .track_url(155999429, Some(AudioQuality::Mp3), None)
-            .await,
-        "get track url"
-    );
+    assert_yaml_snapshot!(client
+        .user_playlists()
+        .await
+        .expect("failed to fetch user playlists"), { ".user.id" => "[id]", ".user.login" => "[login]" });
+    assert_yaml_snapshot!(client
+        .search_albums("a love supreme".to_string(), Some(10))
+        .await
+        .expect("failed to search for albums"));
+    assert_yaml_snapshot!(client
+        .album("lhrak0dpdxcbc".to_string())
+        .await
+        .expect("failed to get album"));
+    assert_yaml_snapshot!(client
+        .search_artists("pink floyd".to_string(), Some(10))
+        .await
+        .expect("failed to search artists"));
+    assert_yaml_snapshot!(client
+        .artist(148745, Some(10))
+        .await
+        .expect("failed to get artist"));
+    assert_yaml_snapshot!(client.track(155999429).await.expect("failed to get track"));
+    assert_yaml_snapshot!(client
+        .track_url(155999429, Some(AudioQuality::Mp3), None)
+        .await
+        .expect("failed to get track url"), { ".url" => "[url]" });
 
-    let new_playlist: Playlist = assert_ok!(
-        client
-            .create_playlist(
-                "test".to_string(),
-                false,
-                Some("This is a description".to_string()),
-                Some(false)
-            )
-            .await,
-        "creating a new playlist"
-    );
-
-    assert_ok!(
-        client
-            .playlist_add_track(new_playlist.id.to_string(), vec![155999429.to_string()])
-            .await,
-        "adding a track to newly created playlist"
-    );
-
-    assert_ok!(
-        client
-            .playlist_delete_track(new_playlist.id.to_string(), vec![155999429.to_string()])
-            .await,
-        "deleting track from the newly created playlist"
-    );
-
-    assert_ok!(
-        client.delete_playlist(new_playlist.id.to_string()).await,
-        "deleting the newly created playlist"
-    );
+    // let new_playlist: Playlist = assert_ok!(
+    //     client
+    //         .create_playlist(
+    //             "test".to_string(),
+    //             false,
+    //             Some("This is a description".to_string()),
+    //             Some(false)
+    //         )
+    //         .await,
+    //     "creating a new playlist"
+    // );
+    //
+    // assert_ok!(
+    //     client
+    //         .playlist_add_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+    //         .await,
+    //     "adding a track to newly created playlist"
+    // );
+    //
+    // assert_ok!(
+    //     client
+    //         .playlist_delete_track(new_playlist.id.to_string(), vec![155999429.to_string()])
+    //         .await,
+    //     "deleting track from the newly created playlist"
+    // );
+    //
+    // assert_ok!(
+    //     client.delete_playlist(new_playlist.id.to_string()).await,
+    //     "deleting the newly created playlist"
+    // );
 }

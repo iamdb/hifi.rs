@@ -1,0 +1,800 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.search_albums(\"a love supreme\".to_string(),\n            Some(10)).await.expect(\"failed to search for albums\")"
+---
+query: a love supreme
+albums:
+  limit: 10
+  offset: 0
+  total: 65
+  items:
+    - artist:
+        image: ~
+        name: John Coltrane
+        id: 26028
+        albums_count: 2517
+        slug: john-coltrane
+        albums: ~
+      artists:
+        - id: 26028
+          name: John Coltrane
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 1963
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: "0060253742084"
+      image:
+        small: "https://static.qobuz.com/images/covers/84/20/0060253742084_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/84/20/0060253742084_50.jpg"
+        large: "https://static.qobuz.com/images/covers/84/20/0060253742084_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Impulse!
+        id: 1156
+        albums_count: 467
+        supplier_id: 1
+        slug: impulse
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 96
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1662015600
+      qobuz_id: 9883169
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1965-01-01
+      release_date_original: 1965-01-01
+      release_date_stream: 1965-01-01
+      release_tags: ~
+      release_type: ~
+      released_at: -157770000
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1660633200
+      subtitle: ~
+      title: A Love Supreme
+      tracks: ~
+      tracks_count: 4
+      upc: "0060253742084"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-john-coltrane/0060253742084"
+      version: ~
+    - artist:
+        image: ~
+        name: John Coltrane
+        id: 26028
+        albums_count: 2517
+        slug: john-coltrane
+        albums: ~
+      artists:
+        - id: 26028
+          name: John Coltrane
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 4528
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: jgj3exmfroqpa
+      image:
+        small: "https://static.qobuz.com/images/covers/pa/oq/jgj3exmfroqpa_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/pa/oq/jgj3exmfroqpa_50.jpg"
+        large: "https://static.qobuz.com/images/covers/pa/oq/jgj3exmfroqpa_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Impulse!
+        id: 1156
+        albums_count: 467
+        supplier_id: 1
+        slug: impulse
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 192
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1668326400
+      qobuz_id: 135238664
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2021-10-22
+      release_date_original: 2021-10-22
+      release_date_stream: 2021-10-22
+      release_tags: ~
+      release_type: ~
+      released_at: 1634853600
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1668326400
+      subtitle: ~
+      title: "A Love Supreme: Live In Seattle"
+      tracks: ~
+      tracks_count: 8
+      upc: "0602438624812"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-live-in-seattle-john-coltrane/jgj3exmfroqpa"
+      version: Live
+    - artist:
+        image: ~
+        name: John Coltrane
+        id: 26028
+        albums_count: 2517
+        slug: john-coltrane
+        albums: ~
+      artists:
+        - id: 26028
+          name: John Coltrane
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 9789
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0060254748945"
+      image:
+        small: "https://static.qobuz.com/images/covers/45/89/0060254748945_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/45/89/0060254748945_50.jpg"
+        large: "https://static.qobuz.com/images/covers/45/89/0060254748945_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Impulse!
+        id: 1156
+        albums_count: 467
+        supplier_id: 1
+        slug: impulse
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 3
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1655967600
+      qobuz_id: 28265362
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1964-01-01
+      release_date_original: 1964-01-01
+      release_date_stream: 1964-01-01
+      release_tags: ~
+      release_type: ~
+      released_at: -189392400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1655967600
+      subtitle: ~
+      title: "A Love Supreme: The Complete Masters"
+      tracks: ~
+      tracks_count: 22
+      upc: "0060254748945"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-the-complete-masters-john-coltrane/0060254748945"
+      version: Super Deluxe Edition
+    - artist:
+        image: ~
+        name: Sean Khan
+        id: 597427
+        albums_count: 20
+        slug: sean-khan
+        albums: ~
+      artists:
+        - id: 597427
+          name: Sean Khan
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 5773
+      genre:
+        path:
+          - 127
+          - 131
+        color: "#5eabc1"
+        name: Funk
+        id: 131
+        slug: funk
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: na7f53zqeqtwb
+      image:
+        small: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_50.jpg"
+        large: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: BBE Music
+        id: 276273
+        albums_count: 663
+        supplier_id: 17
+        slug: bbe-music
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1646640000
+      qobuz_id: 126078305
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2021-11-19
+      release_date_original: 2021-11-19
+      release_date_stream: 2021-11-19
+      release_tags: ~
+      release_type: ~
+      released_at: 1637276400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1646640000
+      subtitle: ~
+      title: "Supreme Love: a Journey Through Coltrane"
+      tracks: ~
+      tracks_count: 17
+      upc: "0196006169527"
+      url: "https://www.qobuz.com/fr-fr/album/supreme-love-a-journey-through-coltrane-sean-khan/na7f53zqeqtwb"
+      version: ~
+    - artist:
+        image: ~
+        name: KA MA Quartet
+        id: 2706804
+        albums_count: 2
+        slug: ka-ma-quartet
+        albums: ~
+      artists:
+        - id: 2706804
+          name: KA MA Quartet
+          roles:
+            - main-artist
+        - id: 2523489
+          name: Nippy Noya
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 3766
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: "4012116414134"
+      image:
+        small: "https://static.qobuz.com/images/covers/34/41/4012116414134_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/34/41/4012116414134_50.jpg"
+        large: "https://static.qobuz.com/images/covers/34/41/4012116414134_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Neuklang
+        id: 27782
+        albums_count: 380
+        supplier_id: 32
+        slug: neuklang
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 96
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1662015600
+      qobuz_id: 33439043
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2016-09-02
+      release_date_original: 2016-09-02
+      release_date_stream: 2016-09-02
+      release_tags: ~
+      release_type: ~
+      released_at: 1472767200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1658991600
+      subtitle: ~
+      title: A Love Supreme / Universal Tone
+      tracks: ~
+      tracks_count: 7
+      upc: "4012116414134"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-universal-tone-ka-ma-quartet-nippy-noya/4012116414134"
+      version: ~
+    - artist:
+        image: ~
+        name: Branford Marsalis
+        id: 148753
+        albums_count: 62
+        slug: branford-marsalis
+        albums: ~
+      artists:
+        - id: 148753
+          name: Branford Marsalis
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2906
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0886445043808"
+      image:
+        small: "https://static.qobuz.com/images/covers/08/38/0886445043808_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/08/38/0886445043808_50.jpg"
+        large: "https://static.qobuz.com/images/covers/08/38/0886445043808_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Okeh
+        id: 9339
+        albums_count: 183
+        supplier_id: 23
+        slug: okeh
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1650265200
+      qobuz_id: 23624502
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2005-11-18
+      release_date_original: 2005-11-18
+      release_date_stream: 2005-11-18
+      release_tags: ~
+      release_type: ~
+      released_at: 1132268400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1650265200
+      subtitle: ~
+      title: "Coltrane's A Love Supreme Live In Amsterdam"
+      tracks: ~
+      tracks_count: 4
+      upc: "0886445043808"
+      url: "https://www.qobuz.com/fr-fr/album/coltranes-a-love-supreme-live-in-amsterdam-branford-marsalis-quartet/0886445043808"
+      version: ~
+    - artist:
+        image: ~
+        name: The Campbell Brothers
+        id: 112776
+        albums_count: 7
+        slug: the-campbell-brothers
+        albums: ~
+      artists:
+        - id: 112776
+          name: The Campbell Brothers
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 1856
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: hzlb9s2qayz7b
+      image:
+        small: "https://static.qobuz.com/images/covers/7b/yz/hzlb9s2qayz7b_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/7b/yz/hzlb9s2qayz7b_50.jpg"
+        large: "https://static.qobuz.com/images/covers/7b/yz/hzlb9s2qayz7b_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: FLi Records
+        id: 1230442
+        albums_count: 3
+        supplier_id: 17
+        slug: fli-records-1
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1634022000
+      qobuz_id: 134816229
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2021-10-01
+      release_date_original: 2021-10-01
+      release_date_stream: 2021-10-01
+      release_tags: ~
+      release_type: ~
+      released_at: 1633039200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1634022000
+      subtitle: ~
+      title: "The Campbell Brothers Present John Coltrane's A Love Supreme"
+      tracks: ~
+      tracks_count: 7
+      upc: "0767531780763"
+      url: "https://www.qobuz.com/fr-fr/album/the-campbell-brothers-present-john-coltranes-a-love-supreme-the-campbell-brothers/hzlb9s2qayz7b"
+      version: ~
+    - artist:
+        image: ~
+        name: Dal Sasso/Belmondo Big Band
+        id: 1678299
+        albums_count: 1
+        slug: dal-sasso-belmondo-big-band
+        albums: ~
+      artists:
+        - id: 1678299
+          name: Dal Sasso/Belmondo Big Band
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2253
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: "3149028055726"
+      image:
+        small: "https://static.qobuz.com/images/covers/26/57/3149028055726_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/26/57/3149028055726_50.jpg"
+        large: "https://static.qobuz.com/images/covers/26/57/3149028055726_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: jazz&people
+        id: 107343
+        albums_count: 15
+        supplier_id: 22
+        slug: jazz-people
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 48
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1657695600
+      qobuz_id: 15389780
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2014-04-13
+      release_date_original: 2014-04-13
+      release_date_stream: 2014-04-13
+      release_tags: ~
+      release_type: ~
+      released_at: 1397340000
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1657695600
+      subtitle: ~
+      title: "John Coltrane: A Love Supreme"
+      tracks: ~
+      tracks_count: 6
+      upc: "3149028055726"
+      url: "https://www.qobuz.com/fr-fr/album/john-coltrane-a-love-supreme-dal-sasso-belmondo-big-band/3149028055726"
+      version: ~
+    - artist:
+        image: ~
+        name: Jazz At Lincoln Center Orchestra
+        id: 1015052
+        albums_count: 48
+        slug: jazz-at-lincoln-center-orchestra
+        albums: ~
+      artists:
+        - id: 1015052
+          name: Jazz At Lincoln Center Orchestra
+          roles:
+            - main-artist
+        - id: 14141
+          name: Wynton Marsalis
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2500
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0843436038892"
+      image:
+        small: "https://static.qobuz.com/images/covers/92/88/0843436038892_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/92/88/0843436038892_50.jpg"
+        large: "https://static.qobuz.com/images/covers/92/88/0843436038892_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Jazz at Lincoln Center
+        id: 6688
+        albums_count: 6
+        supplier_id: 17
+        slug: jazz-at-lincoln-center
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1654758000
+      qobuz_id: 28830019
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2005-01-11
+      release_date_original: 2005-01-11
+      release_date_stream: 2005-01-11
+      release_tags: ~
+      release_type: ~
+      released_at: 1105398000
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1654758000
+      subtitle: ~
+      title: A Love Supreme
+      tracks: ~
+      tracks_count: 4
+      upc: "0843436038892"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-jazz-at-lincoln-center-orchestra-wynton-marsalis/0843436038892"
+      version: ~
+    - artist:
+        image: ~
+        name: Will Downing
+        id: 37586
+        albums_count: 62
+        slug: will-downing
+        albums: ~
+      artists:
+        - id: 37586
+          name: Will Downing
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 1955
+      genre:
+        path:
+          - 64
+          - 129
+        color: "#5eabc1"
+        name: Dance
+        id: 129
+        slug: dance
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0060075365936"
+      image:
+        small: "https://static.qobuz.com/images/covers/36/59/0060075365936_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/36/59/0060075365936_50.jpg"
+        large: "https://static.qobuz.com/images/covers/36/59/0060075365936_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: UMC (Universal Music Catalogue)
+        id: 92555
+        albums_count: 3410
+        supplier_id: 1
+        slug: umc-universal-music-catalogue
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1650351600
+      qobuz_id: 32496951
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1988-01-01
+      release_date_original: 1988-01-01
+      release_date_stream: 1988-01-01
+      release_tags: ~
+      release_type: ~
+      released_at: 567990000
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1650351600
+      subtitle: ~
+      title: A Love Supreme
+      tracks: ~
+      tracks_count: 5
+      upc: "0060075365936"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-will-downing/0060075365936"
+      version: Remixes
