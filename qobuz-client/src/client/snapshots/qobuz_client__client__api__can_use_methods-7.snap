@@ -1,0 +1,11 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.track_url(155999429, Some(AudioQuality::Mp3),\n            None).await.expect(\"failed to get track url\")"
+---
+track_id: 155999429
+duration: 187
+url: "[url]"
+format_id: 5
+mime_type: audio/mpeg
+sampling_rate: 44.1
+bit_depth: 16

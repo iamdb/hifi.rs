@@ -1,0 +1,78 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.search_artists(\"pink floyd\".to_string(),\n            Some(10)).await.expect(\"failed to search artists\")"
+---
+query: pink floyd
+artists:
+  limit: 10
+  offset: 0
+  total: 24
+  items:
+    - image:
+        small: "https://static.qobuz.com/images/artists/covers/small/79379920bdf366b143baf7e9be669191.jpg"
+        thumbnail: ~
+        large: "https://static.qobuz.com/images/artists/covers/large/79379920bdf366b143baf7e9be669191.jpg"
+        back: ~
+      name: Pink Floyd
+      id: 38324
+      albums_count: 285
+      slug: pink-floyd
+      albums: ~
+    - image:
+        small: "https://static.qobuz.com/images/artists/covers/small/ae3826f153b96c9e4c05387050070cc6.jpg"
+        thumbnail: ~
+        large: "https://static.qobuz.com/images/artists/covers/large/ae3826f153b96c9e4c05387050070cc6.jpg"
+        back: ~
+      name: The Australian Pink Floyd Show
+      id: 3778014
+      albums_count: 2
+      slug: theaustralianpinkfloydshow-10003778014
+      albums: ~
+    - image: ~
+      name: Pink Floyd Floydhead
+      id: 5661969
+      albums_count: 1
+      slug: pink-floyd-floydhead
+      albums: ~
+    - image: ~
+      name: The Machine Perform Pink Floyd
+      id: 5446149
+      albums_count: 3
+      slug: the-machine-perform-pink-floyd
+      albums: ~
+    - image: ~
+      name: Celtic Pink Floyd
+      id: 5239316
+      albums_count: 3
+      slug: celtic-pink-floyd
+      albums: ~
+    - image: ~
+      name: The Pink Floyd Story
+      id: 3735065
+      albums_count: 4
+      slug: thepinkfloydstory-10003735065
+      albums: ~
+    - image: ~
+      name: Pink Floyd Redux
+      id: 2761835
+      albums_count: 2
+      slug: pink-floyd-redux
+      albums: ~
+    - image: ~
+      name: Hungarian Pink Floyd Show
+      id: 2519235
+      albums_count: 1
+      slug: hungarian-pink-floyd-show
+      albums: ~
+    - image: ~
+      name: Pink Floyd History
+      id: 5636687
+      albums_count: 1
+      slug: pink-floyd-history
+      albums: ~
+    - image: ~
+      name: A Fair Forgery of Pink Floyd (Various Artists)
+      id: 4898001
+      albums_count: 2
+      slug: a-fair-forgery-of-pink-floyd-various-artists
+      albums: ~

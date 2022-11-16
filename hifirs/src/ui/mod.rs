@@ -44,7 +44,7 @@ macro_rules! switch_screen {
 
 pub trait Screen {
     fn render(&mut self, terminal: &mut Console);
-    fn key_events(&mut self, key: Key) -> bool;
+    fn key_events(&mut self, key: Key) -> Option<()>;
 }
 
 #[allow(unused)]
@@ -287,7 +287,7 @@ impl Tui {
                         .await
                     {
                         if let Some(screen) = self.screens.get(&active_screen) {
-                            if screen.borrow_mut().key_events(key) {
+                            if screen.borrow_mut().key_events(key).is_some() {
                                 self.tick().await;
                             }
                         }

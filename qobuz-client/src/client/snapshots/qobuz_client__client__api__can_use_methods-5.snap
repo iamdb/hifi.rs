@@ -1,0 +1,813 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.artist(148745, Some(10)).await.expect(\"failed to get artist\")"
+---
+image:
+  small: "https://static.qobuz.com/images/artists/covers/small/6b6de26ea357b242bba9da636ff1e9cd.jpg"
+  thumbnail: ~
+  large: "https://static.qobuz.com/images/artists/covers/large/6b6de26ea357b242bba9da636ff1e9cd.jpg"
+  back: ~
+name: Gil Scott-Heron
+id: 148745
+albums_count: 45
+slug: gil-scott-heron
+albums:
+  limit: 10
+  offset: 0
+  total: 45
+  items:
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 98
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 3647
+      genre:
+        path:
+          - 127
+          - 134
+        color: "#5eabc1"
+        name: Soul
+        id: 134
+        slug: soul
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: kjv5c8zne4n8b
+      image:
+        small: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_50.jpg"
+        large: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Ace Records
+        id: 151088
+        albums_count: 953
+        supplier_id: 17
+        slug: ace-records-2
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1667980800
+      qobuz_id: 155999428
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1971-01-01
+      release_date_original: 1971-01-01
+      release_date_stream: 1971-01-01
+      release_tags: ~
+      release_type: ~
+      released_at: 31532400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1667980800
+      subtitle: ~
+      title: Pieces of a Man
+      tracks: ~
+      tracks_count: 14
+      upc: "0029667527484"
+      url: "https://www.qobuz.com/fr-fr/album/pieces-of-a-man-gil-scott-heron/kjv5c8zne4n8b"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 96
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+        - id: 2098969
+          name: Makaya McCraven
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2228
+      genre:
+        path:
+          - 127
+          - 134
+        color: "#5eabc1"
+        name: Soul
+        id: 134
+        slug: soul
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: uzfe322u3l3vc
+      image:
+        small: "https://static.qobuz.com/images/covers/vc/l3/uzfe322u3l3vc_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/vc/l3/uzfe322u3l3vc_50.jpg"
+        large: "https://static.qobuz.com/images/covers/vc/l3/uzfe322u3l3vc_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: XL Recordings
+        id: 9313
+        albums_count: 1280
+        supplier_id: 28
+        slug: xl-recordings
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: true
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1663138800
+      qobuz_id: 87169202
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2020-02-07
+      release_date_original: 2020-02-07
+      release_date_stream: 2020-02-07
+      release_tags: ~
+      release_type: ~
+      released_at: 1581030000
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1663138800
+      subtitle: ~
+      title: "We're New Again - A Reimagining by Makaya McCraven"
+      tracks: ~
+      tracks_count: 18
+      upc: "0191404100653"
+      url: "https://www.qobuz.com/fr-fr/album/were-new-again-a-reimagining-by-makaya-mccraven-gil-scott-heron-makaya-mccraven/uzfe322u3l3vc"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 95
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2447
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0828768208229"
+      image:
+        small: "https://static.qobuz.com/images/covers/29/82/0828768208229_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/29/82/0828768208229_50.jpg"
+        large: "https://static.qobuz.com/images/covers/29/82/0828768208229_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Arista
+        id: 4597
+        albums_count: 1365
+        supplier_id: 23
+        slug: arista
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1647932400
+      qobuz_id: 4968728
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1981-03-01
+      release_date_original: 1981-03-01
+      release_date_stream: 1981-03-01
+      release_tags: ~
+      release_type: ~
+      released_at: 352249200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1647932400
+      subtitle: ~
+      title: Reflections
+      tracks: ~
+      tracks_count: 7
+      upc: "0828768208229"
+      url: "https://www.qobuz.com/fr-fr/album/reflections-gil-scott-heron/0828768208229"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 95
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2117
+      genre:
+        path:
+          - 127
+          - 132
+        color: "#5eabc1"
+        name: R&B
+        id: 132
+        slug: rb
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0886445048353"
+      image:
+        small: "https://static.qobuz.com/images/covers/53/83/0886445048353_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/53/83/0886445048353_50.jpg"
+        large: "https://static.qobuz.com/images/covers/53/83/0886445048353_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: RCA - Legacy
+        id: 4656
+        albums_count: 2138
+        supplier_id: 23
+        slug: rca-legacy
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1651129200
+      qobuz_id: 23206345
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1980-01-01
+      release_date_original: 1980-01-01
+      release_date_stream: 1980-01-01
+      release_tags: ~
+      release_type: ~
+      released_at: 315529200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1651129200
+      subtitle: ~
+      title: Real Eyes
+      tracks: ~
+      tracks_count: 8
+      upc: "0886445048353"
+      url: "https://www.qobuz.com/fr-fr/album/real-eyes-gil-scott-heron/0886445048353"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 98
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 3486
+      genre:
+        path:
+          - 127
+          - 134
+        color: "#5eabc1"
+        name: Soul
+        id: 134
+        slug: soul
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: j460dccthlvzb
+      image:
+        small: "https://static.qobuz.com/images/covers/zb/lv/j460dccthlvzb_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/zb/lv/j460dccthlvzb_50.jpg"
+        large: "https://static.qobuz.com/images/covers/zb/lv/j460dccthlvzb_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: XL Recordings
+        id: 9313
+        albums_count: 1290
+        supplier_id: 28
+        slug: xl-recordings
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 2
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1666940400
+      qobuz_id: 87169176
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2010-02-08
+      release_date_original: 2010-02-08
+      release_date_stream: 2010-02-08
+      release_tags: ~
+      release_type: ~
+      released_at: 1265583600
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1666940400
+      subtitle: ~
+      title: I’m New Here
+      tracks: ~
+      tracks_count: 25
+      upc: "0191404100530"
+      url: "https://www.qobuz.com/fr-fr/album/im-new-here-gil-scott-heron/j460dccthlvzb"
+      version: 10th Anniversary Expanded Edition
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 98
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+        - id: 1707822
+          name: Jamie xx
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2135
+      genre:
+        path:
+          - 64
+        color: "#5eabc1"
+        name: Electronic
+        id: 64
+        slug: electro
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0634904051761"
+      image:
+        small: "https://static.qobuz.com/images/covers/61/17/0634904051761_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/61/17/0634904051761_50.jpg"
+        large: "https://static.qobuz.com/images/covers/61/17/0634904051761_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: XL Recordings
+        id: 9313
+        albums_count: 1290
+        supplier_id: 28
+        slug: xl-recordings
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1666940400
+      qobuz_id: 3406186
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2011-02-21
+      release_date_original: 2011-02-21
+      release_date_stream: 2011-02-21
+      release_tags: ~
+      release_type: ~
+      released_at: 1298242800
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1666940400
+      subtitle: ~
+      title: We’re New Here
+      tracks: ~
+      tracks_count: 13
+      upc: "0634904051761"
+      url: "https://www.qobuz.com/fr-fr/album/were-new-here-gil-scott-heron-jamie-xx/0634904051761"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 95
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 2249
+      genre:
+        path:
+          - 127
+        color: "#5eabc1"
+        name: Soul/Funk/R&B
+        id: 127
+        slug: soul-funk-rap
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0884977719291"
+      image:
+        small: "https://static.qobuz.com/images/covers/91/92/0884977719291_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/91/92/0884977719291_50.jpg"
+        large: "https://static.qobuz.com/images/covers/91/92/0884977719291_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Windham Hill - Legacy
+        id: 6383
+        albums_count: 37
+        supplier_id: 23
+        slug: windham-hill-legacy
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1647932400
+      qobuz_id: 2349071
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1982-09-01
+      release_date_original: 1982-09-01
+      release_date_stream: 1982-09-01
+      release_tags: ~
+      release_type: ~
+      released_at: 399679200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1647932400
+      subtitle: ~
+      title: Moving Target
+      tracks: ~
+      tracks_count: 7
+      upc: "0884977719291"
+      url: "https://www.qobuz.com/fr-fr/album/moving-target-gil-scott-heron/0884977719291"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 95
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 3389
+      genre:
+        path:
+          - 80
+          - 86
+        color: "#5eabc1"
+        name: Jazz Fusion & Jazz Rock
+        id: 86
+        slug: jazz-fusion-jazz-rock
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: mf8anaw4ys9kb
+      image:
+        small: "https://static.qobuz.com/images/covers/kb/s9/mf8anaw4ys9kb_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/kb/s9/mf8anaw4ys9kb_50.jpg"
+        large: "https://static.qobuz.com/images/covers/kb/s9/mf8anaw4ys9kb_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: TVT Records
+        id: 8942
+        albums_count: 13
+        supplier_id: 17
+        slug: tvt-records-1
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1645084800
+      qobuz_id: 68669828
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 1994-01-05
+      release_date_original: 1994-01-05
+      release_date_stream: 1994-01-05
+      release_tags: ~
+      release_type: ~
+      released_at: 757724400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1645084800
+      subtitle: ~
+      title: Spirits
+      tracks: ~
+      tracks_count: 10
+      upc: "0193483688053"
+      url: "https://www.qobuz.com/fr-fr/album/spirits-gil-scott-heron/mf8anaw4ys9kb"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 96
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 1941
+      genre:
+        path:
+          - 127
+          - 134
+        color: "#5eabc1"
+        name: Soul
+        id: 134
+        slug: soul
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0634904057558"
+      image:
+        small: "https://static.qobuz.com/images/covers/58/75/0634904057558_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/58/75/0634904057558_50.jpg"
+        large: "https://static.qobuz.com/images/covers/58/75/0634904057558_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: XL Recordings
+        id: 9313
+        albums_count: 1280
+        supplier_id: 28
+        slug: xl-recordings
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1652338800
+      qobuz_id: 23476636
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2015-04-01
+      release_date_original: 2015-04-01
+      release_date_stream: 2015-04-01
+      release_tags: ~
+      release_type: ~
+      released_at: 1427839200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1652338800
+      subtitle: ~
+      title: Nothing New
+      tracks: ~
+      tracks_count: 14
+      upc: "0634904057558"
+      url: "https://www.qobuz.com/fr-fr/album/nothing-new-gil-scott-heron/0634904057558"
+      version: ~
+    - artist:
+        image: ~
+        name: Gil Scott-Heron
+        id: 148745
+        albums_count: 98
+        slug: gil-scott-heron
+        albums: ~
+      artists:
+        - id: 148745
+          name: Gil Scott-Heron
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 401
+      genre:
+        path:
+          - 127
+          - 134
+        color: "#5eabc1"
+        name: Soul
+        id: 134
+        slug: soul
+      genres_list: ~
+      hires: false
+      hires_streamable: false
+      id: "0634904048068"
+      image:
+        small: "https://static.qobuz.com/images/covers/68/80/0634904048068_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/68/80/0634904048068_50.jpg"
+        large: "https://static.qobuz.com/images/covers/68/80/0634904048068_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: XL Recordings
+        id: 9313
+        albums_count: 1290
+        supplier_id: 28
+        slug: xl-recordings
+      maximum_bit_depth: 16
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1666940400
+      qobuz_id: 3246939
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2010-02-22
+      release_date_original: 2010-02-22
+      release_date_stream: 2010-02-22
+      release_tags: ~
+      release_type: ~
+      released_at: 1266793200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1666940400
+      subtitle: ~
+      title: Me and the Devil
+      tracks: ~
+      tracks_count: 2
+      upc: "0634904048068"
+      url: "https://www.qobuz.com/fr-fr/album/me-and-the-devil-gil-scott-heron/0634904048068"
+      version: ~

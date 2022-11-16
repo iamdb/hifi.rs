@@ -1,0 +1,123 @@
+---
+source: qobuz-client/src/client/api.rs
+expression: "client.track(155999429).await.expect(\"failed to get track\")"
+---
+album:
+  artist:
+    image: ~
+    name: Gil Scott-Heron
+    id: 148745
+    albums_count: 98
+    slug: gil-scott-heron
+    albums: ~
+  artists:
+    - id: 148745
+      name: Gil Scott-Heron
+      roles:
+        - main-artist
+  catchline: ""
+  composer:
+    id: 573076
+    name: Various Composers
+    slug: various-composers
+    albums_count: 583621
+    image: ~
+  copyright: (C) 2014 Ace Records (P) 2014 Ace Records
+  created_at: 1651095212
+  description: "Gil Scott-Heron's 1971 album Pieces of a Man set a standard for vocal artistry and political awareness that few musicians will ever match. His unique proto-rap vocal style influenced a generation of hip-hop artists, and nowhere is his style more powerful than on the classic \"The Revolution Will Not Be Televised.\" Even though the media -- the very entity attacked in this song -- has used, reused, and recontextualized the song and its title so many times, the message is so strong that it has become almost impossible to co-opt. Musically, the track created a formula that modern hip-hop would follow for years to come: bare-bones arrangements featuring pounding basslines and stripped-down drumbeats. Although the song features plenty of outdated references to everything from Spiro Agnew and Jim Webb to The Beverly Hillbillies, the force of Scott-Heron's well-directed anger makes the song timeless. More than just a spoken word poet, Scott-Heron was also a uniquely gifted vocalist. On tracks like the reflective \"I Think I'll Call It Morning\" and the title track, Scott-Heron's voice is complemented perfectly by the soulful keyboards of Brian Jackson. On \"Lady Day and John Coltrane,\" he not only celebrates jazz legends of the past in his words but in his vocal performance, one that is filled with enough soul and innovation to make Coltrane and Billie Holiday nod their heads in approval. More than three decades after its release, Pieces of a Man is just as -- if not more -- powerful and influential today as it was the day it was released.\n<br />&copy  Jon Azpiri /TiVo"
+  displayable: true
+  downloadable: true
+  duration: 3647
+  genre:
+    path:
+      - 127
+      - 134
+    color: "#5eabc1"
+    name: Soul
+    id: 134
+    slug: soul
+  genres_list:
+    - Soul/Funk/R&B
+    - Soul/Funk/R&B→Soul
+  hires: false
+  hires_streamable: false
+  id: kjv5c8zne4n8b
+  image:
+    small: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_230.jpg"
+    thumbnail: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_50.jpg"
+    large: "https://static.qobuz.com/images/covers/8b/4n/kjv5c8zne4n8b_600.jpg"
+    back: ~
+  is_official: true
+  label:
+    name: Ace Records
+    id: 151088
+    albums_count: 953
+    supplier_id: 17
+    slug: ace-records-2
+  maximum_bit_depth: 16
+  maximum_channel_count: 2
+  maximum_sampling_rate: 44.1
+  maximum_technical_specifications: ""
+  media_count: 1
+  parental_warning: false
+  popularity: 0
+  previewable: true
+  product_sales_factors_monthly: 0.1
+  product_sales_factors_weekly: 0
+  product_sales_factors_yearly: 9.7
+  product_type: album
+  product_url: /fr-fr/album/pieces-of-a-man-gil-scott-heron/kjv5c8zne4n8b
+  purchasable: true
+  purchasable_at: 1667980800
+  qobuz_id: 155999428
+  recording_information: ""
+  relative_url: /album/pieces-of-a-man-gil-scott-heron/kjv5c8zne4n8b
+  release_date_download: 1971-01-01
+  release_date_original: 1971-01-01
+  release_date_stream: 1971-01-01
+  release_tags: []
+  release_type: album
+  released_at: 31532400
+  sampleable: true
+  slug: pieces-of-a-man-gil-scott-heron
+  streamable: true
+  streamable_at: 1667980800
+  subtitle: Gil Scott-Heron
+  title: Pieces of a Man
+  tracks: ~
+  tracks_count: 14
+  upc: "0029667527484"
+  url: "https://www.qobuz.com/fr-fr/album/pieces-of-a-man-gil-scott-heron/kjv5c8zne4n8b"
+  version: ~
+audio_info:
+  replaygain_track_gain: -4.94
+  replaygain_track_peak: 0.966156
+copyright: (C) 2014 Ace Records (P) 1971 Flying Dutchman Records
+displayable: true
+downloadable: true
+duration: 187
+hires: false
+hires_streamable: false
+id: 155999429
+isrc: USBB17101029
+maximum_bit_depth: 16
+maximum_channel_count: 2
+maximum_sampling_rate: 44.1
+media_number: 1
+parental_warning: false
+performer:
+  id: 148745
+  name: Gil Scott-Heron
+performers: "Gil Scott-Heron, Composer, MainArtist - Carlin Music Corp, MusicPublisher - Bienstock Publishing Company, MusicPublisher"
+previewable: true
+purchasable: true
+purchasable_at: 1667980800
+release_date_download: ~
+release_date_original: ~
+release_date_stream: ~
+sampleable: true
+streamable: true
+streamable_at: 1667980800
+title: The Revolution Will Not Be Televised
+track_number: 1
+version: ~
