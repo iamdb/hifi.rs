@@ -95,31 +95,31 @@ impl Screen for NowPlayingScreen {
             .expect("failed to draw screen");
     }
 
-    fn key_events(&mut self, key: Key) -> bool {
+    fn key_events(&mut self, key: Key) -> Option<()> {
         match key {
             Key::Down | Key::Char('j') => {
                 self.track_list.next();
-                return true;
+                Some(())
             }
             Key::Up | Key::Char('k') => {
                 self.track_list.previous();
-                return true;
+                Some(())
             }
             Key::Right | Key::Char('h') => {
                 executor::block_on(self.controls.jump_forward());
-                return true;
+                Some(())
             }
             Key::Left | Key::Char('l') => {
                 executor::block_on(self.controls.jump_backward());
-                return true;
+                Some(())
             }
             Key::Home => {
                 self.track_list.home();
-                return true;
+                Some(())
             }
             Key::End => {
                 self.track_list.end();
-                return true;
+                Some(())
             }
             Key::PageDown => {
                 let page_height = (self.list_height / 2) as usize;
@@ -127,17 +127,17 @@ impl Screen for NowPlayingScreen {
                 if let Some(selected) = self.track_list.selected() {
                     if selected == 0 {
                         self.track_list.select(page_height * 2);
-                        return true;
+                        Some(())
                     } else if selected + page_height > self.track_list.len() - 1 {
                         self.track_list.select(self.track_list.len() - 1);
-                        return true;
+                        Some(())
                     } else {
                         self.track_list.select(selected + page_height);
-                        return true;
+                        Some(())
                     }
                 } else {
                     self.track_list.select(page_height);
-                    return true;
+                    Some(())
                 }
             }
             Key::PageUp => {
@@ -146,28 +146,28 @@ impl Screen for NowPlayingScreen {
                 if let Some(selected) = self.track_list.selected() {
                     if selected < page_height {
                         self.track_list.select(0);
-                        return true;
+                        Some(())
                     } else {
                         self.track_list.select(selected - page_height);
-                        return true;
+                        Some(())
                     }
                 } else {
                     self.track_list.select(page_height);
-                    return true;
+                    Some(())
                 }
             }
             Key::Char(c) => match c {
                 ' ' => {
                     executor::block_on(self.controls.play_pause());
-                    return true;
+                    Some(())
                 }
                 'N' => {
                     executor::block_on(self.controls.next());
-                    return true;
+                    Some(())
                 }
                 'P' => {
                     executor::block_on(self.controls.previous());
-                    return true;
+                    Some(())
                 }
                 '\n' => {
                     if let Some(selection) = self.track_list.selected() {
@@ -175,14 +175,14 @@ impl Screen for NowPlayingScreen {
                         executor::block_on(self.controls.skip_to(selection));
                     }
 
-                    return true;
+                    Some(())
                 }
-                _ => (),
+                _ => None,
             },
 
-            _ => (),
-        }
+            _ => None,
+        };
 
-        false
+        None
     }
 }

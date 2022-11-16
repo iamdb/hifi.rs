@@ -155,35 +155,47 @@ impl Screen for SearchScreen {
             })
             .expect("failed to draw screen");
     }
-    fn key_events(&mut self, key: Key) -> bool {
+    fn key_events(&mut self, key: Key) -> Option<()> {
         match key {
             Key::Up | Key::Char('k') => {
-                self.results_table.previous();
-                return true;
+                if self.enter_search {
+                    self.search_query.push('k');
+                } else {
+                    self.results_table.previous();
+                }
+                Some(())
             }
             Key::Down | Key::Char('j') => {
-                self.results_table.next();
-                return true;
+                if self.enter_search {
+                    self.search_query.push('j');
+                } else {
+                    self.results_table.next();
+                }
+                Some(())
             }
             Key::Backspace => {
                 if self.enter_search {
                     self.search_query.pop();
-                    return true;
+                    Some(())
+                } else {
+                    None
                 }
             }
             Key::Esc => {
                 if self.enter_search {
                     self.enter_search = false;
-                    return true;
+                    Some(())
+                } else {
+                    None
                 }
             }
             Key::Home => {
                 self.results_table.home();
-                return true;
+                Some(())
             }
             Key::End => {
                 self.results_table.end();
-                return true;
+                Some(())
             }
             Key::PageDown => {
                 let page_height = (self.results_height / 2) as usize;
@@ -191,17 +203,17 @@ impl Screen for SearchScreen {
                 if let Some(selected) = self.results_table.selected() {
                     if selected == 0 {
                         self.results_table.select(page_height * 2);
-                        return true;
+                        Some(())
                     } else if selected + page_height > self.results_table.len() - 1 {
                         self.results_table.select(self.results_table.len() - 1);
-                        return true;
+                        Some(())
                     } else {
                         self.results_table.select(selected + page_height);
-                        return true;
+                        Some(())
                     }
                 } else {
                     self.results_table.select(page_height);
-                    return true;
+                    Some(())
                 }
             }
             Key::PageUp => {
@@ -210,14 +222,14 @@ impl Screen for SearchScreen {
                 if let Some(selected) = self.results_table.selected() {
                     if selected < page_height {
                         self.results_table.select(0);
-                        return true;
+                        Some(())
                     } else {
                         self.results_table.select(selected - page_height);
-                        return true;
+                        Some(())
                     }
                 } else {
                     self.results_table.select(page_height);
-                    return true;
+                    Some(())
                 }
             }
             Key::Char(char) => match char {
@@ -235,26 +247,36 @@ impl Screen for SearchScreen {
                         }
                     } else if let Some(selected) = self.results_table.selected() {
                         if let Some(results) = &self.search_results.clone() {
-                            return self.handle_selection(results, selected);
+                            if self.handle_selection(results, selected) {
+                                Some(())
+                            } else {
+                                None
+                            };
                         }
                     }
+
+                    None
                 }
                 '/' => {
                     if !self.enter_search {
                         self.enter_search = true;
-                        return true;
+                        Some(())
+                    } else {
+                        None
                     }
                 }
                 char => {
                     if self.enter_search {
                         self.search_query.push(char);
-                        return true;
+                        Some(())
+                    } else {
+                        None
                     }
                 }
             },
-            _ => (),
+            _ => None,
         };
 
-        false
+        None
     }
 }

@@ -168,7 +168,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
             .expect("failed to draw screen");
     }
 
-    fn key_events(&mut self, key: Key) -> bool {
+    fn key_events(&mut self, key: Key) -> Option<()> {
         if self.show_album_or_track_popup || self.show_play_or_open_popup {
             match key {
                 Key::Right | Key::Left | Key::Char('h') | Key::Char('l') => {
@@ -179,7 +179,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                             self.show_album_or_track_selection = 0;
                         }
 
-                        return true;
+                        Some(())
                     } else if self.show_play_or_open_popup {
                         if self.show_play_or_open_popup_selection == 0 {
                             self.show_play_or_open_popup_selection = 1;
@@ -187,19 +187,18 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                             self.show_play_or_open_popup_selection = 0;
                         }
 
-                        return true;
-                    }
+                        Some(())
+                    } else {
+                        None
+                    };
                 }
                 Key::Esc => {
                     if self.show_play_or_open_popup {
                         self.show_play_or_open_popup = false;
-                        return true;
-                    }
-
-                    if self.show_album_or_track_popup {
-                        self.show_album_or_track_popup = false;
-                        return true;
-                    }
+                        Some(())
+                    } else {
+                        None
+                    };
                 }
                 Key::Char('\n') => {
                     if self.show_album_or_track_popup {
@@ -223,7 +222,12 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                                         ActiveScreen::NowPlaying,
                                                     ),
                                                 );
+                                                Some(())
+                                            } else {
+                                                None
                                             }
+                                        } else {
+                                            None
                                         }
                                     } else if self.show_album_or_track_selection == 1 {
                                         executor::block_on(self.controls.play_track(track.clone()));
@@ -233,12 +237,14 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                             StateKey::App(AppKey::ActiveScreen),
                                             ActiveScreen::NowPlaying,
                                         ));
-                                    }
+
+                                        Some(())
+                                    } else {
+                                        None
+                                    };
                                 }
                             }
                         }
-
-                        return true;
                     } else if self.show_play_or_open_popup {
                         if self.show_play_or_open_popup_selection == 0 {
                             debug!("made selection");
@@ -269,8 +275,10 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                         self.show_selected_playlist = true;
                                         self.show_play_or_open_popup = false;
 
-                                        return true;
-                                    }
+                                        Some(())
+                                    } else {
+                                        None
+                                    };
                                 }
                             }
                         } else if self.show_play_or_open_popup_selection == 1 {
@@ -292,40 +300,40 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                             ActiveScreen::NowPlaying,
                                         ));
 
-                                        return true;
-                                    }
+                                        Some(())
+                                    } else {
+                                        None
+                                    };
                                 }
                             }
                         }
                     }
                 }
                 _ => (),
-            }
-
-            return false;
+            };
         }
 
         if self.show_selected_playlist {
             match key {
                 Key::Down | Key::Char('j') => {
                     self.selected_playlist_table.next();
-                    return true;
+                    Some(())
                 }
                 Key::Up | Key::Char('k') => {
                     self.selected_playlist_table.previous();
-                    return true;
+                    Some(())
                 }
                 Key::Esc => {
                     self.show_selected_playlist = false;
-                    return true;
+                    Some(())
                 }
                 Key::Home => {
                     self.selected_playlist_table.home();
-                    return true;
+                    Some(())
                 }
                 Key::End => {
                     self.selected_playlist_table.end();
-                    return true;
+                    Some(())
                 }
                 Key::PageDown => {
                     let page_height = (self.screen_height / 2) as usize;
@@ -333,18 +341,18 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     if let Some(selected) = self.selected_playlist_table.selected() {
                         if selected == 0 {
                             self.selected_playlist_table.select(page_height * 2);
-                            return true;
+                            Some(())
                         } else if selected + page_height > self.selected_playlist_table.len() - 1 {
                             self.selected_playlist_table
                                 .select(self.selected_playlist_table.len() - 1);
-                            return true;
+                            Some(())
                         } else {
                             self.selected_playlist_table.select(selected + page_height);
-                            return true;
+                            Some(())
                         }
                     } else {
                         self.selected_playlist_table.select(page_height);
-                        return true;
+                        Some(())
                     }
                 }
                 Key::PageUp => {
@@ -353,56 +361,54 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     if let Some(selected) = self.selected_playlist_table.selected() {
                         if selected < page_height {
                             self.selected_playlist_table.select(0);
-                            return true;
+                            Some(())
                         } else {
                             self.selected_playlist_table.select(selected - page_height);
-                            return true;
+                            Some(())
                         }
                     } else {
                         self.selected_playlist_table.select(page_height);
-                        return true;
+                        Some(())
                     }
                 }
                 Key::Char('\n') => {
                     self.show_album_or_track_popup = true;
+                    Some(())
                 }
-                _ => (),
-            }
-
-            return false;
+                _ => None,
+            };
         }
 
         match key {
             Key::Down | Key::Char('j') => {
                 self.mylists.next();
-                return true;
+                Some(())
             }
             Key::Up | Key::Char('k') => {
                 self.mylists.previous();
-                return true;
+                Some(())
             }
             Key::Home => {
                 self.mylists.select(0);
-                return true;
+                Some(())
             }
             Key::End => {
                 self.mylists.select(self.mylists.len() - 1);
-                return true;
+                Some(())
             }
             Key::Char(char) => match char {
                 'r' => {
                     self.refresh_lists();
-                    return true;
+                    Some(())
                 }
                 '\n' => {
                     self.show_play_or_open_popup = true;
+                    Some(())
                 }
-                _ => (),
+                _ => None,
             },
 
-            _ => (),
+            _ => None,
         }
-
-        false
     }
 }
