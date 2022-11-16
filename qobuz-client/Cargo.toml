@@ -31,9 +31,3 @@ zerocopy = "0.6"
 tokio-test = "0.4"
 nanoid = "0.4.0"
 insta = { version = "1.21", features = [ "yaml", "redactions" ] }
-
-[profile.dev.package.insta]
-opt-level = 3
-
-[profile.dev.package.similar]
-opt-level = 3
