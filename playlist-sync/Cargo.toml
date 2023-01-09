@@ -13,7 +13,7 @@ pretty_env_logger = "0.4"
 qobuz-client = { version = "0.1.0", path = "../qobuz-client" }
 rspotify = { version = "0.11" } 
 snafu = "0.7"
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.24", features = ["full"] }
 warp = "0.3"
 webbrowser = "0.8"
 console = "0.15"
