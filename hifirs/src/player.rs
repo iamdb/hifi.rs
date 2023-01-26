@@ -70,7 +70,9 @@ pub struct Player {
 pub async fn new(client: Client, _resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
     let state = SafePlayerState::default();
-    let playbin = gst::ElementFactory::make("playbin", None).expect("failed to create gst element");
+    let playbin = gst::ElementFactory::make("playbin")
+        .build()
+        .expect("failed to create gst element");
     let controls = Controls::new(state.clone());
 
     let connection = mpris::init(controls.clone()).await;
