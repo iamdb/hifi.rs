@@ -304,7 +304,7 @@ pub async fn run() -> Result<(), Error> {
 
                     let state = player.state();
 
-                    switch_screen!(state.write().await, ActiveScreen::Playlists);
+                    switch_screen!(state.lock().await, ActiveScreen::Playlists);
                     tui.event_loop().await?;
                 }
             }
@@ -363,7 +363,7 @@ pub async fn run() -> Result<(), Error> {
                     ui::new(player.state(), player.controls(), client, None, None).await?;
 
                 let state = player.state();
-                switch_screen!(state.write().await, ActiveScreen::NowPlaying);
+                switch_screen!(state.lock().await, ActiveScreen::NowPlaying);
 
                 tui.event_loop().await?;
             }

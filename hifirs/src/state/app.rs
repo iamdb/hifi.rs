@@ -4,9 +4,10 @@ use qobuz_client::client::album::Album;
 use qobuz_client::client::playlist::Playlist;
 use qobuz_client::client::track::{TrackListTrack, TrackStatus};
 use snafu::prelude::*;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -39,7 +40,7 @@ pub struct PlayerState {
     quit_sender: BroadcastSender<bool>,
 }
 
-pub type SafePlayerState = Arc<RwLock<PlayerState>>;
+pub type SafePlayerState = Arc<Mutex<PlayerState>>;
 
 impl PlayerState {
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
@@ -147,28 +148,72 @@ impl PlayerState {
         self.tracklist.rows()
     }
 
-    pub fn next_track(&mut self, num: Option<usize>) -> Option<TrackListTrack> {
-        if let Some(next_track) = if let Some(current) = &self.current_track {
-            self.tracklist
-                .set_track_status(current.track.id as usize, TrackStatus::Played);
-
-            if let Some(n) = num {
-                self.tracklist.find_track_by_index(n)
+    pub fn skip_track(
+        &mut self,
+        index: Option<usize>,
+        direction: SkipDirection,
+    ) -> Option<TrackListTrack> {
+        let next_track_index = if let Some(i) = index {
+            i
+        } else if let Some(current_track_index) = self.current_track_index() {
+            if direction == SkipDirection::Forward {
+                current_track_index + 1
             } else {
-                self.tracklist.find_track_by_index(current.index + 1)
+                current_track_index - 1
             }
         } else {
-            self.tracklist.queue.front().cloned()
-        } {
-            self.tracklist
-                .set_track_status(next_track.track.id as usize, TrackStatus::Playing);
+            0
+        };
 
-            self.current_track = Some(next_track.clone());
-            Some(next_track)
-        } else {
-            None
-        }
+        self.tracklist.queue = self
+            .tracklist
+            .queue
+            .iter_mut()
+            .map(|mut t| {
+                match t.index.cmp(&next_track_index) {
+                    std::cmp::Ordering::Less => {
+                        t.status = TrackStatus::Played;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        t.status = TrackStatus::Playing;
+                    }
+                    std::cmp::Ordering::Greater => {
+                        t.status = TrackStatus::Unplayed;
+                    }
+                }
+
+                t.to_owned()
+            })
+            .collect::<VecDeque<TrackListTrack>>();
+
+        self.tracklist.find_track_by_index(next_track_index)
     }
+
+    // pub fn next_track(&mut self, num: Option<usize>) -> Option<TrackListTrack> {
+    //     // need previous track
+    //     // if no num, get current track, get track index, increase by 1
+    //     // if num, get track by num
+    //     if let Some(next_track) = if let Some(current) = &self.current_track {
+    //         self.tracklist
+    //             .set_track_status(current.track.id as usize, TrackStatus::Played);
+
+    //         if let Some(n) = num {
+    //             self.tracklist.find_track_by_index(n)
+    //         } else {
+    //             self.tracklist.find_track_by_index(current.index + 1)
+    //         }
+    //     } else {
+    //         self.tracklist.queue.front().cloned()
+    //     } {
+    //         self.tracklist
+    //             .set_track_status(next_track.track.id as usize, TrackStatus::Playing);
+
+    //         self.current_track = Some(next_track.clone());
+    //         Some(next_track)
+    //     } else {
+    //         None
+    //     }
+    // }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
         self.quit_sender.subscribe()
@@ -212,6 +257,12 @@ impl Default for PlayerState {
             quit_sender,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SkipDirection {
+    Forward,
+    Backward,
 }
 
 #[derive(Debug, Clone)]

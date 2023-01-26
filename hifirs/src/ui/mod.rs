@@ -143,7 +143,7 @@ pub async fn new(
     };
 
     if let Some(results) = search_results {
-        let mut state = state.write().await;
+        let mut state = state.lock().await;
 
         match results {
             SearchResults::UserPlaylists(_) => {
@@ -165,7 +165,7 @@ impl Tui {
         }
     }
     async fn render(&mut self) {
-        let state = self.state.read().await.clone();
+        let state = self.state.lock().await.clone();
         let screen = state.active_screen();
 
         if let Some(screen) = self.screens.get(&screen) {
@@ -176,7 +176,7 @@ impl Tui {
         // Watches stdin for input events and sends them to the
         // router for handling.
         let event_sender = self.tx.clone();
-        let mut q = self.state.read().await.quitter();
+        let mut q = self.state.lock().await.quitter();
         thread::spawn(move || {
             let stdin = std::io::stdin();
             for event in stdin.events().flatten() {
@@ -195,7 +195,7 @@ impl Tui {
         // Sends a tick whose interval is defined by
         // REFRESH_RESOLUTION
         let event_sender = self.tx.clone();
-        let mut q = self.state.read().await.quitter();
+        let mut q = self.state.lock().await.quitter();
         thread::spawn(move || loop {
             if let Ok(quit) = q.try_recv() {
                 if quit {
@@ -214,7 +214,7 @@ impl Tui {
 
         let event_receiver = self.rx.clone();
         let mut event_stream = event_receiver.stream();
-        let mut quitter = self.state.read().await.quitter();
+        let mut quitter = self.state.lock().await.quitter();
 
         loop {
             select! {
@@ -238,7 +238,7 @@ impl Tui {
             }
             Event::Key(key) => match key {
                 Key::Char('\t') => {
-                    let mut state = self.state.write().await;
+                    let mut state = self.state.lock().await;
                     let active_screen = state.active_screen();
 
                     match active_screen {
@@ -265,10 +265,10 @@ impl Tui {
                     }
                     self.controls.stop().await;
                     std::thread::sleep(Duration::from_millis(500));
-                    self.state.read().await.quit();
+                    self.state.lock().await.quit();
                 }
                 _ => {
-                    if let Some(screen) = self.screens.get(&self.state.read().await.active_screen())
+                    if let Some(screen) = self.screens.get(&self.state.lock().await.active_screen())
                     {
                         if screen.lock().await.key_events(key).await.is_some() {
                             self.tick().await;
