@@ -1,100 +1,25 @@
 pub mod app;
 
-use crate::{
-    state::app::StateKey,
-    ui::components::{Item, Row, TableRow, TableRows},
-};
+use crate::ui::components::{Item, Row, TableRow, TableRows};
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
-use qobuz_client::client::{album::Album, playlist::Playlist, track::TrackListTrack, AudioQuality};
+use qobuz_client::client::{
+    album::Album,
+    playlist::Playlist,
+    track::{TrackListTrack, TrackStatus},
+    AudioQuality,
+};
 use serde::{Deserialize, Serialize};
-use sled::{IVec, Tree};
 use std::{
     collections::{vec_deque::Drain, VecDeque},
     fmt::Display,
     ops::RangeBounds,
-    str::FromStr,
 };
 use tui::{
     style::{Color, Modifier, Style},
     text::Text,
     widgets::ListItem,
 };
-
-#[derive(Debug, Clone)]
-pub struct HifiDB(sled::Db);
-
-impl HifiDB {
-    pub fn open_tree(&self, name: &'static str) -> StateTree {
-        StateTree::new(
-            self.0
-                .open_tree(name)
-                .unwrap_or_else(|_| panic!("failed to open tree {}", name)),
-        )
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StateTree {
-    db: Tree,
-}
-
-impl StateTree {
-    pub fn new(db: Tree) -> StateTree {
-        StateTree { db }
-    }
-    pub fn clear(&self) {
-        self.db.clear().expect("failed to clear tree");
-    }
-    pub fn flush(&self) {
-        self.db.flush().expect("failed to flush db");
-    }
-    pub fn insert<K, T>(&self, key: StateKey, value: T)
-    where
-        K: FromStr,
-        T: Serialize,
-    {
-        if let Ok(serialized) = bincode::serialize(&value) {
-            self.db.insert(key.as_str(), serialized).unwrap();
-        }
-    }
-    pub fn get<'a, K, T>(&self, key: StateKey) -> Option<T>
-    where
-        K: FromStr,
-        T: Into<T> + From<Bytes> + Deserialize<'a>,
-    {
-        if let Ok(record) = self.db.get(key.as_str()) {
-            record.map(|value| {
-                let bytes: Bytes = value.into();
-
-                bytes.into()
-            })
-        } else {
-            None
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! get_client {
-    ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(StateKey::Client($tree_key))
-    };
-}
-
-#[macro_export]
-macro_rules! get_player {
-    ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(StateKey::Player($tree_key))
-    };
-}
-
-#[macro_export]
-macro_rules! get_app {
-    ($tree_key:path, $tree:ident, $value_type:ty) => {
-        $tree.get::<String, $value_type>(StateKey::App($tree_key))
-    };
-}
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -279,18 +204,6 @@ impl From<FloatValue> for f64 {
 #[derive(Debug, Clone)]
 pub struct Bytes(Vec<u8>);
 
-impl From<IVec> for Bytes {
-    fn from(ivec: IVec) -> Self {
-        ivec.to_vec().into()
-    }
-}
-
-impl From<Bytes> for IVec {
-    fn from(bytes: Bytes) -> Self {
-        bytes.into()
-    }
-}
-
 impl From<Vec<u8>> for Bytes {
     fn from(vec: Vec<u8>) -> Self {
         Bytes(vec)
@@ -370,14 +283,32 @@ impl From<TrackListValue> for Bytes {
 
 impl TableRows for TrackListValue {
     fn rows(&self) -> Vec<Row> {
-        self.queue.iter().map(|t| t.row()).collect::<Vec<Row>>()
+        let mut rows = self.unplayed_tracks();
+        rows.append(&mut self.played_tracks());
+
+        rows.iter()
+            .filter_map(|t| {
+                if t.status != TrackStatus::Playing {
+                    Some(t.row())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<Row>>()
     }
 }
 
 impl TrackListValue {
-    pub fn new() -> TrackListValue {
+    pub fn new(queue: Option<VecDeque<TrackListTrack>>) -> TrackListValue {
+        debug!("creating tracklist");
+        let queue = if let Some(q) = queue {
+            q
+        } else {
+            VecDeque::new()
+        };
+
         TrackListValue {
-            queue: VecDeque::new(),
+            queue,
             album: None,
             playlist: None,
             list_type: None,
@@ -392,7 +323,9 @@ impl TrackListValue {
     }
 
     pub fn set_album(&mut self, album: Album) {
+        debug!("setting tracklist album");
         self.album = Some(album);
+        debug!("setting tracklist list type");
         self.list_type = Some(TrackListType::Album);
     }
 
@@ -422,6 +355,34 @@ impl TrackListValue {
             .iter()
             .find(|t| t.track.id as usize == track_id)
             .cloned()
+    }
+
+    pub fn find_track_by_index(&self, index: usize) -> Option<TrackListTrack> {
+        self.queue.iter().find(|t| t.index == index).cloned()
+    }
+
+    pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
+        if let Some(track) = self
+            .queue
+            .iter_mut()
+            .find(|t| t.track.id as usize == track_id)
+        {
+            track.status = status;
+        }
+    }
+
+    pub fn unplayed_tracks(&self) -> Vec<&TrackListTrack> {
+        self.queue
+            .iter()
+            .filter(|t| t.status == TrackStatus::Unplayed)
+            .collect::<Vec<&TrackListTrack>>()
+    }
+
+    pub fn played_tracks(&self) -> Vec<&TrackListTrack> {
+        self.queue
+            .iter()
+            .filter(|t| t.status == TrackStatus::Played)
+            .collect::<Vec<&TrackListTrack>>()
     }
 
     pub fn track_index(&self, track_id: usize) -> Option<usize> {

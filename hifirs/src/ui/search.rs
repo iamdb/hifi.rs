@@ -1,17 +1,13 @@
 use crate::{
     player::Controls,
     qobuz::SearchResults,
-    sql::db::Database,
-    state::{
-        app::{AppKey, StateKey},
-        ActiveScreen,
-    },
+    state::app::PlayerState,
     ui::{
         components::{self, ColumnWidth, Table, TableHeaders, TableRows, TableWidths},
         Console, Screen,
     },
 };
-use futures::executor;
+use async_trait::async_trait;
 use qobuz_client::client::{
     album::{Album, AlbumSearchResults},
     api::Client,
@@ -22,7 +18,6 @@ use tui::layout::{Constraint, Direction, Layout};
 pub struct SearchScreen {
     client: Client,
     results_table: Table,
-    db: Database,
     search_results: Option<SearchResults>,
     controls: Controls,
     search_query: Vec<char>,
@@ -33,7 +28,6 @@ pub struct SearchScreen {
 
 impl SearchScreen {
     pub fn new(
-        db: Database,
         controls: Controls,
         client: Client,
         search_results: Option<SearchResults>,
@@ -59,7 +53,6 @@ impl SearchScreen {
 
         SearchScreen {
             search_results,
-            db,
             client,
             controls,
             enter_search,
@@ -70,24 +63,26 @@ impl SearchScreen {
         }
     }
 
-    fn handle_selection(&mut self, results: &SearchResults, selected: usize) -> bool {
+    async fn handle_selection(&mut self, results: &SearchResults, selected: usize) -> bool {
         match results {
             // An album has been selected, play it.
             SearchResults::Albums(results) => {
                 if let Some(album) = results.albums.items.get(selected) {
-                    executor::block_on(self.controls.play_album(album.clone()));
-                    executor::block_on(self.db.insert::<String, ActiveScreen>(
-                        StateKey::App(AppKey::ActiveScreen),
-                        ActiveScreen::NowPlaying,
-                    ));
+                    self.controls.play_album(album.id.clone()).await;
+                    // executor::block_on(self.db.insert::<String, ActiveScreen>(
+                    //     StateKey::App(AppKey::ActiveScreen),
+                    //     ActiveScreen::NowPlaying,
+                    // ));
                     return true;
                 };
             }
             // An artist has been selected, load the albums into the list.
             SearchResults::Artists(results) => {
                 if let Some(artist) = results.artists.items.get(selected) {
-                    if let Ok(artist_info) =
-                        executor::block_on(self.client.artist(artist.id.try_into().unwrap(), None))
+                    if let Ok(artist_info) = self
+                        .client
+                        .artist(artist.id.try_into().unwrap(), None)
+                        .await
                     {
                         if let Some(mut albums) = artist_info.albums {
                             albums.sort_by_date();
@@ -111,8 +106,9 @@ impl SearchScreen {
     }
 }
 
+#[async_trait]
 impl Screen for SearchScreen {
-    fn render(&mut self, terminal: &mut Console) {
+    fn render(&mut self, state: PlayerState, terminal: &mut Console) {
         terminal
             .draw(|f| {
                 self.screen_width = f.size().width;
@@ -130,7 +126,7 @@ impl Screen for SearchScreen {
 
                 self.results_height = (layout[2].height - layout[2].y) as usize;
 
-                components::player(f, layout[0], self.db.clone());
+                components::player(f, layout[0], state);
 
                 let text = String::from_iter(&self.search_query);
                 components::text_box(f, text, Some("Search Artists"), layout[1]);
@@ -155,7 +151,7 @@ impl Screen for SearchScreen {
             })
             .expect("failed to draw screen");
     }
-    fn key_events(&mut self, key: Key) -> Option<()> {
+    async fn key_events(&mut self, key: Key) -> Option<()> {
         match key {
             Key::Up | Key::Char('k') => {
                 if self.enter_search {
@@ -198,59 +194,59 @@ impl Screen for SearchScreen {
                 Some(())
             }
             Key::PageDown => {
-                let page_height = (self.results_height / 2) as usize;
+                let page_height = self.results_height / 2;
 
                 if let Some(selected) = self.results_table.selected() {
                     if selected == 0 {
                         self.results_table.select(page_height * 2);
-                        Some(())
+                        return Some(());
                     } else if selected + page_height > self.results_table.len() - 1 {
                         self.results_table.select(self.results_table.len() - 1);
-                        Some(())
+                        return Some(());
                     } else {
                         self.results_table.select(selected + page_height);
-                        Some(())
+                        return Some(());
                     }
                 } else {
                     self.results_table.select(page_height);
-                    Some(())
+                    return Some(());
                 }
             }
             Key::PageUp => {
-                let page_height = (self.results_height / 2) as usize;
+                let page_height = self.results_height / 2;
 
                 if let Some(selected) = self.results_table.selected() {
                     if selected < page_height {
                         self.results_table.select(0);
-                        Some(())
+                        return Some(());
                     } else {
                         self.results_table.select(selected - page_height);
-                        Some(())
+                        return Some(());
                     }
                 } else {
                     self.results_table.select(page_height);
-                    Some(())
+                    return Some(());
                 }
             }
             Key::Char(char) => match char {
                 '\n' => {
                     if self.enter_search {
                         let query = String::from_iter(self.search_query.clone());
-                        if let Ok(results) =
-                            executor::block_on(self.client.search_artists(query, Some(100)))
-                        {
+                        if let Ok(results) = self.client.search_artists(query, Some(100)).await {
                             let search_results = SearchResults::Artists(results);
                             self.search_results = Some(search_results.clone());
                             self.results_table = search_results.into();
                             self.results_table.select(0);
                             self.enter_search = false;
+
+                            return Some(());
                         }
                     } else if let Some(selected) = self.results_table.selected() {
                         if let Some(results) = &self.search_results.clone() {
-                            if self.handle_selection(results, selected) {
-                                Some(())
+                            if self.handle_selection(results, selected).await {
+                                return Some(());
                             } else {
-                                None
+                                return None;
                             };
                         }
                     }
@@ -260,7 +256,7 @@ impl Screen for SearchScreen {
                 '/' => {
                     if !self.enter_search {
                         self.enter_search = true;
-                        Some(())
+                        return Some(());
                     } else {
                         None
                     }
@@ -268,13 +264,13 @@ impl Screen for SearchScreen {
                 char => {
                     if self.enter_search {
                         self.search_query.push(char);
-                        Some(())
+                        return Some(());
                     } else {
-                        None
+                        return None;
                     }
                 }
             },
-            _ => None,
+            _ => return None,
         };
 
         None

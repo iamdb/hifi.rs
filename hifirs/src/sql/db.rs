@@ -32,6 +32,7 @@ pub async fn new() -> Database {
     };
 
     let options = SqliteConnectOptions::new()
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .filename(database_url)
         .create_if_missing(true);
 

@@ -1,39 +1,37 @@
 use crate::{
     player::Controls,
-    sql::db::Database,
-    state::{app::PlayerKey, TrackListValue},
+    state::app::PlayerState,
     ui::{
-        components::{self, Row, Table, TableHeaders, TableRows, TableWidths},
-        Console, Screen, StateKey,
+        components::{self, Table, TableHeaders, TableWidths},
+        Console, Screen,
     },
 };
-use futures::executor;
+use async_trait::async_trait;
 use qobuz_client::client::track::Track;
 use termion::event::Key;
 use tui::layout::{Constraint, Direction, Layout};
 
 pub struct NowPlayingScreen {
     track_list: Table,
-    db: Database,
     controls: Controls,
     list_height: usize,
 }
 
 impl NowPlayingScreen {
-    pub fn new(db: Database, controls: Controls) -> NowPlayingScreen {
+    pub fn new(controls: Controls) -> NowPlayingScreen {
         let track_list = Table::new(None, None, None);
 
         NowPlayingScreen {
             track_list,
-            db,
             controls,
             list_height: 0,
         }
     }
 }
 
+#[async_trait]
 impl Screen for NowPlayingScreen {
-    fn render(&mut self, terminal: &mut Console) {
+    fn render(&mut self, state: PlayerState, terminal: &mut Console) {
         terminal
             .draw(|f| {
                 let layout = Layout::default()
@@ -49,45 +47,23 @@ impl Screen for NowPlayingScreen {
 
                 self.list_height = (split_layout[1].height - split_layout[1].y) as usize;
 
-                components::player(f, split_layout[0], self.db.clone());
+                components::player(f, split_layout[0], state.clone());
 
-                let mut title = "Now Playing".to_string();
+                let rows = state.rows();
 
-                if let Some(tracklist) = executor::block_on(
-                    self.db
-                        .get::<String, TrackListValue>(StateKey::Player(PlayerKey::Playlist)),
-                ) {
-                    let mut rows = tracklist.rows();
-
-                    if let Some(prev_playlist) =
-                        executor::block_on(self.db.get::<String, TrackListValue>(StateKey::Player(
-                            PlayerKey::PreviousPlaylist,
-                        )))
-                    {
-                        let prev_rows = prev_playlist.rows();
-                        rows.append(
-                            &mut prev_rows
-                                .into_iter()
-                                .map(|mut r| {
-                                    r.set_dim(true);
-                                    r
-                                })
-                                .collect::<Vec<Row>>(),
-                        )
-                    }
-
+                if !self.track_list.compare_rows(&rows) {
                     self.track_list.set_rows(rows);
                     self.track_list.set_header(Track::headers());
                     self.track_list.set_widths(Track::widths());
-
-                    title = if let Some(album) = tracklist.get_album() {
-                        format!("Album: {}", album.title)
-                    } else if let Some(playlist) = tracklist.get_playlist() {
-                        format!("Playlist: {}", playlist.name)
-                    } else {
-                        "Now Playing".to_string()
-                    };
                 }
+
+                let title = if let Some(album) = state.album() {
+                    format!("Album: {}", album.title)
+                } else if let Some(playlist) = state.playlist() {
+                    format!("Playlist: {}", playlist.name)
+                } else {
+                    "Now Playing".to_string()
+                };
 
                 components::table(f, &mut self.track_list, title.as_str(), split_layout[1]);
                 components::tabs(0, f, split_layout[2]);
@@ -95,7 +71,7 @@ impl Screen for NowPlayingScreen {
             .expect("failed to draw screen");
     }
 
-    fn key_events(&mut self, key: Key) -> Option<()> {
+    async fn key_events(&mut self, key: Key) -> Option<()> {
         match key {
             Key::Down | Key::Char('j') => {
                 self.track_list.next();
@@ -105,12 +81,12 @@ impl Screen for NowPlayingScreen {
                 self.track_list.previous();
                 Some(())
             }
-            Key::Right | Key::Char('h') => {
-                executor::block_on(self.controls.jump_forward());
+            Key::Right | Key::Char('l') => {
+                self.controls.jump_forward().await;
                 Some(())
             }
-            Key::Left | Key::Char('l') => {
-                executor::block_on(self.controls.jump_backward());
+            Key::Left | Key::Char('h') => {
+                self.controls.jump_backward().await;
                 Some(())
             }
             Key::Home => {
@@ -122,7 +98,7 @@ impl Screen for NowPlayingScreen {
                 Some(())
             }
             Key::PageDown => {
-                let page_height = (self.list_height / 2) as usize;
+                let page_height = self.list_height / 2;
 
                 if let Some(selected) = self.track_list.selected() {
                     if selected == 0 {
@@ -141,7 +117,7 @@ impl Screen for NowPlayingScreen {
                 }
             }
             Key::PageUp => {
-                let page_height = (self.list_height / 2) as usize;
+                let page_height = self.list_height / 2;
 
                 if let Some(selected) = self.track_list.selected() {
                     if selected < page_height {
@@ -158,21 +134,21 @@ impl Screen for NowPlayingScreen {
             }
             Key::Char(c) => match c {
                 ' ' => {
-                    executor::block_on(self.controls.play_pause());
+                    self.controls.play_pause().await;
                     Some(())
                 }
                 'N' => {
-                    executor::block_on(self.controls.next());
+                    self.controls.next().await;
                     Some(())
                 }
                 'P' => {
-                    executor::block_on(self.controls.previous());
+                    self.controls.previous().await;
                     Some(())
                 }
                 '\n' => {
                     if let Some(selection) = self.track_list.selected() {
                         debug!("playing selected track {}", selection);
-                        executor::block_on(self.controls.skip_to(selection));
+                        self.controls.skip_to(selection).await;
                     }
 
                     Some(())
@@ -181,8 +157,6 @@ impl Screen for NowPlayingScreen {
             },
 
             _ => None,
-        };
-
-        None
+        }
     }
 }

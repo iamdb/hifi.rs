@@ -4,17 +4,17 @@ use console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use rspotify::model::PlaylistId;
 use snafu::Snafu;
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 const TITLE: &str = r#"
-╔═╗ ┌─┐┌┐ ┬ ┬┌─┐      
-║═╬╗│ │├┴┐│ │┌─┘      
-╚═╝╚└─┘└─┘└─┘└─┘      
+╔═╗ ┌─┐┌┐ ┬ ┬┌─┐
+║═╬╗│ │├┴┐│ │┌─┘
+╚═╝╚└─┘└─┘└─┘└─┘
 ╔═╗┬  ┌─┐┬ ┬┬  ┬┌─┐┌┬┐
-╠═╝│  ├─┤└┬┘│  │└─┐ │ 
-╩  ┴─┘┴ ┴ ┴ ┴─┘┴└─┘ ┴ 
-╔═╗┬ ┬┌┐┌┌─┐          
-╚═╗└┬┘││││            
+╠═╝│  ├─┤└┬┘│  │└─┐ │
+╩  ┴─┘┴ ┴ ┴ ┴─┘┴└─┘ ┴
+╔═╗┬ ┬┌┐┌┌─┐
+╚═╗└┬┘││││
 ╚═╝ ┴ ┘└┘└─┘
 "#;
 
@@ -89,7 +89,7 @@ pub async fn run() -> Result<(), Error> {
 
     let spotify_playlist = spotify
         .playlist(
-            PlaylistId::from_str(cli.spotify_playlist_id.as_str())
+            PlaylistId::from_id(cli.spotify_playlist_id.as_str())
                 .expect("invalid spotify playlist id"),
         )
         .await?;

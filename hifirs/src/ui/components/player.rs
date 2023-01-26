@@ -14,6 +14,7 @@ pub(crate) fn progress<B>(
     position: ClockValue,
     duration: ClockValue,
     progress: FloatValue,
+    is_buffering: bool,
     f: &mut Frame<B>,
     area: Rect,
 ) where
@@ -41,7 +42,8 @@ pub(crate) fn progress<B>(
             .ratio(prog.into());
         f.render_widget(progress, area);
     } else {
-        let loading = Paragraph::new("LOADING")
+        let text = if is_buffering { "BUFFERING" } else { "LOADING" };
+        let loading = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().bg(Color::Indexed(236)));
 

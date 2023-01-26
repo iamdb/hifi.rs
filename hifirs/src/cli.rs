@@ -182,28 +182,30 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let player = player::new(data.clone(), client.clone(), true).await;
+            let player = player::new(client.clone(), true).await;
 
             player.play();
 
             if no_tui {
                 wait!(data);
             } else {
-                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
+                let mut tui =
+                    ui::new(player.state(), player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
 
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let mut player = player::new(data.clone(), client.clone(), true).await;
+            let player = player::new(client.clone(), true).await;
 
             player.play_uri(uri, Some(client.quality())).await;
 
             if no_tui {
                 wait!(data);
             } else {
-                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
+                let mut tui =
+                    ui::new(player.state(), player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
             Ok(())
@@ -234,13 +236,13 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(data.clone(), client.clone(), true).await;
+                let player = player::new(client.clone(), true).await;
 
                 if no_tui {
                     wait!(data);
                 } else {
                     let mut tui = ui::new(
-                        data.clone(),
+                        player.state(),
                         player.controls(),
                         client,
                         Some(results),
@@ -265,13 +267,13 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(data.clone(), client.clone(), true).await;
+                let player = player::new(client.clone(), true).await;
 
                 if no_tui {
                     wait!(data);
                 } else {
                     let mut tui = ui::new(
-                        data.clone(),
+                        player.state(),
                         player.controls(),
                         client,
                         Some(results),
@@ -292,14 +294,17 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let player = player::new(data.clone(), client.clone(), true).await;
+                let player = player::new(client.clone(), true).await;
 
                 if no_tui {
                     wait!(data);
                 } else {
                     let mut tui =
-                        ui::new(data.clone(), player.controls(), client, None, None).await?;
-                    switch_screen!(data, ActiveScreen::Playlists);
+                        ui::new(player.state(), player.controls(), client, None, None).await?;
+
+                    let state = player.state();
+
+                    switch_screen!(state.write().await, ActiveScreen::Playlists);
                     tui.event_loop().await?;
                 }
             }
@@ -319,7 +324,7 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let mut player = player::new(data.clone(), client.clone(), false).await;
+            let player = player::new(client.clone(), false).await;
 
             let track = client.track(track_id).await?;
 
@@ -328,7 +333,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(data);
             } else {
-                let mut tui = ui::new(data, player.controls(), client, None, None).await?;
+                let mut tui =
+                    ui::new(player.state(), player.controls(), client, None, None).await?;
                 tui.event_loop().await?;
             }
 
@@ -347,14 +353,18 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let mut player = player::new(data.clone(), client.clone(), false).await;
+            let player = player::new(client.clone(), false).await;
             player.play_album(album, Some(quality)).await;
 
             if no_tui {
                 wait!(data);
             } else {
-                let mut tui = ui::new(data.clone(), player.controls(), client, None, None).await?;
-                switch_screen!(data, ActiveScreen::NowPlaying);
+                let mut tui =
+                    ui::new(player.state(), player.controls(), client, None, None).await?;
+
+                let state = player.state();
+                switch_screen!(state.write().await, ActiveScreen::NowPlaying);
+
                 tui.event_loop().await?;
             }
 

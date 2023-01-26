@@ -1,14 +1,6 @@
 mod player;
 
-use crate::{
-    sql::db::Database,
-    state::{
-        app::{PlayerKey, StateKey},
-        ClockValue, FloatValue, StatusValue,
-    },
-};
-use futures::executor;
-use qobuz_client::client::track::TrackListTrack;
+use crate::state::app::PlayerState;
 use textwrap::fill;
 use tui::{
     backend::Backend,
@@ -23,38 +15,27 @@ use tui::{
     Frame,
 };
 
-pub fn player<B>(f: &mut Frame<B>, rect: Rect, db: Database)
+pub fn player<B>(f: &mut Frame<B>, rect: Rect, state: PlayerState)
 where
     B: Backend,
 {
-    if let Some(track) =
-        executor::block_on(db.get::<String, TrackListTrack>(StateKey::Player(PlayerKey::NextUp)))
-    {
-        if let Some(status) =
-            executor::block_on(db.get::<String, StatusValue>(StateKey::Player(PlayerKey::Status)))
-        {
-            let layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Max(5), Constraint::Length(1)])
-                .margin(0)
-                .split(rect);
+    if let Some(track) = state.current_track() {
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Max(5), Constraint::Length(1)])
+            .margin(0)
+            .split(rect);
 
-            player::current_track(track, status, f, layout[0]);
-
-            if let (Some(position), Some(duration), Some(prog)) = (
-                executor::block_on(
-                    db.get::<String, ClockValue>(StateKey::Player(PlayerKey::Position)),
-                ),
-                executor::block_on(
-                    db.get::<String, ClockValue>(StateKey::Player(PlayerKey::Duration)),
-                ),
-                executor::block_on(
-                    db.get::<String, FloatValue>(StateKey::Player(PlayerKey::Progress)),
-                ),
-            ) {
-                player::progress(position, duration, prog, f, layout[1]);
-            }
-        }
+        let current_status = state.status();
+        player::current_track(track, current_status, f, layout[0]);
+        player::progress(
+            state.position(),
+            state.duration(),
+            state.progress(),
+            state.buffering(),
+            f,
+            layout[1],
+        );
     } else {
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -319,7 +300,7 @@ impl<'t> List<'t> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Row {
     columns: Vec<String>,
     widths: Vec<ColumnWidth>,
@@ -391,7 +372,7 @@ impl Row {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ColumnWidth {
     /// Table column size in percent
     column_size: u16,
@@ -456,6 +437,10 @@ impl Table {
                 widths: vec![],
             }
         }
+    }
+
+    pub fn compare_rows(&self, rows: &Vec<Row>) -> bool {
+        self.rows.eq(rows)
     }
 
     fn term_table(&self, size: u16) -> (Vec<TermRow>, Vec<Constraint>, Vec<String>) {

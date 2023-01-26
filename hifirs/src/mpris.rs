@@ -194,11 +194,10 @@ impl MprisTrackList {
     ) -> Vec<HashMap<&'static str, zvariant::Value>> {
         if let Some(playlist) = self.controls.remaining_tracks().await {
             playlist
-                .vec()
-                .iter()
+                .into_iter()
                 .filter_map(|i| {
                     if tracks.contains(&i.track.id.to_string()) {
-                        Some(track_to_meta(i.clone()))
+                        Some(track_to_meta(i))
                     } else {
                         None
                     }
@@ -223,7 +222,6 @@ impl MprisTrackList {
     async fn tracks(&self) -> Vec<String> {
         if let Some(playlist) = self.controls.remaining_tracks().await {
             playlist
-                .vec()
                 .iter()
                 .map(|i| i.track.id.to_string())
                 .collect::<Vec<String>>()
