@@ -1,13 +1,19 @@
-use crate::state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListValue};
-use crate::ui::components::{Row, TableRows};
-use qobuz_client::client::album::Album;
-use qobuz_client::client::playlist::Playlist;
-use qobuz_client::client::track::{TrackListTrack, TrackStatus};
+use crate::{
+    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListValue},
+    ui::components::{Row, TableRows},
+};
+use qobuz_client::client::{
+    album::Album,
+    api::Client,
+    playlist::Playlist,
+    track::{TrackListTrack, TrackStatus},
+};
 use snafu::prelude::*;
-use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender};
-use tokio::sync::Mutex;
+use tokio::sync::{
+    broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
+    Mutex,
+};
 
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -27,6 +33,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
+    client: Client,
     current_track: Option<TrackListTrack>,
     tracklist: TrackListValue,
     current_progress: FloatValue,
@@ -148,7 +155,26 @@ impl PlayerState {
         self.tracklist.rows()
     }
 
-    pub fn skip_track(
+    /// Attach a `TrackURL` to the given track.
+    pub async fn attach_track_url(&mut self, track: &mut TrackListTrack) {
+        if let Ok(track_url) = self.client.track_url(track.track.id, None, None).await {
+            track.set_track_url(track_url);
+        }
+    }
+
+    pub async fn attach_track_url_current(&mut self) {
+        if let Some(current_track) = self.current_track.as_mut() {
+            if let Ok(track_url) = self
+                .client
+                .track_url(current_track.track.id, None, None)
+                .await
+            {
+                current_track.set_track_url(track_url);
+            }
+        }
+    }
+
+    pub async fn skip_track(
         &mut self,
         index: Option<usize>,
         direction: SkipDirection,
@@ -165,55 +191,25 @@ impl PlayerState {
             0
         };
 
-        self.tracklist.queue = self
-            .tracklist
+        self.tracklist
             .queue
             .iter_mut()
-            .map(|mut t| {
-                match t.index.cmp(&next_track_index) {
-                    std::cmp::Ordering::Less => {
-                        t.status = TrackStatus::Played;
-                    }
-                    std::cmp::Ordering::Equal => {
-                        t.status = TrackStatus::Playing;
-                    }
-                    std::cmp::Ordering::Greater => {
-                        t.status = TrackStatus::Unplayed;
-                    }
+            .for_each(|mut t| match t.index.cmp(&next_track_index) {
+                std::cmp::Ordering::Less => {
+                    t.status = TrackStatus::Played;
                 }
+                std::cmp::Ordering::Equal => {
+                    t.status = TrackStatus::Playing;
+                    self.current_track = Some(t.clone());
+                }
+                std::cmp::Ordering::Greater => {
+                    t.status = TrackStatus::Unplayed;
+                }
+            });
 
-                t.to_owned()
-            })
-            .collect::<VecDeque<TrackListTrack>>();
-
-        self.tracklist.find_track_by_index(next_track_index)
+        self.attach_track_url_current().await;
+        self.current_track.clone()
     }
-
-    // pub fn next_track(&mut self, num: Option<usize>) -> Option<TrackListTrack> {
-    //     // need previous track
-    //     // if no num, get current track, get track index, increase by 1
-    //     // if num, get track by num
-    //     if let Some(next_track) = if let Some(current) = &self.current_track {
-    //         self.tracklist
-    //             .set_track_status(current.track.id as usize, TrackStatus::Played);
-
-    //         if let Some(n) = num {
-    //             self.tracklist.find_track_by_index(n)
-    //         } else {
-    //             self.tracklist.find_track_by_index(current.index + 1)
-    //         }
-    //     } else {
-    //         self.tracklist.queue.front().cloned()
-    //     } {
-    //         self.tracklist
-    //             .set_track_status(next_track.track.id as usize, TrackStatus::Playing);
-
-    //         self.current_track = Some(next_track.clone());
-    //         Some(next_track)
-    //     } else {
-    //         None
-    //     }
-    // }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
         self.quit_sender.subscribe()
@@ -236,15 +232,13 @@ impl PlayerState {
         self.is_buffering = false;
         self.resume = false;
     }
-}
-
-impl Default for PlayerState {
-    fn default() -> Self {
+    pub fn new(client: Client) -> Self {
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
         Self {
             current_track: None,
+            client,
             tracklist,
             duration_remaining: ClockValue::default(),
             duration: ClockValue::default(),

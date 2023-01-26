@@ -2,7 +2,7 @@ use crate::{
     action,
     mpris::{self, MprisPlayer, MprisTrackList},
     state::{
-        app::{SafePlayerState, SkipDirection},
+        app::{PlayerState, SafePlayerState, SkipDirection},
         ClockValue, StatusValue, TrackListType, TrackListValue,
     },
     REFRESH_RESOLUTION,
@@ -20,8 +20,8 @@ use qobuz_client::client::{
     AudioQuality, TrackURL,
 };
 use snafu::prelude::*;
-use std::time::Duration;
-use tokio::select;
+use std::{sync::Arc, time::Duration};
+use tokio::{select, sync::Mutex};
 use zbus::Connection;
 
 #[derive(Snafu, Debug)]
@@ -72,7 +72,7 @@ pub struct Player {
 
 pub async fn new(client: Client, _resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
-    let state = SafePlayerState::default();
+    let state = Arc::new(Mutex::new(PlayerState::new(client.clone())));
     let playbin = gst::ElementFactory::make("playbin")
         .build()
         .expect("failed to create gst element");
@@ -282,10 +282,7 @@ impl Player {
     pub async fn skip_forward(&self, num: Option<usize>) -> Result<()> {
         let mut state = self.state.lock().await;
 
-        if let Some(mut next_track_to_play) = state.skip_track(num, SkipDirection::Forward) {
-            next_track_to_play = self.attach_track_url(next_track_to_play).await?;
-            state.set_current_track(next_track_to_play.clone());
-
+        if let Some(mut next_track_to_play) = state.skip_track(num, SkipDirection::Forward).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping forward to next track");
                 self.ready();
@@ -322,10 +319,7 @@ impl Player {
 
         let mut state = self.state.lock().await;
 
-        if let Some(mut next_track_to_play) = state.skip_track(num, SkipDirection::Backward) {
-            next_track_to_play = self.attach_track_url(next_track_to_play).await?;
-            state.set_current_track(next_track_to_play.clone());
-
+        if let Some(mut next_track_to_play) = state.skip_track(num, SkipDirection::Backward).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping backward to previous track");
                 self.ready();
@@ -422,13 +416,12 @@ impl Player {
         let mut state = self.state.lock().await;
         state.replace_list(tracklist);
 
-        if let Ok(track) = self.attach_track_url(first_track).await {
-            state.set_current_track(track.clone());
+        state.attach_track_url(&mut first_track).await;
+        state.set_current_track(first_track.clone());
 
-            self.playbin
-                .set_property("uri", Some(track.track_url.unwrap().url.as_str()));
-            self.play();
-        }
+        self.playbin
+            .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
+        self.play();
 
         // if let Some(tracks) = album.tracks {
         //     let tracks = tracks
@@ -811,15 +804,10 @@ impl Player {
     async fn prep_next_track(&self) -> Option<String> {
         let mut state = self.state.lock().await;
 
-        if let Some(mut next_track) = state.skip_track(None, SkipDirection::Forward) {
+        if let Some(mut next_track) = state.skip_track(None, SkipDirection::Forward).await {
+            //self.dbus_metadata_changed().await;
             debug!("received new track, adding to player");
-            if let Ok(next_playlist_track_url) =
-                self.client.track_url(next_track.track.id, None, None).await
-            {
-                next_track.set_track_url(next_playlist_track_url.clone());
-
-                //self.dbus_metadata_changed().await;
-
+            if let Some(next_playlist_track_url) = next_track.track_url {
                 Some(next_playlist_track_url.url)
             } else {
                 None
@@ -827,14 +815,6 @@ impl Player {
         } else {
             debug!("no more tracks left");
             None
-        }
-    }
-    /// Attach a `TrackURL` to the given track.
-    pub async fn attach_track_url(&self, mut track: TrackListTrack) -> Result<TrackListTrack> {
-        if let Ok(track_url) = self.client.track_url(track.track.id, None, None).await {
-            Ok(track.set_track_url(track_url))
-        } else {
-            Err(Error::TrackURL)
         }
     }
 

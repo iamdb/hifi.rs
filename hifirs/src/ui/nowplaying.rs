@@ -15,6 +15,7 @@ pub struct NowPlayingScreen {
     track_list: Table,
     controls: Controls,
     list_height: usize,
+    current_track_index: usize,
 }
 
 impl NowPlayingScreen {
@@ -25,6 +26,7 @@ impl NowPlayingScreen {
             track_list,
             controls,
             list_height: 0,
+            current_track_index: 0,
         }
     }
 }
@@ -32,6 +34,10 @@ impl NowPlayingScreen {
 #[async_trait]
 impl Screen for NowPlayingScreen {
     fn render(&mut self, state: PlayerState, terminal: &mut Console) {
+        if let Some(current_track_index) = state.current_track_index() {
+            self.current_track_index = current_track_index;
+        }
+
         terminal
             .draw(|f| {
                 let layout = Layout::default()
@@ -147,8 +153,12 @@ impl Screen for NowPlayingScreen {
                 }
                 '\n' => {
                     if let Some(selection) = self.track_list.selected() {
-                        debug!("playing selected track {}", selection);
-                        self.controls.skip_to(selection).await;
+                        debug!("****************** CURRENT {:?}", self.current_track_index);
+                        debug!(
+                            "playing selected track {}",
+                            selection + self.current_track_index + 1
+                        );
+                        // self.controls.skip_to(selection).await;
                     }
 
                     Some(())

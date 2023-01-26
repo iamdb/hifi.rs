@@ -93,7 +93,7 @@ pub(crate) fn current_track<B>(
         current_track_text.insert(0, Spans::from(""));
     }
 
-    if let Some(album) = playlist_track.album {
+    if let Some(album) = &playlist_track.album {
         let release_year =
             chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
                 .unwrap()
@@ -105,9 +105,15 @@ pub(crate) fn current_track<B>(
         .wrap(Wrap { trim: false })
         .block(Block::default().style(Style::default().bg(Color::Indexed(237))));
 
+    let index = if playlist_track.album.is_some() {
+        playlist_track.track.track_number as usize
+    } else {
+        playlist_track.index
+    };
+
     let track_number_text = vec![
         Spans::from(""),
-        Spans::from(format!("{:02}", playlist_track.index)),
+        Spans::from(format!("{:02}", index)),
         Spans::from("of"),
         Spans::from(format!("{:02}", playlist_track.total)),
         Spans::from(""),

@@ -125,16 +125,15 @@ impl TrackListTrack {
         };
 
         vec![
-            self.index.to_string(),
+            self.track.track_number.to_string(),
             self.track.title.clone(),
             performer,
             duration,
         ]
     }
 
-    pub fn set_track_url(&mut self, track_url: TrackURL) -> Self {
+    pub fn set_track_url(&mut self, track_url: TrackURL) {
         self.track_url = Some(track_url);
-        self.clone()
     }
 }
 
