@@ -212,7 +212,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                             return None;
                                         }
                                     } else if self.show_album_or_track_selection == 1 {
-                                        self.controls.play_track(track.clone()).await;
+                                        self.controls.play_track(track.id).await;
                                         self.show_album_or_track_popup = false;
 
                                         // executor::block_on(self.db.insert::<String, ActiveScreen>(
@@ -242,7 +242,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                     );
                                     debug!("fetching tracks for selected playlist");
                                     if let Ok(mut playlist_info) =
-                                        self.client.playlist(list.id.to_string()).await
+                                        self.client.playlist(list.id).await
                                     {
                                         debug!("received playlist, adding to table");
                                         playlist_info.reverse();
@@ -269,9 +269,9 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                             {
                                 if let Some(playlist) = results.playlists.items.get(selected) {
                                     if let Ok(full_playlist) =
-                                        self.client.playlist(playlist.id.to_string()).await
+                                        self.client.playlist(playlist.id).await
                                     {
-                                        self.controls.play_playlist(full_playlist).await;
+                                        self.controls.play_playlist(full_playlist.id).await;
                                         self.show_play_or_open_popup = false;
 
                                         return Some(());

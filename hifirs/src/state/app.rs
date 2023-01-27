@@ -103,8 +103,8 @@ impl PlayerState {
         self.duration_remaining = remaining;
     }
 
-    pub fn set_duration(&mut self, remaining: ClockValue) {
-        self.duration = remaining;
+    pub fn set_duration(&mut self, duration: ClockValue) {
+        self.duration = duration;
     }
 
     pub fn duration(&self) -> ClockValue {

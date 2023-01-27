@@ -57,7 +57,7 @@ impl<'q> Qobuz<'q> {
         self.progress.set_message("signed into Qobuz");
     }
 
-    pub async fn playlist(&self, playlist_id: String) -> Result<QobuzPlaylist> {
+    pub async fn playlist(&self, playlist_id: i64) -> Result<QobuzPlaylist> {
         self.progress
             .set_message(format!("fetching playlist: {playlist_id}"));
 

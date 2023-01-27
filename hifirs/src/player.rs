@@ -3,7 +3,7 @@ use crate::{
     mpris::{self, MprisPlayer, MprisTrackList},
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
-        ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue,
+        ClockValue, StatusValue, TrackListType, TrackListValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -50,9 +50,9 @@ pub enum Action {
     JumpForward,
     JumpBackward,
     PlayAlbum { album_id: String },
-    PlayTrack { track: Box<Track> },
+    PlayTrack { track_id: i32 },
     PlayUri { uri: String },
-    PlayPlaylist { playlist: Box<Playlist> },
+    PlayPlaylist { playlist_id: i64 },
 }
 
 /// A player handles playing media to a device.
@@ -303,8 +303,6 @@ impl Player {
         self.ready();
 
         let mut state = self.state.lock().await;
-        state.reset_player();
-
         if let Some(mut next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
@@ -550,9 +548,17 @@ impl Player {
                                 self.play_album(album, None).await;
                             }
                         },
-                        Action::PlayTrack { track } => self.play_track(*track, None).await,
+                        Action::PlayTrack { track_id } => {
+                            if let Ok(track) = self.client.track(track_id).await {
+                                self.play_track(track, None).await;
+                            }
+                        },
                         Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await,
-                        Action::PlayPlaylist { playlist } => self.play_playlist(*playlist, Some(self.client.quality())).await,
+                        Action::PlayPlaylist { playlist_id } => {
+                            if let Ok(playlist) = self.client.playlist(playlist_id).await {
+                                self.play_playlist(playlist, Some(self.client.quality())).await
+                            }
+                        },
                         Action::Quit => self.state.lock().await.quit(),
                         Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
@@ -602,19 +608,6 @@ impl Player {
                             //         self.seek(position, None).await;
                             //     }
                             // }
-                            let mut state = self.state.lock().await;
-
-                            if let Some(position) = self.position() {
-                                debug!("setting position");
-                                state.set_position(position);
-                            }
-
-                            if let Some(duration) = self.duration() {
-                                debug!("setting duration");
-                                state.set_duration(duration);
-                            }
-
-                            state.set_current_progress(FloatValue(0.0));
                         }
                         MessageView::StateChanged(state_changed) => {
                             if state_changed
@@ -733,6 +726,7 @@ impl Player {
                     state.set_position(position.into());
                     state.set_current_progress(progress.into());
                     state.set_duration_remaining(remaining.into());
+                    state.set_duration(duration.into());
                 }
 
                 std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
@@ -866,21 +860,11 @@ impl Controls {
     pub async fn play_uri(&self, uri: String) {
         action!(self, Action::PlayUri { uri });
     }
-    pub async fn play_track(&self, track: Track) {
-        action!(
-            self,
-            Action::PlayTrack {
-                track: Box::new(track)
-            }
-        );
+    pub async fn play_track(&self, track_id: i32) {
+        action!(self, Action::PlayTrack { track_id });
     }
-    pub async fn play_playlist(&self, playlist: Playlist) {
-        action!(
-            self,
-            Action::PlayPlaylist {
-                playlist: Box::new(playlist)
-            }
-        )
+    pub async fn play_playlist(&self, playlist_id: i64) {
+        action!(self, Action::PlayPlaylist { playlist_id })
     }
     pub async fn position(&self) -> Option<ClockValue> {
         let state = self.state.lock().await;

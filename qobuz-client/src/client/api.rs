@@ -299,12 +299,13 @@ impl Client {
     }
 
     /// Retrieve a playlist
-    pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
+    pub async fn playlist(&self, playlist_id: i64) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
+        let id_string = playlist_id.to_string();
         let params = vec![
             ("limit", "500"),
             ("extra", "tracks"),
-            ("playlist_id", playlist_id.as_str()),
+            ("playlist_id", id_string.as_str()),
             ("offset", "0"),
         ];
         let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));

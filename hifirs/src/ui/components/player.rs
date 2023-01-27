@@ -20,7 +20,14 @@ pub(crate) fn progress<B>(
 ) where
     B: Backend,
 {
-    if duration.inner_clocktime() > ClockTime::default() {
+    if is_buffering {
+        let text = "BUFFERING";
+        let loading = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(Color::Indexed(236)));
+
+        f.render_widget(loading, area);
+    } else if duration.inner_clocktime() > ClockTime::default() {
         let position = position.to_string().as_str()[3..7].to_string();
         let duration = duration.to_string().as_str()[3..7].to_string();
         let prog = if progress >= FloatValue(0.0) {
@@ -42,7 +49,7 @@ pub(crate) fn progress<B>(
             .ratio(prog.into());
         f.render_widget(progress, area);
     } else {
-        let text = if is_buffering { "BUFFERING" } else { "LOADING" };
+        let text = "LOADING";
         let loading = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().bg(Color::Indexed(236)));

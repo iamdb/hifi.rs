@@ -55,7 +55,7 @@ pub struct User {
 
 pub enum UrlType {
     Album { id: String },
-    Playlist { id: String },
+    Playlist { id: i64 },
 }
 
 /// The audio quality as defined by the Qobuz API.
@@ -102,7 +102,11 @@ pub fn parse_url(string_url: &str) -> Option<UrlType> {
                     }
                     Some("playlist") => {
                         debug!("this is a playlist");
-                        let id = path.next().unwrap().to_string();
+                        let id = path
+                            .next()
+                            .unwrap()
+                            .parse::<i64>()
+                            .expect("failed to convert id");
 
                         Some(UrlType::Playlist { id })
                     }

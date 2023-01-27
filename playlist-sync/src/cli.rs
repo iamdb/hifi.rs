@@ -26,7 +26,7 @@ struct Cli {
     pub spotify_playlist_id: String,
     /// Qobuz client to sync to
     #[clap(short = 'q', long = "qobuz")]
-    pub qobuz_playlist_id: String,
+    pub qobuz_playlist_id: i64,
 }
 
 #[derive(Debug, Snafu)]

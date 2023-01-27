@@ -96,7 +96,7 @@ enum Commands {
         no_tui: bool,
     },
     /// Retreive information about a specific playlist.
-    Playlist { playlist_id: String },
+    Playlist { playlist_id: i64 },
     /// Reset the player state
     Reset,
     /// Set configuration options
