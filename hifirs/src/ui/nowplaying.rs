@@ -1,6 +1,6 @@
 use crate::{
     player::Controls,
-    state::app::PlayerState,
+    state::app::{PlayerState, SkipDirection},
     ui::{
         components::{self, Table, TableHeaders, TableWidths},
         Console, Screen,
@@ -15,7 +15,7 @@ pub struct NowPlayingScreen {
     track_list: Table,
     controls: Controls,
     list_height: usize,
-    current_track_index: usize,
+    state: Option<PlayerState>,
 }
 
 impl NowPlayingScreen {
@@ -26,7 +26,7 @@ impl NowPlayingScreen {
             track_list,
             controls,
             list_height: 0,
-            current_track_index: 0,
+            state: None,
         }
     }
 }
@@ -34,9 +34,7 @@ impl NowPlayingScreen {
 #[async_trait]
 impl Screen for NowPlayingScreen {
     fn render(&mut self, state: PlayerState, terminal: &mut Console) {
-        if let Some(current_track_index) = state.current_track_index() {
-            self.current_track_index = current_track_index;
-        }
+        self.state = Some(state.clone());
 
         terminal
             .draw(|f| {
@@ -51,7 +49,11 @@ impl Screen for NowPlayingScreen {
 
                 let split_layout = layout.split(f.size());
 
-                self.list_height = (split_layout[1].height - split_layout[1].y) as usize;
+                self.list_height = if split_layout[1].height > split_layout[1].y {
+                    (split_layout[1].height - split_layout[1].y) as usize
+                } else {
+                    1
+                };
 
                 components::player(f, split_layout[0], state.clone());
 
@@ -153,12 +155,30 @@ impl Screen for NowPlayingScreen {
                 }
                 '\n' => {
                     if let Some(selection) = self.track_list.selected() {
-                        debug!("****************** CURRENT {:?}", self.current_track_index);
-                        debug!(
-                            "playing selected track {}",
-                            selection + self.current_track_index + 1
-                        );
-                        self.controls.skip_to(selection).await;
+                        if let Some(state) = &self.state {
+                            if let Some(current_index) = state.current_track_index() {
+                                let unplayed = state.unplayed_tracks().len();
+                                let played = state.played_tracks().len();
+
+                                let mut index = selection + 1;
+
+                                if index < unplayed {
+                                    index += played;
+                                } else {
+                                    index = selection - unplayed;
+                                }
+
+                                debug!("playing selected track index: {index} selection: {selection} current: {current_index}");
+
+                                let direction = if index > current_index {
+                                    SkipDirection::Forward
+                                } else {
+                                    SkipDirection::Backward
+                                };
+
+                                self.controls.skip_to(index, direction).await;
+                            }
+                        }
                     }
 
                     Some(())

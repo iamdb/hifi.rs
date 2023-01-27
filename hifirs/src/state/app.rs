@@ -181,6 +181,7 @@ impl PlayerState {
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
         let next_track_index = if let Some(i) = index {
+            debug!("received a track index, using that {i}");
             i
         } else if let Some(current_track_index) = self.current_track_index() {
             if direction == SkipDirection::Forward {

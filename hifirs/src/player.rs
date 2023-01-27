@@ -45,14 +45,27 @@ pub enum Action {
     Previous,
     Stop,
     Quit,
-    SkipTo { num: usize },
-    SkipToById { track_id: usize },
+    SkipTo {
+        num: usize,
+        direction: SkipDirection,
+    },
+    SkipToById {
+        track_id: usize,
+    },
     JumpForward,
     JumpBackward,
-    PlayAlbum { album_id: String },
-    PlayTrack { track_id: i32 },
-    PlayUri { uri: String },
-    PlayPlaylist { playlist_id: i64 },
+    PlayAlbum {
+        album_id: String,
+    },
+    PlayTrack {
+        track_id: i32,
+    },
+    PlayUri {
+        uri: String,
+    },
+    PlayPlaylist {
+        playlist_id: i64,
+    },
 }
 
 /// A player handles playing media to a device.
@@ -278,7 +291,7 @@ impl Player {
             }
         }
     }
-    /// Skip forward to the next track in the playlist.
+    /// Skip to the next, previous or specific track in the playlist.
     pub async fn skip(&self, direction: SkipDirection, num: Option<usize>) -> Result<()> {
         // If the track is greater than 1 second into playing,
         // then we just want to go back to the beginning.
@@ -560,7 +573,7 @@ impl Player {
                             }
                         },
                         Action::Quit => self.state.lock().await.quit(),
-                        Action::SkipTo { num } => self.skip_to(num).await.expect("failed to skip to track"),
+                        Action::SkipTo { num, direction } => self.skip(direction, Some(num)).await.expect("failed to skip to track"),
                         Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
                     }
                 }
@@ -842,8 +855,8 @@ impl Controls {
     pub async fn previous(&self) {
         action!(self, Action::Previous);
     }
-    pub async fn skip_to(&self, num: usize) {
-        action!(self, Action::SkipTo { num });
+    pub async fn skip_to(&self, num: usize, direction: SkipDirection) {
+        action!(self, Action::SkipTo { num, direction });
     }
     pub async fn skip_to_by_id(&self, track_id: usize) {
         action!(self, Action::SkipToById { track_id })

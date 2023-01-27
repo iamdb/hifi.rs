@@ -215,11 +215,6 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                         self.controls.play_track(track.id).await;
                                         self.show_album_or_track_popup = false;
 
-                                        // executor::block_on(self.db.insert::<String, ActiveScreen>(
-                                        //     StateKey::App(AppKey::ActiveScreen),
-                                        //     ActiveScreen::NowPlaying,
-                                        // ));
-
                                         return Some(());
                                     } else {
                                         return None;
