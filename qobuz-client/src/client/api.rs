@@ -723,7 +723,7 @@ impl Client {
         let play_url = "https://play.qobuz.com";
         let login_page = self
             .client
-            .get(format!("{}/login", play_url))
+            .get(format!("{play_url}/login"))
             .send()
             .await
             .expect("failed to get login page. something is very wrong.");
@@ -737,7 +737,7 @@ impl Client {
             .get(1)
             .map_or("", |m| m.as_str());
 
-        let bundle_url = format!("{}{}", play_url, bundle_path);
+        let bundle_url = format!("{play_url}{bundle_path}");
         let bundle_page = self.client.get(bundle_url).send().await.unwrap();
 
         let bundle_contents = bundle_page.text().await.unwrap();
@@ -765,7 +765,7 @@ impl Client {
                         let info = c.name("info").map_or("", |m| m.as_str()).to_string();
                         let extras = c.name("extras").map_or("", |m| m.as_str()).to_string();
 
-                        let chars = format!("{}{}{}", seed, info, extras);
+                        let chars = format!("{seed}{info}{extras}");
                         let encoded_secret = chars[..chars.len() - 44].to_string();
                         let decoded_secret =
                             base64::decode(encoded_secret).expect("failed to decode base64 secret");

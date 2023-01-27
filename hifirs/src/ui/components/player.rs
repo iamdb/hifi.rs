@@ -30,7 +30,7 @@ pub(crate) fn progress<B>(
         };
 
         let progress = Gauge::default()
-            .label(format!("{} / {}", position, duration))
+            .label(format!("{position} / {duration}"))
             .use_unicode(true)
             .block(Block::default().style(Style::default().bg(Color::Indexed(236))))
             .gauge_style(
@@ -113,7 +113,7 @@ pub(crate) fn current_track<B>(
 
     let track_number_text = vec![
         Spans::from(""),
-        Spans::from(format!("{:02}", index)),
+        Spans::from(format!("{index:02}")),
         Spans::from("of"),
         Spans::from(format!("{:02}", playlist_track.total)),
         Spans::from(""),

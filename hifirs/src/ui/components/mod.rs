@@ -75,7 +75,7 @@ where
 }
 
 #[allow(unused)]
-pub fn list<'t, B>(f: &mut Frame<B>, list: &'t mut List<'_>, title: &str, area: Rect)
+pub fn list<B>(f: &mut Frame<B>, list: &'_ mut List<'_>, title: &str, area: Rect)
 where
     B: Backend,
 {
@@ -96,7 +96,7 @@ where
     f.render_stateful_widget(term_list, layout[0], &mut list.state);
 }
 
-pub fn table<'r, B>(f: &mut Frame<B>, table: &'r mut Table, title: &str, area: Rect)
+pub fn table<B>(f: &mut Frame<B>, table: &'_ mut Table, title: &str, area: Rect)
 where
     B: Backend,
 {
@@ -132,7 +132,7 @@ where
         .iter()
         .cloned()
         .map(|t| {
-            let text = format!("{:^padding$}", t);
+            let text = format!("{t:^padding$}");
             Spans::from(text)
         })
         .collect();

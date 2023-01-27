@@ -9,7 +9,7 @@ use qobuz_client::client::{
     track::{TrackListTrack, TrackStatus},
 };
 use snafu::prelude::*;
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     Mutex,
@@ -44,6 +44,7 @@ pub struct PlayerState {
     is_buffering: bool,
     resume: bool,
     active_screen: ActiveScreen,
+    target_status: StatusValue,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -183,9 +184,15 @@ impl PlayerState {
             i
         } else if let Some(current_track_index) = self.current_track_index() {
             if direction == SkipDirection::Forward {
-                current_track_index + 1
-            } else {
+                if current_track_index < self.tracklist.len() {
+                    current_track_index + 1
+                } else {
+                    self.tracklist.len()
+                }
+            } else if current_track_index > 1 {
                 current_track_index - 1
+            } else {
+                0
             }
         } else {
             0
@@ -211,6 +218,12 @@ impl PlayerState {
         self.current_track.clone()
     }
 
+    pub fn reset_player(&mut self) {
+        self.duration = ClockValue::default();
+        self.position = ClockValue::default();
+        self.current_progress = FloatValue(0.0);
+    }
+
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
         self.quit_sender.subscribe()
     }
@@ -219,6 +232,14 @@ impl PlayerState {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
+    }
+
+    pub fn set_target_status(&mut self, status: StatusValue) {
+        self.target_status = status;
+    }
+
+    pub fn target_status(&self) -> StatusValue {
+        self.target_status.clone()
     }
 
     pub fn reset(&mut self) {
@@ -244,6 +265,7 @@ impl PlayerState {
             duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
+            target_status: StatusValue(gstreamer::State::Null),
             current_progress: FloatValue(0.0),
             is_buffering: false,
             resume: false,
@@ -257,6 +279,15 @@ impl PlayerState {
 pub enum SkipDirection {
     Forward,
     Backward,
+}
+
+impl Display for SkipDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SkipDirection::Forward => f.write_str("forward"),
+            SkipDirection::Backward => f.write_str("backward"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

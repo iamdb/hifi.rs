@@ -316,7 +316,7 @@ pub async fn run() -> Result<(), Error> {
             let json =
                 serde_json::to_string(&results).expect("failed to convert results to string");
 
-            print!("{}", json);
+            print!("{json}");
             Ok(())
         }
         Commands::StreamTrack {

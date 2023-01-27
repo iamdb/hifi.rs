@@ -124,7 +124,11 @@ impl Screen for SearchScreen {
                     .margin(0)
                     .split(f.size());
 
-                self.results_height = (layout[2].height - layout[2].y) as usize;
+                self.results_height = if layout[2].height > layout[2].y {
+                    (layout[2].height - layout[2].y) as usize
+                } else {
+                    1
+                };
 
                 components::player(f, layout[0], state);
 

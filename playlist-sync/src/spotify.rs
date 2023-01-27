@@ -81,7 +81,7 @@ impl<'s> Spotify<'s> {
                         if webbrowser::open(&url).is_ok() {
                             self.wait_for_auth().await;
                         } else {
-                            println!("There was a problem opening the browser, please open this url manually:\n{}", url);
+                            println!("There was a problem opening the browser, please open this url manually:\n{url}");
                             self.wait_for_auth().await;
                         }
                     }
@@ -95,8 +95,7 @@ impl<'s> Spotify<'s> {
                 self.wait_for_auth().await;
             } else {
                 println!(
-                    "There was a problem opening the browser, please open this url manually:\n{}",
-                    url
+                    "There was a problem opening the browser, please open this url manually:\n{url}",
                 );
                 self.wait_for_auth().await;
             }

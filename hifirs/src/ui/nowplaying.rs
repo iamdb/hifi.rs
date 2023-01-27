@@ -158,7 +158,7 @@ impl Screen for NowPlayingScreen {
                             "playing selected track {}",
                             selection + self.current_track_index + 1
                         );
-                        // self.controls.skip_to(selection).await;
+                        self.controls.skip_to(selection).await;
                     }
 
                     Some(())

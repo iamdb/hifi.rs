@@ -59,7 +59,7 @@ impl<'q> Qobuz<'q> {
 
     pub async fn playlist(&self, playlist_id: String) -> Result<QobuzPlaylist> {
         self.progress
-            .set_message(format!("fetching playlist: {}", playlist_id));
+            .set_message(format!("fetching playlist: {playlist_id}"));
 
         let playlist = self.client.playlist(playlist_id).await?;
 
