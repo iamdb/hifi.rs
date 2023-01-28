@@ -160,42 +160,44 @@ impl Screen for SearchScreen {
             Key::Up | Key::Char('k') => {
                 if self.enter_search {
                     self.search_query.push('k');
+                    return Some(());
                 } else {
                     self.results_table.previous();
+                    return Some(());
                 }
-                Some(())
             }
             Key::Down | Key::Char('j') => {
                 if self.enter_search {
                     self.search_query.push('j');
+                    return Some(());
                 } else {
                     self.results_table.next();
+                    return Some(());
                 }
-                Some(())
             }
             Key::Backspace => {
                 if self.enter_search {
                     self.search_query.pop();
-                    Some(())
+                    return Some(());
                 } else {
-                    None
+                    return None;
                 }
             }
             Key::Esc => {
                 if self.enter_search {
                     self.enter_search = false;
-                    Some(())
+                    return Some(());
                 } else {
-                    None
+                    return None;
                 }
             }
             Key::Home => {
                 self.results_table.home();
-                Some(())
+                return Some(());
             }
             Key::End => {
                 self.results_table.end();
-                Some(())
+                return Some(());
             }
             Key::PageDown => {
                 let page_height = self.results_height / 2;
@@ -255,14 +257,14 @@ impl Screen for SearchScreen {
                         }
                     }
 
-                    None
+                    return None;
                 }
                 '/' => {
                     if !self.enter_search {
                         self.enter_search = true;
                         return Some(());
                     } else {
-                        None
+                        return None;
                     }
                 }
                 char => {
@@ -276,7 +278,5 @@ impl Screen for SearchScreen {
             },
             _ => return None,
         };
-
-        None
     }
 }

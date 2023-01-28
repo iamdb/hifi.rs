@@ -316,6 +316,8 @@ impl Player {
         self.ready();
 
         let mut state = self.state.lock().await;
+        state.reset_player();
+
         if let Some(mut next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
