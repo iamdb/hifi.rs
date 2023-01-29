@@ -19,14 +19,14 @@ use flume::{Receiver, Sender};
 use gstreamer::State as GstState;
 use qobuz_client::client::api::Client;
 use snafu::prelude::*;
-use std::{collections::HashMap, io::Stdout, sync::Arc, thread, time::Duration};
+use std::{collections::HashMap, io::Stdout, sync::Arc, time::Duration};
 use termion::{
     event::{Event as TermEvent, Key, MouseEvent},
     input::{MouseTerminal, TermRead},
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
-use tokio::{select, sync::Mutex};
+use tokio::{select, sync::Mutex, time};
 use tokio_stream::StreamExt;
 use tui::{backend::TermionBackend, Terminal};
 
@@ -176,17 +176,11 @@ impl Tui {
         // Watches stdin for input events and sends them to the
         // router for handling.
         let event_sender = self.tx.clone();
-        let mut q = self.state.lock().await.quitter();
-        thread::spawn(move || {
+
+        let stdin_handle = tokio::spawn(async move {
             let stdin = std::io::stdin();
             for event in stdin.events().flatten() {
-                if let Ok(quit) = q.try_recv() {
-                    if quit {
-                        return;
-                    }
-                }
-
-                if let Err(err) = event_sender.send(event.into()) {
+                if let Err(err) = event_sender.send_async(event.into()).await {
                     error!("error sending key event: {}", err.to_string());
                 }
             }
@@ -195,21 +189,21 @@ impl Tui {
         // Sends a tick whose interval is defined by
         // REFRESH_RESOLUTION
         let event_sender = self.tx.clone();
-        let mut q = self.state.lock().await.quitter();
-        thread::spawn(move || loop {
-            if let Ok(quit) = q.try_recv() {
-                if quit {
-                    break;
+
+        let tick_handle = tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_millis(REFRESH_RESOLUTION));
+
+            loop {
+                interval.tick().await;
+
+                if let Err(err) = event_sender.send_async(Event::Tick).await {
+                    debug!(
+                        "error sending tick, app is probably just closing. err: {}",
+                        err.to_string()
+                    );
+                    return;
                 }
             }
-            if let Err(err) = event_sender.send(Event::Tick) {
-                debug!(
-                    "error sending tick, app is probably just closing. err: {}",
-                    err.to_string()
-                );
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
         });
 
         let event_receiver = self.rx.clone();
@@ -219,7 +213,10 @@ impl Tui {
         loop {
             select! {
                 Ok(quit) = quitter.recv() => {
+                    debug!("quitting input event stream");
                     if quit {
+                        stdin_handle.abort();
+                        tick_handle.abort();
                         break;
                     }
                 }
@@ -257,13 +254,14 @@ impl Tui {
                     }
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
+                    debug!("quitting ui handle event loop");
                     let status = self.state.lock().await.status();
                     if status == GstState::Playing.into() {
                         self.controls.pause().await;
-                        std::thread::sleep(Duration::from_millis(500));
+                        tokio::time::sleep(Duration::from_millis(250)).await;
                     }
                     self.controls.stop().await;
-                    std::thread::sleep(Duration::from_millis(500));
+                    tokio::time::sleep(Duration::from_millis(250)).await;
                     self.state.lock().await.quit();
                 }
                 _ => {

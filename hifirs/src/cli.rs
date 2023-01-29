@@ -12,6 +12,8 @@ use qobuz_client::client::{
     AudioQuality,
 };
 use snafu::prelude::*;
+use std::time::Duration;
+use tokio::time;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -440,14 +442,17 @@ macro_rules! wait {
         })
         .expect("error setting ctrlc handler");
 
+        let mut interval = time::interval(Duration::from_millis(REFRESH_RESOLUTION));
+
         loop {
+            interval.tick().await;
+
             if let Ok(quit) = quitter.try_recv() {
                 if quit {
-                    debug!("quitting");
+                    debug!("quitting main thread");
                     break;
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(REFRESH_RESOLUTION));
         }
     };
 }

@@ -536,13 +536,13 @@ impl Player {
                     match quit {
                         Ok(quit) => {
                             if quit {
-                                debug!("quitting");
-                                break;
+                                debug!("quitting player loop");
+                                return;
                             }
                         },
                         Err(_) => {
-                            debug!("quitting, with error");
-                            break;
+                            debug!("quitting player loop, with error");
+                            return;
                         },
                     }
                 }
@@ -728,13 +728,16 @@ impl Player {
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
     async fn clock_loop(&self) {
+        let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
         let mut quit_receiver = self.state.lock().await.quitter();
 
         loop {
+            interval.tick().await;
+
             if let Ok(quit) = quit_receiver.try_recv() {
                 if quit {
-                    debug!("quitting");
-                    break;
+                    debug!("quitting clock loop");
+                    return;
                 }
             }
             if self.current_state() != GstState::VoidPending.into()
@@ -753,8 +756,6 @@ impl Player {
                     state.set_duration_remaining(remaining.into());
                     state.set_duration(duration.into());
                 }
-
-                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
         }
     }
