@@ -1,12 +1,15 @@
 use crate::{
-    sql::db::Database,
-    state::{
-        app::{AppKey, StateKey},
-        ActiveScreen,
+    player::Controls,
+    ui::{
+        components::{self, Item, List},
+        Console, Screen,
     },
+};
+use crate::{
+    state::app::PlayerState,
     ui::components::{Table, TableHeaders, TableRows, TableWidths},
 };
-use futures::executor;
+use async_trait::async_trait;
 use qobuz_client::client::{
     api::Client,
     playlist::{Playlist, UserPlaylistsResult},
@@ -20,17 +23,8 @@ use tui::{
     widgets::{Block, BorderType, Borders, ListItem, Tabs},
 };
 
-use crate::{
-    player::Controls,
-    ui::{
-        components::{self, Item, List},
-        Console, Screen,
-    },
-};
-
 pub struct MyPlaylistsScreen<'m> {
     controls: Controls,
-    db: Database,
     client: Client,
     mylist_results: Option<UserPlaylistsResult>,
     mylists: List<'m>,
@@ -46,7 +40,7 @@ pub struct MyPlaylistsScreen<'m> {
 }
 
 impl<'m> MyPlaylistsScreen<'m> {
-    pub fn new(db: Database, client: Client, controls: Controls) -> Self {
+    pub async fn new(client: Client, controls: Controls) -> MyPlaylistsScreen<'m> {
         let mylists = List::new(None);
         let selected_playlist = Table::new(None, None, None);
 
@@ -55,7 +49,6 @@ impl<'m> MyPlaylistsScreen<'m> {
             show_album_or_track_selection: 0,
             screen_height: 0,
             screen_width: 0,
-            db,
             client,
             mylist_results: None,
             mylists,
@@ -66,13 +59,13 @@ impl<'m> MyPlaylistsScreen<'m> {
             show_play_or_open_popup_selection: 0,
             show_selected_playlist: false,
         };
-        screen.refresh_lists();
+        screen.refresh_lists().await;
 
         screen
     }
 
-    fn refresh_lists(&mut self) {
-        if let Ok(my_lists) = executor::block_on(self.client.user_playlists()) {
+    async fn refresh_lists(&mut self) {
+        if let Ok(my_lists) = self.client.user_playlists().await {
             let list: Vec<String> = my_lists.clone().into();
             let items = list
                 .into_iter()
@@ -85,8 +78,9 @@ impl<'m> MyPlaylistsScreen<'m> {
     }
 }
 
+#[async_trait]
 impl<'m> Screen for MyPlaylistsScreen<'m> {
-    fn render(&mut self, terminal: &mut Console) {
+    fn render(&mut self, state: PlayerState, terminal: &mut Console) {
         terminal
             .draw(|f| {
                 self.screen_height = f.size().height as usize;
@@ -102,7 +96,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                     .margin(0)
                     .split(f.size());
 
-                components::player(f, layout[0], self.db.clone());
+                components::player(f, layout[0], state);
 
                 if self.show_selected_playlist {
                     components::table(
@@ -168,29 +162,29 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
             .expect("failed to draw screen");
     }
 
-    fn key_events(&mut self, key: Key) -> Option<()> {
+    async fn key_events(&mut self, key: Key) -> Option<()> {
         if self.show_album_or_track_popup || self.show_play_or_open_popup {
             match key {
                 Key::Right | Key::Left | Key::Char('h') | Key::Char('l') => {
                     if self.show_album_or_track_popup {
                         if self.show_album_or_track_selection == 0 {
                             self.show_album_or_track_selection = 1;
+                            return Some(());
                         } else if self.show_album_or_track_selection == 1 {
                             self.show_album_or_track_selection = 0;
+                            return Some(());
                         }
+                    }
 
-                        Some(())
-                    } else if self.show_play_or_open_popup {
+                    if self.show_play_or_open_popup {
                         if self.show_play_or_open_popup_selection == 0 {
                             self.show_play_or_open_popup_selection = 1;
+                            return Some(());
                         } else if self.show_play_or_open_popup_selection == 1 {
                             self.show_play_or_open_popup_selection = 0;
+                            return Some(());
                         }
-
-                        Some(())
-                    } else {
-                        None
-                    };
+                    }
                 }
                 Key::Esc => {
                     if self.show_play_or_open_popup {
@@ -210,37 +204,20 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                 if let Some(track) = tracks.items.get(selected) {
                                     if self.show_album_or_track_selection == 0 {
                                         if let Some(album) = &track.album {
-                                            if let Ok(album) = executor::block_on(
-                                                self.client.album(album.id.clone()),
-                                            ) {
-                                                executor::block_on(self.controls.play_album(album));
-                                                self.show_album_or_track_popup = false;
+                                            self.controls.play_album(album.id.clone()).await;
+                                            self.show_album_or_track_popup = false;
 
-                                                executor::block_on(
-                                                    self.db.insert::<String, ActiveScreen>(
-                                                        StateKey::App(AppKey::ActiveScreen),
-                                                        ActiveScreen::NowPlaying,
-                                                    ),
-                                                );
-                                                Some(())
-                                            } else {
-                                                None
-                                            }
+                                            return Some(());
                                         } else {
-                                            None
+                                            return None;
                                         }
                                     } else if self.show_album_or_track_selection == 1 {
-                                        executor::block_on(self.controls.play_track(track.clone()));
+                                        self.controls.play_track(track.id).await;
                                         self.show_album_or_track_popup = false;
 
-                                        executor::block_on(self.db.insert::<String, ActiveScreen>(
-                                            StateKey::App(AppKey::ActiveScreen),
-                                            ActiveScreen::NowPlaying,
-                                        ));
-
-                                        Some(())
+                                        return Some(());
                                     } else {
-                                        None
+                                        return None;
                                     };
                                 }
                             }
@@ -259,9 +236,9 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                         list.name, list.id
                                     );
                                     debug!("fetching tracks for selected playlist");
-                                    if let Ok(mut playlist_info) = executor::block_on(
-                                        self.client.playlist(list.id.to_string()),
-                                    ) {
+                                    if let Ok(mut playlist_info) =
+                                        self.client.playlist(list.id).await
+                                    {
                                         debug!("received playlist, adding to table");
                                         playlist_info.reverse();
 
@@ -275,9 +252,9 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                         self.show_selected_playlist = true;
                                         self.show_play_or_open_popup = false;
 
-                                        Some(())
+                                        return Some(());
                                     } else {
-                                        None
+                                        return None;
                                     };
                                 }
                             }
@@ -286,23 +263,15 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
                                 (&self.mylist_results, self.mylists.selected())
                             {
                                 if let Some(playlist) = results.playlists.items.get(selected) {
-                                    if let Ok(full_playlist) = executor::block_on(
-                                        self.client.playlist(playlist.id.to_string()),
-                                    ) {
-                                        executor::block_on(
-                                            self.controls.play_playlist(full_playlist),
-                                        );
-
+                                    if let Ok(full_playlist) =
+                                        self.client.playlist(playlist.id).await
+                                    {
+                                        self.controls.play_playlist(full_playlist.id).await;
                                         self.show_play_or_open_popup = false;
 
-                                        executor::block_on(self.db.insert::<String, ActiveScreen>(
-                                            StateKey::App(AppKey::ActiveScreen),
-                                            ActiveScreen::NowPlaying,
-                                        ));
-
-                                        Some(())
+                                        return Some(());
                                     } else {
-                                        None
+                                        return None;
                                     };
                                 }
                             }
@@ -317,65 +286,65 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
             match key {
                 Key::Down | Key::Char('j') => {
                     self.selected_playlist_table.next();
-                    Some(())
+                    return Some(());
                 }
                 Key::Up | Key::Char('k') => {
                     self.selected_playlist_table.previous();
-                    Some(())
+                    return Some(());
                 }
                 Key::Esc => {
                     self.show_selected_playlist = false;
-                    Some(())
+                    return Some(());
                 }
                 Key::Home => {
                     self.selected_playlist_table.home();
-                    Some(())
+                    return Some(());
                 }
                 Key::End => {
                     self.selected_playlist_table.end();
-                    Some(())
+                    return Some(());
                 }
                 Key::PageDown => {
-                    let page_height = (self.screen_height / 2) as usize;
+                    let page_height = self.screen_height / 2;
 
                     if let Some(selected) = self.selected_playlist_table.selected() {
                         if selected == 0 {
                             self.selected_playlist_table.select(page_height * 2);
-                            Some(())
+                            return Some(());
                         } else if selected + page_height > self.selected_playlist_table.len() - 1 {
                             self.selected_playlist_table
                                 .select(self.selected_playlist_table.len() - 1);
-                            Some(())
+                            return Some(());
                         } else {
                             self.selected_playlist_table.select(selected + page_height);
-                            Some(())
+                            return Some(());
                         }
                     } else {
                         self.selected_playlist_table.select(page_height);
-                        Some(())
+                        return Some(());
                     }
                 }
                 Key::PageUp => {
-                    let page_height = (self.screen_height / 2) as usize;
+                    let page_height = self.screen_height / 2;
 
                     if let Some(selected) = self.selected_playlist_table.selected() {
                         if selected < page_height {
                             self.selected_playlist_table.select(0);
-                            Some(())
+                            return Some(());
                         } else {
                             self.selected_playlist_table.select(selected - page_height);
-                            Some(())
+                            return Some(());
                         }
                     } else {
                         self.selected_playlist_table.select(page_height);
-                        Some(())
+                        return Some(());
                     }
                 }
                 Key::Char('\n') => {
                     self.show_album_or_track_popup = true;
-                    Some(())
+                    return Some(());
                 }
-                _ => None,
+                _ => return None,
             };
         }
 
@@ -398,7 +367,7 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
             }
             Key::Char(char) => match char {
                 'r' => {
-                    self.refresh_lists();
+                    self.refresh_lists().await;
                     Some(())
                 }
                 '\n' => {

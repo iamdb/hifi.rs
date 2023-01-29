@@ -4,21 +4,20 @@ name = "hifi-rs"
 version = "0.1.0"
 
 [dependencies]
+async-trait = "0.1"
 base64 = "0.13"
 bincode = "1.3"
 byteorder = "1.4"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 comfy-table = "6.0"
-crossbeam = "0.8"
 ctrlc = { version = "3.0", features = ["termination"] }
 dialoguer = { version = "0.10.1", features = ["fuzzy-select"] }
 dirs = "4.0"
 enum-as-inner = "0.5"
 flume = "0.10"
 futures = "0.3"
-gstreamer = { version = "0.18", features = ["ser_de"] }
-gstreamer-player = "0.18"
+gstreamer = { version = "0.19", features = ["serde"] }
 log = "0.4"
 md5 = "0.7.0"
 pretty_env_logger = "0.4"
@@ -26,14 +25,12 @@ qobuz-client = { path = "../qobuz-client" }
 regex = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sled = { version = "0.34", features = ["compression"] }
 snafu = "0.7"
 sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "all-types", "default", "offline" ] }
 termion = "1.5"
 textwrap = "0.15"
-tokio = { version = "1.0", features = ["full"]} 
+tokio = { version = "1.0", features = ["full"]}
 tokio-stream = "0.1"
 tui = { version = "0.19", default-features = false, features = ["termion"] }
 url = "2.2"
 zbus = { version = "3", default-features = false, features = ["tokio"] }
-zerocopy = "0.6"

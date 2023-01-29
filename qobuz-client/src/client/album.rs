@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
@@ -64,23 +66,25 @@ pub struct Album {
 }
 
 impl Album {
-    pub fn to_tracklist(&self, quality: AudioQuality) -> Option<Vec<TrackListTrack>> {
+    pub fn to_tracklist(&self, quality: AudioQuality) -> Option<VecDeque<TrackListTrack>> {
         self.tracks.as_ref().map(|t| {
             t.items
                 .iter()
-                .map(|t| {
+                .enumerate()
+                .map(|(i, t)| {
                     TrackListTrack::new(
                         t.clone(),
-                        Some(t.track_number as usize),
+                        Some(i),
                         Some(self.tracks_count as usize),
                         Some(quality.clone()),
                         Some(self.clone()),
                     )
                 })
-                .collect::<Vec<TrackListTrack>>()
+                .collect::<VecDeque<TrackListTrack>>()
         })
     }
     pub async fn attach_tracks(&mut self, client: Client) {
+        debug!("attaching tracks to album");
         if let Ok(album) = client.album(self.id.clone()).await {
             self.tracks = album.tracks;
         }

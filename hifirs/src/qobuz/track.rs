@@ -1,7 +1,7 @@
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
 use qobuz_client::client::{
     playlist::TrackListTracks,
-    track::{Track, TrackListTrack, Tracks},
+    track::{Track, TrackListTrack, TrackStatus, Tracks},
 };
 
 impl TableRow for Track {
@@ -40,7 +40,13 @@ impl TableWidths for Track {
 
 impl TableRow for TrackListTrack {
     fn row(&self) -> Row {
-        Row::new(self.columns(), Track::widths())
+        let mut row = Row::new(self.columns(), Track::widths());
+
+        if self.status == TrackStatus::Played {
+            row.set_dim(true);
+        }
+
+        row
     }
 }
 

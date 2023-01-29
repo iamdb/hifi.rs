@@ -14,12 +14,20 @@ pub(crate) fn progress<B>(
     position: ClockValue,
     duration: ClockValue,
     progress: FloatValue,
+    is_buffering: bool,
     f: &mut Frame<B>,
     area: Rect,
 ) where
     B: Backend,
 {
-    if duration.inner_clocktime() > ClockTime::default() {
+    if is_buffering {
+        let text = "BUFFERING";
+        let loading = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(Color::Indexed(236)));
+
+        f.render_widget(loading, area);
+    } else if duration.inner_clocktime() > ClockTime::default() {
         let position = position.to_string().as_str()[3..7].to_string();
         let duration = duration.to_string().as_str()[3..7].to_string();
         let prog = if progress >= FloatValue(0.0) {
@@ -29,7 +37,7 @@ pub(crate) fn progress<B>(
         };
 
         let progress = Gauge::default()
-            .label(format!("{} / {}", position, duration))
+            .label(format!("{position} / {duration}"))
             .use_unicode(true)
             .block(Block::default().style(Style::default().bg(Color::Indexed(236))))
             .gauge_style(
@@ -41,7 +49,8 @@ pub(crate) fn progress<B>(
             .ratio(prog.into());
         f.render_widget(progress, area);
     } else {
-        let loading = Paragraph::new("LOADING")
+        let text = "LOADING";
+        let loading = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().bg(Color::Indexed(236)));
 
@@ -91,7 +100,7 @@ pub(crate) fn current_track<B>(
         current_track_text.insert(0, Spans::from(""));
     }
 
-    if let Some(album) = playlist_track.album {
+    if let Some(album) = &playlist_track.album {
         let release_year =
             chrono::NaiveDate::parse_from_str(&album.release_date_original, "%Y-%m-%d")
                 .unwrap()
@@ -103,9 +112,15 @@ pub(crate) fn current_track<B>(
         .wrap(Wrap { trim: false })
         .block(Block::default().style(Style::default().bg(Color::Indexed(237))));
 
+    let index = if playlist_track.album.is_some() {
+        playlist_track.track.track_number as usize
+    } else {
+        playlist_track.index
+    };
+
     let track_number_text = vec![
         Spans::from(""),
-        Spans::from(format!("{:02}", playlist_track.index)),
+        Spans::from(format!("{index:02}")),
         Spans::from("of"),
         Spans::from(format!("{:02}", playlist_track.total)),
         Spans::from(""),

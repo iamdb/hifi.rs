@@ -14,7 +14,7 @@ const APP_REGEX: &str = r#"cluster:"eu"}\):\(n.qobuzapi=\{app_id:"(?P<app_id>\d{
 const SEED_REGEX: &str =
     r#"[a-z]\.initialSeed\("(?P<seed>[\w=]+)",window\.utimezone\.(?P<timezone>[a-z]+)\)"#;
 
-macro_rules! format_info {
+macro_rules! info_regex {
     () => {
         r#"name:"\w+/(?P<timezone>{}([a-z]?))",info:"(?P<info>[\w=]+)",extras:"(?P<extras>[\w=]+)""#
     };
@@ -229,8 +229,7 @@ impl Client {
         }
 
         if refresh_config {
-            self.get_config().await.expect("failed to get config");
-            self.test_secrets().await.expect("failed to get secrets");
+            self.refresh().await.expect("failed to refresh secrets");
         }
 
         if self.credentials.is_none() {
@@ -242,7 +241,6 @@ impl Client {
 
     pub async fn refresh(&mut self) -> Result<()> {
         self.get_config().await?;
-        self.test_secrets().await?;
 
         Ok(())
     }
@@ -301,12 +299,13 @@ impl Client {
     }
 
     /// Retrieve a playlist
-    pub async fn playlist(&self, playlist_id: String) -> Result<Playlist> {
+    pub async fn playlist(&self, playlist_id: i64) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
+        let id_string = playlist_id.to_string();
         let params = vec![
             ("limit", "500"),
             ("extra", "tracks"),
-            ("playlist_id", playlist_id.as_str()),
+            ("playlist_id", id_string.as_str()),
             ("offset", "0"),
         ];
         let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
@@ -725,7 +724,7 @@ impl Client {
         let play_url = "https://play.qobuz.com";
         let login_page = self
             .client
-            .get(format!("{}/login", play_url))
+            .get(format!("{play_url}/login"))
             .send()
             .await
             .expect("failed to get login page. something is very wrong.");
@@ -739,7 +738,7 @@ impl Client {
             .get(1)
             .map_or("", |m| m.as_str());
 
-        let bundle_url = format!("{}{}", play_url, bundle_path);
+        let bundle_url = format!("{play_url}{bundle_path}");
         let bundle_page = self.client.get(bundle_url).send().await.unwrap();
 
         let bundle_contents = bundle_page.text().await.unwrap();
@@ -757,7 +756,7 @@ impl Client {
                 let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
                 let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-                let info_regex = format!(format_info!(), util::capitalize(&timezone));
+                let info_regex = format!(info_regex!(), util::capitalize(&timezone));
                 let info_regex_str = info_regex.as_str();
                 regex::Regex::new(info_regex_str)
                     .unwrap()
@@ -767,7 +766,7 @@ impl Client {
                         let info = c.name("info").map_or("", |m| m.as_str()).to_string();
                         let extras = c.name("extras").map_or("", |m| m.as_str()).to_string();
 
-                        let chars = format!("{}{}{}", seed, info, extras);
+                        let chars = format!("{seed}{info}{extras}");
                         let encoded_secret = chars[..chars.len() - 44].to_string();
                         let decoded_secret =
                             base64::decode(encoded_secret).expect("failed to decode base64 secret");
@@ -787,9 +786,10 @@ impl Client {
     }
 
     // Check the retrieved secrets to see which one works.
-    async fn test_secrets(&mut self) -> Result<()> {
-        debug!("testing secrets");
+    pub async fn test_secrets(&mut self) -> Result<()> {
         let secrets = self.secrets.clone();
+        debug!("testing secrets: {secrets:?}");
+
         let mut active_secret: Option<String> = None;
 
         for (timezone, secret) in secrets.iter() {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::player::Controls;
+use crate::{player::Controls, state::app::SafePlayerState};
 use gstreamer::ClockTime;
 use qobuz_client::client::track::TrackListTrack;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
@@ -10,14 +10,15 @@ pub struct Mpris {
     controls: Controls,
 }
 
-pub async fn init(controls: Controls) -> Connection {
+pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
     let mpris = Mpris {
         controls: controls.clone(),
     };
     let mpris_player = MprisPlayer {
         controls: controls.clone(),
+        state: state.clone(),
     };
-    let mpris_tracklist = MprisTrackList { controls };
+    let mpris_tracklist = MprisTrackList { controls, state };
 
     ConnectionBuilder::session()
         .unwrap()
@@ -74,6 +75,7 @@ impl Mpris {
 #[derive(Debug)]
 pub struct MprisPlayer {
     controls: Controls,
+    state: SafePlayerState,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
@@ -101,11 +103,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> &'static str {
-        if let Some(status) = self.controls.status().await {
-            status.as_str()
-        } else {
-            ""
-        }
+        self.state.lock().await.status().as_str()
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -121,7 +119,8 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
-        if let Some(next_up) = self.controls.currently_playing_track().await {
+        debug!("dbus metadata");
+        if let Some(next_up) = self.state.lock().await.current_track() {
             track_to_meta(next_up)
         } else {
             HashMap::new()
@@ -133,14 +132,18 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Position")]
     async fn position(&self) -> i64 {
-        if let Some(position) = self.controls.position().await {
-            position.inner_clocktime().useconds() as i64
-        } else {
-            0
-        }
+        self.state
+            .lock()
+            .await
+            .position()
+            .inner_clocktime()
+            .useconds() as i64
     }
     #[dbus_interface(signal, name = "Seeked")]
-    pub async fn seeked(ctxt: &SignalContext<'_>, message: i64) -> zbus::Result<()>;
+    pub async fn seeked(
+        #[zbus(signal_context)] ctxt: &SignalContext<'_>,
+        message: i64,
+    ) -> zbus::Result<()>;
     // #[dbus_interface(property)]
     // async fn set_position(&self, current: String, position: i64) {
     //     if let Some(next_up) = self.controls.currently_playing_track().await {
@@ -184,6 +187,7 @@ impl MprisPlayer {
 #[derive(Debug)]
 pub struct MprisTrackList {
     controls: Controls,
+    state: SafePlayerState,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.TrackList")]
@@ -192,21 +196,19 @@ impl MprisTrackList {
         &self,
         tracks: Vec<String>,
     ) -> Vec<HashMap<&'static str, zvariant::Value>> {
-        if let Some(playlist) = self.controls.remaining_tracks().await {
-            playlist
-                .vec()
-                .iter()
-                .filter_map(|i| {
-                    if tracks.contains(&i.track.id.to_string()) {
-                        Some(track_to_meta(i.clone()))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
-        } else {
-            vec![]
-        }
+        self.state
+            .lock()
+            .await
+            .unplayed_tracks()
+            .into_iter()
+            .filter_map(|i| {
+                if tracks.contains(&i.track.id.to_string()) {
+                    Some(track_to_meta(i.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
     }
     async fn go_to(&self, track_id: String) {
         if let Ok(id) = track_id.parse::<usize>() {
@@ -215,21 +217,19 @@ impl MprisTrackList {
     }
     #[dbus_interface(signal, name = "Seeked")]
     pub async fn track_list_replaced(
-        ctxt: &SignalContext<'_>,
+        #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<String>,
         current: String,
     ) -> zbus::Result<()>;
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
-        if let Some(playlist) = self.controls.remaining_tracks().await {
-            playlist
-                .vec()
-                .iter()
-                .map(|i| i.track.id.to_string())
-                .collect::<Vec<String>>()
-        } else {
-            vec![]
-        }
+        self.state
+            .lock()
+            .await
+            .unplayed_tracks()
+            .iter()
+            .map(|i| i.track.id.to_string())
+            .collect::<Vec<String>>()
     }
     #[dbus_interface(property, name = "CanEditTracks")]
     async fn can_edit_tracks(&self) -> bool {
@@ -266,9 +266,7 @@ fn track_to_meta(
     );
 
     if let Some(album) = playlist_track.album {
-        if let Some(thumb) = album.image.thumbnail {
-            meta.insert("mpris:artUrl", zvariant::Value::new(thumb));
-        }
+        meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
         meta.insert("xesam:album", zvariant::Value::new(album.title));
         meta.insert(
             "xesam:albumArtist",

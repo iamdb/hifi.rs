@@ -50,12 +50,16 @@ impl<'q> Qobuz<'q> {
             .await
             .expect("failed to refresh config");
         self.client.login().await.expect("failed to login");
+        // self.client
+        //     .test_secrets()
+        //     .await
+        //     .expect("failed to test secrets");
         self.progress.set_message("signed into Qobuz");
     }
 
-    pub async fn playlist(&self, playlist_id: String) -> Result<QobuzPlaylist> {
+    pub async fn playlist(&self, playlist_id: i64) -> Result<QobuzPlaylist> {
         self.progress
-            .set_message(format!("fetching playlist: {}", playlist_id));
+            .set_message(format!("fetching playlist: {playlist_id}"));
 
         let playlist = self.client.playlist(playlist_id).await?;
 
@@ -136,7 +140,7 @@ impl QobuzPlaylist {
 
     pub fn track_count(&self) -> usize {
         if let Some(tracks) = &self.0.tracks {
-            tracks.items.len() as usize
+            tracks.items.len()
         } else {
             0
         }

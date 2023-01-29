@@ -1,7 +1,6 @@
+use crate::client::{album::Album, AudioQuality, TrackURL};
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
-
-use crate::client::{album::Album, AudioQuality, TrackURL};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tracks {
@@ -72,6 +71,14 @@ impl From<Track> for Vec<u8> {
     }
 }
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TrackStatus {
+    Played,
+    Playing,
+    #[default]
+    Unplayed,
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TrackListTrack {
     pub track: Track,
@@ -80,6 +87,7 @@ pub struct TrackListTrack {
     pub album: Option<Album>,
     pub index: usize,
     pub total: usize,
+    pub status: TrackStatus,
 }
 
 impl TrackListTrack {
@@ -100,6 +108,7 @@ impl TrackListTrack {
             quality,
             track_url: None,
             album,
+            status: TrackStatus::Unplayed,
         }
     }
 
@@ -116,16 +125,15 @@ impl TrackListTrack {
         };
 
         vec![
-            self.index.to_string(),
+            self.track.track_number.to_string(),
             self.track.title.clone(),
             performer,
             duration,
         ]
     }
 
-    pub fn set_track_url(&mut self, track_url: TrackURL) -> Self {
+    pub fn set_track_url(&mut self, track_url: TrackURL) {
         self.track_url = Some(track_url);
-        self.clone()
     }
 }
 

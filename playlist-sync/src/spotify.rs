@@ -75,20 +75,28 @@ impl<'s> Spotify<'s> {
                         *self.client.get_token().lock().await.unwrap() = Some(refreshed_token);
                     }
                     None => {
-                        debug!("no cached token, authorizing client");
+                        debug!("no cached token, getting auth url");
                         let url = self.client.get_authorize_url(true).unwrap();
 
                         if webbrowser::open(&url).is_ok() {
+                            self.wait_for_auth().await;
+                        } else {
+                            println!("There was a problem opening the browser, please open this url manually:\n{url}");
                             self.wait_for_auth().await;
                         }
                     }
                 }
             }
         } else {
-            debug!("no cached token, authorizing client");
+            debug!("no cached token, getting auth url");
             let url = self.client.get_authorize_url(true).unwrap();
 
             if webbrowser::open(&url).is_ok() {
+                self.wait_for_auth().await;
+            } else {
+                println!(
+                    "There was a problem opening the browser, please open this url manually:\n{url}",
+                );
                 self.wait_for_auth().await;
             }
         }
@@ -141,15 +149,18 @@ impl<'s> Spotify<'s> {
         all_playlists
     }
 
-    pub async fn playlist(&self, playlist_id: PlaylistId) -> Result<SpotifyFullPlaylist> {
+    pub async fn playlist(&self, playlist_id: PlaylistId<'_>) -> Result<SpotifyFullPlaylist> {
         self.progress
             .set_message(format!("fetching playlist: {playlist_id}"));
         debug!("fetching playlist {}", playlist_id.to_string());
 
-        let spotify_playlist = self.client.playlist(&playlist_id, None, None).await?;
+        let spotify_playlist = self
+            .client
+            .playlist(playlist_id.clone(), None, None)
+            .await?;
 
         debug!("fetching all spotify playlist items");
-        let items = self.client.playlist_items(&playlist_id, None, None);
+        let items = self.client.playlist_items(playlist_id, None, None);
 
         match items.try_collect::<Vec<PlaylistItem>>().await {
             Ok(full_list) => {
@@ -224,7 +235,7 @@ impl SpotifyFullPlaylist {
     }
 
     pub fn track_count(&self) -> usize {
-        self.all_tracks.len() as usize
+        self.all_tracks.len()
     }
 }
 
