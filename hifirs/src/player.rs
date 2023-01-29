@@ -89,9 +89,9 @@ pub async fn new(client: Client, _resume: bool) -> Player {
     let playbin = gst::ElementFactory::make("playbin")
         .build()
         .expect("failed to create gst element");
-    let controls = Controls::new(state.clone());
+    let controls = Controls::new();
 
-    let connection = mpris::init(controls.clone()).await;
+    let connection = mpris::init(state.clone(), controls.clone()).await;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -216,7 +216,7 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
-                //self.dbus_seeked_signal(time).await;
+                self.dbus_seeked_signal(time).await;
             }
             Err(error) => {
                 error!("{}", error.message);
@@ -305,8 +305,8 @@ impl Player {
                     debug!("current track position >1s, seeking to start of track");
                     self.seek(ClockTime::default().into(), None).await;
 
-                    // self.dbus_seeked_signal(ClockValue::default()).await;
-                    // self.dbus_metadata_changed().await;
+                    self.dbus_seeked_signal(ClockValue::default()).await;
+                    self.dbus_metadata_changed().await;
 
                     return Ok(());
                 }
@@ -322,8 +322,9 @@ impl Player {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
-                // self.dbus_seeked_signal(ClockValue::default()).await;
-                // self.dbus_metadata_changed().await;
+                drop(state);
+                self.dbus_seeked_signal(ClockValue::default()).await;
+                self.dbus_metadata_changed().await;
 
                 self.playbin.set_property("uri", Some(track_url.url));
 
@@ -416,23 +417,25 @@ impl Player {
         state.attach_track_url(&mut first_track).await;
         state.set_current_track(first_track.clone());
 
+        drop(state);
+
         self.playbin
             .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
         self.play();
 
-        // if let Some(tracks) = album.tracks {
-        //     let tracks = tracks
-        //         .items
-        //         .iter()
-        //         .map(|t| t.id.to_string())
-        //         .collect::<Vec<String>>();
+        if let Some(tracks) = album.tracks {
+            let tracks = tracks
+                .items
+                .iter()
+                .map(|t| t.id.to_string())
+                .collect::<Vec<String>>();
 
-        //     let current = tracks.first().cloned().unwrap();
+            let current = tracks.first().cloned().unwrap();
 
-        //     self.dbus_track_list_replaced_signal(tracks, current).await;
-        // }
+            self.dbus_track_list_replaced_signal(tracks, current).await;
+        }
 
-        // self.dbus_metadata_changed().await;
+        self.dbus_metadata_changed().await;
     }
     /// Play an item from Qobuz web uri
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) {
@@ -477,23 +480,25 @@ impl Player {
             tracklist.set_playlist(playlist.clone());
 
             let first_track = tracklist.front().unwrap().clone();
+
             let mut state = self.state.lock().await;
             state.replace_list(tracklist);
             state.set_current_track(first_track.clone());
+            drop(state);
 
-            // if let Some(tracks) = playlist.tracks {
-            //     let tracks = tracks
-            //         .items
-            //         .iter()
-            //         .map(|t| t.id.to_string())
-            //         .collect::<Vec<String>>();
+            if let Some(tracks) = playlist.tracks {
+                let tracks = tracks
+                    .items
+                    .iter()
+                    .map(|t| t.id.to_string())
+                    .collect::<Vec<String>>();
 
-            //     let current = tracks.first().cloned().unwrap();
+                let current = tracks.first().cloned().unwrap();
 
-            //     self.dbus_track_list_replaced_signal(tracks, current).await;
-            // }
+                self.dbus_track_list_replaced_signal(tracks, current).await;
+            }
 
-            // self.dbus_metadata_changed().await;
+            self.dbus_metadata_changed().await;
             self.start(first_track, quality).await;
         }
     }
@@ -589,7 +594,7 @@ impl Player {
                             break;
                         },
                         MessageView::StreamStart(_) => {
-                            //self.dbus_metadata_changed().await;
+                            self.dbus_metadata_changed().await;
                         }
                         MessageView::DurationChanged(_) => {
                             if let Some(duration) = self.duration() {
@@ -636,8 +641,8 @@ impl Player {
                                     .get::<GstState>()
                                     .unwrap();
 
-                                // let iface_ref = self.player_iface().await;
-                                // let iface = iface_ref.get_mut().await;
+                                let iface_ref = self.player_iface().await;
+                                let iface = iface_ref.get_mut().await;
 
                                 match current_state {
                                     GstState::Playing => {
@@ -645,54 +650,59 @@ impl Player {
 
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Playing.into());
+                                        drop(state);
 
-                                        // iface
-                                        //     .playback_status_changed(iface_ref.signal_context())
-                                        //     .await
-                                        //     .expect("failed");
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
 
                                     }
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Paused.into());
+                                        drop(state);
 
-                                        // iface
-                                        //     .playback_status_changed(iface_ref.signal_context())
-                                        //     .await
-                                        //     .expect("failed");
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
                                     }
                                     GstState::Ready => {
                                         debug!("player state changed to Ready");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Ready.into());
+                                        drop(state);
 
-                                        // iface
-                                        //     .playback_status_changed(iface_ref.signal_context())
-                                        //     .await
-                                        //     .expect("failed");
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
 
                                     }
                                     GstState::VoidPending => {
                                         debug!("player state changed to VoidPending");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::VoidPending.into());
+                                        drop(state);
 
-                                        // iface
-                                        //     .playback_status_changed(iface_ref.signal_context())
-                                        //     .await
-                                        //     .expect("failed");
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
 
                                     },
                                     GstState::Null => {
                                         debug!("player state changed to Null");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Null.into());
+                                        drop(state);
 
-                                        // iface
-                                        //     .playback_status_changed(iface_ref.signal_context())
-                                        //     .await
-                                        //     .expect("failed");
+                                        iface
+                                            .playback_status_changed(iface_ref.signal_context())
+                                            .await
+                                            .expect("failed");
                                     },
                                     _ => (),
 
@@ -820,15 +830,13 @@ impl Player {
 pub struct Controls {
     action_tx: Sender<Action>,
     action_rx: Receiver<Action>,
-    state: SafePlayerState,
 }
 
 impl Controls {
-    fn new(state: SafePlayerState) -> Controls {
+    fn new() -> Controls {
         let (action_tx, action_rx) = flume::bounded::<Action>(10);
 
         Controls {
-            state,
             action_rx,
             action_tx,
         }
@@ -880,34 +888,6 @@ impl Controls {
     }
     pub async fn play_playlist(&self, playlist_id: i64) {
         action!(self, Action::PlayPlaylist { playlist_id })
-    }
-    pub async fn position(&self) -> Option<ClockValue> {
-        let state = self.state.lock().await;
-
-        Some(state.position())
-    }
-    pub async fn status(&self) -> Option<StatusValue> {
-        let state = self.state.lock().await;
-
-        Some(state.status())
-    }
-
-    pub async fn currently_playing_track(&self) -> Option<TrackListTrack> {
-        let state = self.state.lock().await;
-
-        state.current_track()
-    }
-
-    pub async fn remaining_tracks(&self) -> Option<Vec<TrackListTrack>> {
-        let state = self.state.lock().await;
-
-        Some(
-            state
-                .unplayed_tracks()
-                .into_iter()
-                .cloned()
-                .collect::<Vec<TrackListTrack>>(),
-        )
     }
 }
 

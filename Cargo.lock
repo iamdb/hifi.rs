@@ -107,12 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic_refcell"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "857253367827bd9d0fd973f0ef15506a96e79e41b0ad7aa691203a4e3214f6c8"
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1153,63 +1147,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gstreamer-base"
-version = "0.19.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a61a299f9ea2ca892b43e2e428b86c679875e95ba23f8ae06fd730308df630f0"
-dependencies = [
- "atomic_refcell",
- "bitflags",
- "cfg-if",
- "glib 0.16.7",
- "gstreamer 0.19.7",
- "gstreamer-base-sys",
- "libc",
-]
-
-[[package]]
-name = "gstreamer-base-sys"
-version = "0.19.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbc3c4476e1503ae245c89fbe20060c30ec6ade5f44620bcc402cbc70a3911a1"
-dependencies = [
- "glib-sys 0.16.3",
- "gobject-sys 0.16.3",
- "gstreamer-sys 0.19.4",
- "libc",
- "system-deps",
-]
-
-[[package]]
-name = "gstreamer-player"
-version = "0.19.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d058cf1a5db88fdfdc370a3e7c88335cba2f238578a794e1f8e58d8f903835d"
-dependencies = [
- "bitflags",
- "glib 0.16.7",
- "gstreamer 0.19.7",
- "gstreamer-player-sys",
- "gstreamer-video",
- "libc",
- "once_cell",
-]
-
-[[package]]
-name = "gstreamer-player-sys"
-version = "0.19.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4725bb801f8c7976f93d3846eca66c8ababf263bafcca3c43a7b17f9f01fae19"
-dependencies = [
- "glib-sys 0.16.3",
- "gobject-sys 0.16.3",
- "gstreamer-sys 0.19.4",
- "gstreamer-video-sys",
- "libc",
- "system-deps",
-]
-
-[[package]]
 name = "gstreamer-sys"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1229,37 +1166,6 @@ checksum = "545f52ad8a480732cc4290fd65dfe42952c8ae374fe581831ba15981fedf18a4"
 dependencies = [
  "glib-sys 0.16.3",
  "gobject-sys 0.16.3",
- "libc",
- "system-deps",
-]
-
-[[package]]
-name = "gstreamer-video"
-version = "0.19.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb19dcbdd5436483e764318bef157070f192acc5b1199e85878723a9ce33d4e3"
-dependencies = [
- "bitflags",
- "cfg-if",
- "futures-channel",
- "glib 0.16.7",
- "gstreamer 0.19.7",
- "gstreamer-base",
- "gstreamer-video-sys",
- "libc",
- "once_cell",
-]
-
-[[package]]
-name = "gstreamer-video-sys"
-version = "0.19.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7546bc798c898f2083330d81a7efff48f65a31b03873f410538032d26ec0cdc7"
-dependencies = [
- "glib-sys 0.16.3",
- "gobject-sys 0.16.3",
- "gstreamer-base-sys",
- "gstreamer-sys 0.19.4",
  "libc",
  "system-deps",
 ]
@@ -1386,7 +1292,6 @@ dependencies = [
  "flume",
  "futures",
  "gstreamer 0.19.7",
- "gstreamer-player",
  "log",
  "md5",
  "pretty_env_logger",
@@ -1403,7 +1308,6 @@ dependencies = [
  "tui",
  "url",
  "zbus",
- "zerocopy",
 ]
 
 [[package]]
@@ -1865,15 +1769,6 @@ dependencies = [
  "safemem",
  "tempfile",
  "twoway",
-]
-
-[[package]]
-name = "nanoid"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ffa00dec017b5b1a8b7cf5e2c008bfda1aa7e0697ac1508b491fdf2622fb4d8"
-dependencies = [
- "rand",
 ]
 
 [[package]]
@@ -2408,17 +2303,12 @@ version = "0.1.0"
 dependencies = [
  "base64 0.13.1",
  "bincode",
- "byteorder",
  "chrono",
  "clap",
- "enum-as-inner",
- "flume",
- "futures",
  "gstreamer 0.18.8",
  "insta",
  "log",
  "md5",
- "nanoid",
  "pretty_env_logger",
  "regex",
  "reqwest",
@@ -2429,7 +2319,6 @@ dependencies = [
  "tokio-test",
  "url",
  "util",
- "zerocopy",
 ]
 
 [[package]]
@@ -4078,27 +3967,6 @@ dependencies = [
  "serde",
  "static_assertions",
  "zvariant",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "332f188cc1bcf1fe1064b8c58d150f497e697f49774aa846f2dc949d9a25f236"
-dependencies = [
- "byteorder",
- "zerocopy-derive",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6505e6815af7de1746a08f69c69606bb45695a17149517680f3b2149713b19a3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

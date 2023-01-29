@@ -257,11 +257,10 @@ impl Tui {
                     }
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
-                    if let Some(status) = self.controls.status().await {
-                        if status == GstState::Playing.into() {
-                            self.controls.pause().await;
-                            std::thread::sleep(Duration::from_millis(500));
-                        }
+                    let status = self.state.lock().await.status();
+                    if status == GstState::Playing.into() {
+                        self.controls.pause().await;
+                        std::thread::sleep(Duration::from_millis(500));
                     }
                     self.controls.stop().await;
                     std::thread::sleep(Duration::from_millis(500));
