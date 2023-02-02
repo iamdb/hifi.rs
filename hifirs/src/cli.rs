@@ -2,7 +2,7 @@ use crate::{
     player,
     qobuz::{self, SearchResults},
     sql::db,
-    switch_screen, ui, wait, REFRESH_RESOLUTION,
+    switch_screen, ui, wait,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -443,11 +443,10 @@ macro_rules! wait {
         loop {
             if let Ok(quit) = quitter.try_recv() {
                 if quit {
-                    debug!("quitting");
+                    debug!("quitting main thread");
                     break;
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(REFRESH_RESOLUTION));
         }
     };
 }

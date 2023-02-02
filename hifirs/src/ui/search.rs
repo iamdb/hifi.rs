@@ -69,10 +69,6 @@ impl SearchScreen {
             SearchResults::Albums(results) => {
                 if let Some(album) = results.albums.items.get(selected) {
                     self.controls.play_album(album.id.clone()).await;
-                    // executor::block_on(self.db.insert::<String, ActiveScreen>(
-                    //     StateKey::App(AppKey::ActiveScreen),
-                    //     ActiveScreen::NowPlaying,
-                    // ));
                     return true;
                 };
             }

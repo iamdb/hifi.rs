@@ -1,13 +1,9 @@
 use qobuz_client::client::{ApiConfig, AudioQuality};
-use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 use tokio::sync::broadcast::{Receiver, Sender};
 
-use crate::{
-    acquire, get_one, query,
-    state::{app::StateKey, Bytes},
-};
+use crate::{acquire, get_one, query};
 
 #[derive(Debug, Clone)]
 pub struct Database {
@@ -60,59 +56,6 @@ impl Database {
                 .execute(&mut conn)
                 .await
                 .expect("failed to clear state");
-        }
-    }
-    pub async fn insert<K, T>(&self, key: StateKey, value: T)
-    where
-        K: FromStr,
-        T: Serialize,
-    {
-        if let Ok(serialized) = bincode::serialize(&value) {
-            if let Ok(mut conn) = acquire!(self) {
-                let key = key.as_str();
-
-                sqlx::query(
-                    r#"
-                INSERT INTO state (key,value)
-                VALUES (?1, ?2)
-                ON CONFLICT(key) DO UPDATE
-                SET value=?2
-                "#,
-                )
-                .bind(key)
-                .bind(serialized)
-                .execute(&mut conn)
-                .await
-                .expect("database failure");
-            }
-        }
-    }
-
-    pub async fn get<'a, K, T>(&self, key: StateKey) -> Option<T>
-    where
-        K: FromStr,
-        T: Into<T> + From<Bytes> + Deserialize<'a>,
-    {
-        if let Ok(mut conn) = acquire!(self) {
-            let key = key.as_str();
-
-            if let Ok(rec) = sqlx::query!(
-                r#"
-            SELECT value FROM state
-            WHERE key=?1
-            "#,
-                key,
-            )
-            .fetch_one(&mut conn)
-            .await
-            {
-                let bytes: Bytes = rec.value.into();
-                Some(bytes.into())
-            } else {
-                None
-            }
-        } else {
-            None
         }
     }
 

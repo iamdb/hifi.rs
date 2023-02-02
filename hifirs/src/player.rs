@@ -17,7 +17,7 @@ use qobuz_client::client::{
     api::Client,
     playlist::Playlist,
     track::{Track, TrackListTrack, TrackStatus},
-    AudioQuality, TrackURL,
+    AudioQuality,
 };
 use snafu::prelude::*;
 use std::{sync::Arc, time::Duration};
@@ -142,7 +142,6 @@ pub async fn new(client: Client, _resume: bool) -> Player {
     player
 }
 
-#[allow(unused)]
 impl Player {
     /// Play the player.
     pub fn play(&self) {
@@ -179,11 +178,6 @@ impl Player {
             .set_state(gst::State::Null)
             .expect("Unable to set the pipeline to the `Null` state");
     }
-    /// Set the uri of the track to play.
-    pub fn set_uri(&self, track_url: TrackURL) {
-        self.playbin
-            .set_property("uri", Some(track_url.url.as_str()));
-    }
     /// Is the player paused?
     pub fn is_paused(&self) -> bool {
         self.playbin.current_state() == gst::State::Paused
@@ -216,6 +210,7 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
+                self.state.lock().await.set_position(time.clone());
                 self.dbus_seeked_signal(time).await;
             }
             Err(error) => {
@@ -318,7 +313,7 @@ impl Player {
         let mut state = self.state.lock().await;
         state.reset_player();
 
-        if let Some(mut next_track_to_play) = state.skip_track(num, direction.clone()).await {
+        if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
@@ -536,12 +531,28 @@ impl Player {
                     match quit {
                         Ok(quit) => {
                             if quit {
-                                debug!("quitting");
-                                break;
+                                debug!("quitting player loop");
+                                let status = self.current_state();
+                                if status == GstState::Playing.into() {
+                                    debug!("pausing player");
+                                    self.pause();
+                                }
+
+                                if status != GstState::Null.into() {
+                                    debug!("stopping player");
+                                    self.stop();
+                                }
+
+                                while self.current_state() != GstState::Null.into() {
+                                    debug!("waiting for player to stop");
+                                    std::thread::sleep(Duration::from_millis(100));
+                                }
+
+                                std::process::exit(0);
                             }
                         },
                         Err(_) => {
-                            debug!("quitting, with error");
+                            debug!("quitting player loop, with error");
                             break;
                         },
                     }
@@ -591,7 +602,6 @@ impl Player {
 
                             self.stop();
                             self.state.lock().await.quit();
-                            break;
                         },
                         MessageView::StreamStart(_) => {
                             self.dbus_metadata_changed().await;
@@ -728,13 +738,16 @@ impl Player {
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
     async fn clock_loop(&self) {
+        let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
         let mut quit_receiver = self.state.lock().await.quitter();
 
         loop {
+            interval.tick().await;
+
             if let Ok(quit) = quit_receiver.try_recv() {
                 if quit {
-                    debug!("quitting");
-                    break;
+                    debug!("quitting clock loop");
+                    return;
                 }
             }
             if self.current_state() != GstState::VoidPending.into()
@@ -753,8 +766,6 @@ impl Player {
                     state.set_duration_remaining(remaining.into());
                     state.set_duration(duration.into());
                 }
-
-                std::thread::sleep(Duration::from_millis(REFRESH_RESOLUTION));
             }
         }
     }
@@ -804,7 +815,7 @@ impl Player {
     async fn prep_next_track(&self) -> Option<String> {
         let mut state = self.state.lock().await;
 
-        if let Some(mut next_track) = state.skip_track(None, SkipDirection::Forward).await {
+        if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
             //self.dbus_metadata_changed().await;
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = next_track.track_url {
