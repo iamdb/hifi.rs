@@ -216,6 +216,7 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
+                self.state.lock().await.set_position(time.clone());
                 self.dbus_seeked_signal(time).await;
             }
             Err(error) => {
@@ -537,12 +538,23 @@ impl Player {
                         Ok(quit) => {
                             if quit {
                                 debug!("quitting player loop");
-                                return;
+                                let status = self.current_state();
+                                if status == GstState::Playing.into() {
+                                    debug!("pausing player");
+                                    self.pause();
+                                }
+
+                                if status != GstState::Null.into() {
+                                    debug!("stopping player");
+                                    self.stop();
+                                }
+
+                                std::process::exit(0);
                             }
                         },
                         Err(_) => {
                             debug!("quitting player loop, with error");
-                            return;
+                            break;
                         },
                     }
                 }
@@ -591,7 +603,6 @@ impl Player {
 
                             self.stop();
                             self.state.lock().await.quit();
-                            break;
                         },
                         MessageView::StreamStart(_) => {
                             self.dbus_metadata_changed().await;

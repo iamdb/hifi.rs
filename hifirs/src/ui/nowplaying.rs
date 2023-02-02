@@ -162,7 +162,7 @@ impl Screen for NowPlayingScreen {
 
                                 let mut index = selection + 1;
 
-                                if index < unplayed {
+                                if index <= unplayed {
                                     index += played;
                                 } else {
                                     index = selection - unplayed;

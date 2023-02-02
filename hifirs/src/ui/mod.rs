@@ -16,7 +16,6 @@ use crate::{
 };
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
-use gstreamer::State as GstState;
 use qobuz_client::client::api::Client;
 use snafu::prelude::*;
 use std::{collections::HashMap, io::Stdout, sync::Arc, time::Duration};
@@ -217,16 +216,14 @@ impl Tui {
                     if quit {
                         stdin_handle.abort();
                         tick_handle.abort();
-                        break;
+                        return Ok(());
                     }
                 }
                 Some(event) = event_stream.next() => {
-                    self.handle_event(event).await
+                    self.handle_event(event).await;
                 }
             }
         }
-
-        Ok(())
     }
     async fn handle_event(&mut self, event: Event) {
         match event {
@@ -255,13 +252,6 @@ impl Tui {
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
                     debug!("quitting ui handle event loop");
-                    let status = self.state.lock().await.status();
-                    if status == GstState::Playing.into() {
-                        self.controls.pause().await;
-                        tokio::time::sleep(Duration::from_millis(250)).await;
-                    }
-                    self.controls.stop().await;
-                    tokio::time::sleep(Duration::from_millis(250)).await;
                     self.state.lock().await.quit();
                 }
                 _ => {

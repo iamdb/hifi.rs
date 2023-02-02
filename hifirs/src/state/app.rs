@@ -180,43 +180,62 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
-        let next_track_index = if let Some(i) = index {
-            debug!("received a track index, using that {i}");
-            i
-        } else if let Some(current_track_index) = self.current_track_index() {
-            if direction == SkipDirection::Forward {
-                if current_track_index < self.tracklist.len() {
-                    current_track_index + 1
-                } else {
-                    self.tracklist.len()
+        let next_track_index = if let Some(current_track_index) = self.current_track_index() {
+            match direction {
+                SkipDirection::Forward => {
+                    if let Some(i) = index {
+                        if i < self.tracklist.len() {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    } else if current_track_index < self.tracklist.len() - 1 {
+                        Some(current_track_index + 1)
+                    } else {
+                        None
+                    }
                 }
-            } else if current_track_index > 1 {
-                current_track_index - 1
-            } else {
-                0
+                SkipDirection::Backward => {
+                    if let Some(i) = index {
+                        if i < self.tracklist.len() {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    } else if current_track_index > 1 {
+                        Some(current_track_index - 1)
+                    } else {
+                        Some(0)
+                    }
+                }
             }
         } else {
-            0
+            None
         };
 
-        self.tracklist
-            .queue
-            .iter_mut()
-            .for_each(|mut t| match t.index.cmp(&next_track_index) {
-                std::cmp::Ordering::Less => {
-                    t.status = TrackStatus::Played;
-                }
-                std::cmp::Ordering::Equal => {
-                    t.status = TrackStatus::Playing;
-                    self.current_track = Some(t.clone());
-                }
-                std::cmp::Ordering::Greater => {
-                    t.status = TrackStatus::Unplayed;
-                }
-            });
+        if let Some(index) = next_track_index {
+            self.tracklist
+                .queue
+                .iter_mut()
+                .for_each(|mut t| match t.index.cmp(&index) {
+                    std::cmp::Ordering::Less => {
+                        t.status = TrackStatus::Played;
+                    }
+                    std::cmp::Ordering::Equal => {
+                        t.status = TrackStatus::Playing;
+                        self.current_track = Some(t.clone());
+                    }
+                    std::cmp::Ordering::Greater => {
+                        t.status = TrackStatus::Unplayed;
+                    }
+                });
 
-        self.attach_track_url_current().await;
-        self.current_track.clone()
+            self.attach_track_url_current().await;
+            self.current_track.clone()
+        } else {
+            debug!("no more tracks");
+            None
+        }
     }
 
     pub fn reset_player(&mut self) {
