@@ -44,11 +44,9 @@ pub trait Screen {
     async fn key_events(&mut self, key: Key) -> Option<()>;
 }
 
-#[allow(unused)]
 pub struct Tui {
     rx: Receiver<Event>,
     tx: Sender<Event>,
-    controls: Controls,
     terminal: Console,
     screens: HashMap<ActiveScreen, Arc<Mutex<dyn Screen>>>,
     state: SafePlayerState,
@@ -133,7 +131,6 @@ pub async fn new(
     );
 
     let tui = Tui {
-        controls,
         state: state.clone(),
         rx,
         terminal,

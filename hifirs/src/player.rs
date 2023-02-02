@@ -17,7 +17,7 @@ use qobuz_client::client::{
     api::Client,
     playlist::Playlist,
     track::{Track, TrackListTrack, TrackStatus},
-    AudioQuality, TrackURL,
+    AudioQuality,
 };
 use snafu::prelude::*;
 use std::{sync::Arc, time::Duration};
@@ -142,7 +142,6 @@ pub async fn new(client: Client, _resume: bool) -> Player {
     player
 }
 
-#[allow(unused)]
 impl Player {
     /// Play the player.
     pub fn play(&self) {
@@ -178,11 +177,6 @@ impl Player {
         self.playbin
             .set_state(gst::State::Null)
             .expect("Unable to set the pipeline to the `Null` state");
-    }
-    /// Set the uri of the track to play.
-    pub fn set_uri(&self, track_url: TrackURL) {
-        self.playbin
-            .set_property("uri", Some(track_url.url.as_str()));
     }
     /// Is the player paused?
     pub fn is_paused(&self) -> bool {
@@ -319,7 +313,7 @@ impl Player {
         let mut state = self.state.lock().await;
         state.reset_player();
 
-        if let Some(mut next_track_to_play) = state.skip_track(num, direction.clone()).await {
+        if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
@@ -547,6 +541,11 @@ impl Player {
                                 if status != GstState::Null.into() {
                                     debug!("stopping player");
                                     self.stop();
+                                }
+
+                                while self.current_state() != GstState::Null.into() {
+                                    debug!("waiting for player to stop");
+                                    std::thread::sleep(Duration::from_millis(100));
                                 }
 
                                 std::process::exit(0);
@@ -816,7 +815,7 @@ impl Player {
     async fn prep_next_track(&self) -> Option<String> {
         let mut state = self.state.lock().await;
 
-        if let Some(mut next_track) = state.skip_track(None, SkipDirection::Forward).await {
+        if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
             //self.dbus_metadata_changed().await;
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = next_track.track_url {
