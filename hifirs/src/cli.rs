@@ -184,7 +184,7 @@ pub async fn run() -> Result<(), Error> {
         Commands::Resume { no_tui } => {
             let player = player::new(client.clone(), true).await;
 
-            player.play();
+            player.play().await;
 
             if no_tui {
                 wait!(data);

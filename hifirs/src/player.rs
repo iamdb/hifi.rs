@@ -144,39 +144,44 @@ pub async fn new(client: Client, _resume: bool) -> Player {
 
 impl Player {
     /// Play the player.
-    pub fn play(&self) {
-        self.playbin
-            .set_state(gst::State::Playing)
-            .expect("Unable to set the pipeline to the `Playing` state");
+    pub async fn play(&self) {
+        self.set_player_state(gst::State::Playing).await;
     }
     /// Pause the player.
-    pub fn pause(&self) {
-        self.playbin
-            .set_state(gst::State::Paused)
-            .expect("Unable to set the pipeline to the `Paused` state");
-    }
-    /// Toggle play and pause.
-    pub fn play_pause(&self) {
-        if self.is_playing() {
-            self.pause();
-        } else if self.is_paused() {
-            self.play()
-        }
+    pub async fn pause(&self) {
+        self.set_player_state(gst::State::Paused).await;
     }
     /// Ready the player.
-    pub fn ready(&self) {
-        self.playbin
-            .set_state(gst::State::Ready)
-            .expect("Unable to set the pipeline to the `Ready` state");
-    }
-    pub fn state(&self) -> SafePlayerState {
-        self.state.clone()
+    pub async fn ready(&self) {
+        self.set_player_state(gst::State::Ready).await;
     }
     /// Stop the player.
-    pub fn stop(&self) {
+    pub async fn stop(&self) {
+        self.set_player_state(gst::State::Null).await;
+    }
+    /// Sets the player to a specific state.
+    pub async fn set_player_state(&self, state: gst::State) {
         self.playbin
-            .set_state(gst::State::Null)
-            .expect("Unable to set the pipeline to the `Null` state");
+            .set_state(state)
+            .expect("failed to set player state {state}");
+
+        let mut interval = tokio::time::interval(Duration::from_millis(500));
+        while self.current_state() != state.into() {
+            debug!("waiting for player to stop");
+            interval.tick().await;
+        }
+    }
+    /// Toggle play and pause.
+    pub async fn play_pause(&self) {
+        if self.is_playing() {
+            self.pause().await;
+        } else if self.is_paused() {
+            self.play().await;
+        }
+    }
+    /// Retreive the current player state.
+    pub fn state(&self) -> SafePlayerState {
+        self.state.clone()
     }
     /// Is the player paused?
     pub fn is_paused(&self) -> bool {
@@ -190,11 +195,13 @@ impl Player {
     pub fn current_state(&self) -> StatusValue {
         self.playbin.current_state().into()
     }
+    /// Current track position.
     pub fn position(&self) -> Option<ClockValue> {
         self.playbin
             .query_position::<ClockTime>()
             .map(|position| position.into())
     }
+    /// Current track duraiton.
     pub fn duration(&self) -> Option<ClockValue> {
         self.playbin
             .query_duration::<ClockTime>()
@@ -254,6 +261,7 @@ impl Player {
     pub fn controls(&self) -> Controls {
         self.controls.clone()
     }
+    /// Reset player state.
     pub async fn reset_state(&self) {
         self.state.lock().await.reset();
     }
@@ -308,7 +316,7 @@ impl Player {
             }
         }
 
-        self.ready();
+        self.ready().await;
 
         let mut state = self.state.lock().await;
         state.reset_player();
@@ -323,7 +331,7 @@ impl Player {
 
                 self.playbin.set_property("uri", Some(track_url.url));
 
-                self.play();
+                self.play().await;
             }
         }
         Ok(())
@@ -365,7 +373,7 @@ impl Player {
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) {
         if self.is_playing() {
-            self.stop();
+            self.stop().await;
         }
 
         let quality = if let Some(quality) = quality {
@@ -382,7 +390,7 @@ impl Player {
     /// Plays a full album.
     pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) {
         if self.is_playing() || self.is_paused() {
-            self.stop();
+            self.stop().await;
         }
 
         self.reset_state().await;
@@ -416,7 +424,7 @@ impl Player {
 
         self.playbin
             .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
-        self.play();
+        self.play().await;
 
         if let Some(tracks) = album.tracks {
             let tracks = tracks
@@ -455,9 +463,10 @@ impl Player {
             }
         }
     }
+    /// Plays all tracks in a playlist.
     pub async fn play_playlist(&self, mut playlist: Playlist, quality: Option<AudioQuality>) {
         if self.is_playing() || self.is_paused() {
-            self.stop();
+            self.stop().await;
         }
 
         self.reset_state().await;
@@ -510,7 +519,7 @@ impl Player {
             playbin.set_property("uri", Some(track_url.url.as_str()));
             track.set_track_url(track_url);
 
-            self.play();
+            self.play().await;
         }
     }
     /// Handles messages from the player and takes necessary action.
@@ -535,17 +544,12 @@ impl Player {
                                 let status = self.current_state();
                                 if status == GstState::Playing.into() {
                                     debug!("pausing player");
-                                    self.pause();
+                                    self.pause().await;
                                 }
 
                                 if status != GstState::Null.into() {
                                     debug!("stopping player");
-                                    self.stop();
-                                }
-
-                                while self.current_state() != GstState::Null.into() {
-                                    debug!("waiting for player to stop");
-                                    std::thread::sleep(Duration::from_millis(100));
+                                    self.stop().await;
                                 }
 
                                 std::process::exit(0);
@@ -569,11 +573,11 @@ impl Player {
                         Action::JumpBackward => self.jump_backward().await,
                         Action::JumpForward => self.jump_forward().await,
                         Action::Next => self.skip(SkipDirection::Forward,None).await.expect("failed to skip forward"),
-                        Action::Pause => self.pause(),
-                        Action::Play => self.play(),
-                        Action::PlayPause => self.play_pause(),
+                        Action::Pause => self.pause().await,
+                        Action::Play => self.play().await,
+                        Action::PlayPause => self.play_pause().await,
                         Action::Previous => self.skip(SkipDirection::Backward,None).await.expect("failed to skip backward"),
-                        Action::Stop => self.stop(),
+                        Action::Stop => self.stop().await,
                         Action::PlayAlbum { album_id } => {
                             if let Ok(album) = self.client.album(album_id).await {
                                 self.play_album(album, None).await;
@@ -599,8 +603,6 @@ impl Player {
                     match msg.view() {
                         MessageView::Eos(_) => {
                             debug!("END OF STREAM");
-
-                            self.stop();
                             self.state.lock().await.quit();
                         },
                         MessageView::StreamStart(_) => {
