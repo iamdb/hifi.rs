@@ -1,6 +1,7 @@
 use crate::{
     action,
     mpris::{self, MprisPlayer, MprisTrackList},
+    sql::db::Database,
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
         ClockValue, StatusValue, TrackListType, TrackListValue,
@@ -83,9 +84,9 @@ pub struct Player {
     _resume: bool,
 }
 
-pub async fn new(client: Client, _resume: bool) -> Player {
+pub async fn new(client: Client, db: Database, _resume: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
-    let state = Arc::new(Mutex::new(PlayerState::new(client.clone())));
+    let state = Arc::new(Mutex::new(PlayerState::new(client.clone(), db)));
     let playbin = gst::ElementFactory::make("playbin")
         .build()
         .expect("failed to create gst element");

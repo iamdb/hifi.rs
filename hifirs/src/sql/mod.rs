@@ -14,7 +14,7 @@ macro_rules! query {
         sqlx::query!($query, $value)
             .execute(&mut $conn)
             .await
-            .expect("database failure");
+            .expect("database failure")
     };
 }
 

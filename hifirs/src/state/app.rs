@@ -1,7 +1,9 @@
 use crate::{
-    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListValue},
+    sql::db::Database,
+    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
     ui::components::{Row, TableRows},
 };
+use futures::executor;
 use qobuz_client::client::{
     album::Album,
     api::Client,
@@ -33,6 +35,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
+    db: Database,
     client: Client,
     current_track: Option<TrackListTrack>,
     tracklist: TrackListValue,
@@ -125,6 +128,10 @@ impl PlayerState {
 
     pub fn album(&self) -> Option<&Album> {
         self.tracklist.get_album()
+    }
+
+    pub fn list_type(&self) -> TrackListType {
+        self.tracklist.list_type.clone()
     }
 
     pub fn playlist(&self) -> Option<&Playlist> {
@@ -249,6 +256,8 @@ impl PlayerState {
     }
 
     pub fn quit(&self) {
+        executor::block_on(self.persist());
+
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
@@ -273,11 +282,12 @@ impl PlayerState {
         self.is_buffering = false;
         self.resume = false;
     }
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, db: Database) -> Self {
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
         Self {
+            db,
             current_track: None,
             client,
             tracklist,
@@ -292,6 +302,11 @@ impl PlayerState {
             active_screen: ActiveScreen::NowPlaying,
             quit_sender,
         }
+    }
+
+    pub async fn persist(&self) {
+        debug!("persisting state to database");
+        self.db.persist_state(self.clone()).await;
     }
 }
 

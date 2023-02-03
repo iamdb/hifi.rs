@@ -1,14 +1,15 @@
 use qobuz_client::client::{ApiConfig, AudioQuality};
 use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 use std::path::PathBuf;
-use tokio::sync::broadcast::{Receiver, Sender};
 
-use crate::{acquire, get_one, query};
+use crate::{
+    acquire, get_one, query,
+    state::{app::PlayerState, TrackListType},
+};
 
 #[derive(Debug, Clone)]
 pub struct Database {
     pool: Pool<Sqlite>,
-    quit_sender: Sender<bool>,
 }
 
 pub async fn new() -> Database {
@@ -27,6 +28,8 @@ pub async fn new() -> Database {
         url
     };
 
+    debug!("DATABASE_URL: {}", database_url.to_string_lossy());
+
     let options = SqliteConnectOptions::new()
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .filename(database_url)
@@ -41,9 +44,7 @@ pub async fn new() -> Database {
         .await
         .expect("migration failed");
 
-    let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
-
-    let db = Database { pool, quit_sender };
+    let db = Database { pool };
     db.create_config().await;
 
     db
@@ -173,21 +174,48 @@ impl Database {
         }
     }
 
+    pub async fn persist_state(&self, state: PlayerState) {
+        if let Ok(mut conn) = acquire!(self) {
+            if let (Some(current_track), Some(playback_track_index)) =
+                (state.current_track(), state.current_track_index())
+            {
+                let playback_track_index = playback_track_index as i32;
+                let playback_track_id = current_track.track.id;
+                let playback_position = state.position().inner_clocktime().mseconds() as i32;
+                let playback_entity_type = state.list_type();
+                let playback_entity_id = match playback_entity_type {
+                    TrackListType::Album => {
+                        state.album().expect("failed to get album id").id.clone()
+                    }
+                    TrackListType::Playlist => state
+                        .playlist()
+                        .expect("failed to get playlist id")
+                        .id
+                        .to_string(),
+                    TrackListType::Track => "".to_string(),
+                    TrackListType::Unknown => "".to_string(),
+                };
+
+                if !playback_entity_id.is_empty() {
+                    let playback_entity_type = playback_entity_type.to_string();
+
+                    sqlx::query!(
+                        r#"INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"#,
+                        playback_track_id,
+                        playback_position,
+                        playback_track_index,
+                        playback_entity_id,
+                        playback_entity_type
+                    )
+                    .execute(&mut conn)
+                    .await
+                    .expect("database failure");
+                }
+            }
+        }
+    }
+
     pub async fn close(&self) {
         self.pool.close().await;
-    }
-
-    pub fn quitter(&self) -> Receiver<bool> {
-        self.quit_sender.subscribe()
-    }
-
-    pub fn quit(&self) {
-        self.quit_sender
-            .send(true)
-            .expect("failed to send quit message");
-
-        futures::executor::block_on(async {
-            self.pool.close().await;
-        });
     }
 }

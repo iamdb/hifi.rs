@@ -182,12 +182,12 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let player = player::new(client.clone(), true).await;
+            let player = player::new(client.clone(), data, true).await;
 
             player.play().await;
 
             if no_tui {
-                wait!(data);
+                wait!(player.state());
             } else {
                 let mut tui =
                     ui::new(player.state(), player.controls(), client, None, None).await?;
@@ -197,12 +197,12 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let player = player::new(client.clone(), true).await;
+            let player = player::new(client.clone(), data, true).await;
 
             player.play_uri(uri, Some(client.quality())).await;
 
             if no_tui {
-                wait!(data);
+                wait!(player.state());
             } else {
                 let mut tui =
                     ui::new(player.state(), player.controls(), client, None, None).await?;
@@ -236,10 +236,10 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), true).await;
+                let player = player::new(client.clone(), data, true).await;
 
                 if no_tui {
-                    wait!(data);
+                    wait!(player.state());
                 } else {
                     let mut tui = ui::new(
                         player.state(),
@@ -267,10 +267,10 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), true).await;
+                let player = player::new(client.clone(), data, true).await;
 
                 if no_tui {
-                    wait!(data);
+                    wait!(player.state());
                 } else {
                     let mut tui = ui::new(
                         player.state(),
@@ -294,10 +294,10 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let player = player::new(client.clone(), true).await;
+                let player = player::new(client.clone(), data, true).await;
 
                 if no_tui {
-                    wait!(data);
+                    wait!(player.state());
                 } else {
                     let mut tui =
                         ui::new(player.state(), player.controls(), client, None, None).await?;
@@ -324,14 +324,14 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let player = player::new(client.clone(), false).await;
+            let player = player::new(client.clone(), data, false).await;
 
             let track = client.track(track_id).await?;
 
             player.play_track(track, Some(quality.unwrap())).await;
 
             if no_tui {
-                wait!(data);
+                wait!(player.state());
             } else {
                 let mut tui =
                     ui::new(player.state(), player.controls(), client, None, None).await?;
@@ -353,11 +353,11 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let player = player::new(client.clone(), false).await;
+            let player = player::new(client.clone(), data, false).await;
             player.play_album(album, Some(quality)).await;
 
             if no_tui {
-                wait!(data);
+                wait!(player.state());
             } else {
                 let mut tui =
                     ui::new(player.state(), player.controls(), client, None, None).await?;
@@ -431,11 +431,11 @@ pub async fn run() -> Result<(), Error> {
 #[macro_export]
 macro_rules! wait {
     ($state:expr) => {
-        let mut quitter = $state.quitter();
+        let mut quitter = $state.lock().await.quitter();
 
         let state = $state.clone();
         ctrlc::set_handler(move || {
-            state.quit();
+            state.blocking_lock().quit();
             std::process::exit(0);
         })
         .expect("error setting ctrlc handler");

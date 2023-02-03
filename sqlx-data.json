@@ -1,15 +1,5 @@
 {
   "db": "SQLite",
-  "16129780f2803fa7659f0d6a601f3154f87a13ac7117065e36e42f6df96cc9c3": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Right": 0
-      }
-    },
-    "query": "DELETE FROM state WHERE state.key != 'active_screen'"
-  },
   "26fb84a813da028a0eb78a0403751ab7deb516ddedb62f4f8ef6b7140ab6d29c": {
     "describe": {
       "columns": [],
@@ -30,15 +20,15 @@
     },
     "query": "\n            UPDATE config\n            SET default_quality=?1\n            WHERE ROWID = 1\n            "
   },
-  "85927249c2b29c8c139943f410da960e0488d4fd98930b56be7f687b34b26b9f": {
+  "823e42cefeae8136283f6045d5dfed38d076c0cd725928bf7e022c3b27af52fc": {
     "describe": {
       "columns": [],
       "nullable": [],
       "parameters": {
-        "Right": 2
+        "Right": 5
       }
     },
-    "query": "\n                INSERT INTO state (key,value)\n                VALUES (?1, ?2)\n                ON CONFLICT(key) DO UPDATE\n                SET value=?2\n                "
+    "query": "INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"
   },
   "b5343e80f499af892e1632ff03d0fc58c84187bea1df62a4230f27086cf16b32": {
     "describe": {
@@ -117,24 +107,6 @@
       }
     },
     "query": "\n            UPDATE config\n            SET active_secret=?1\n            WHERE ROWID = 1\n            "
-  },
-  "cc291ede46adb74a1bf18d40783360a080bfd38a142262d9c409fc751c1e5964": {
-    "describe": {
-      "columns": [
-        {
-          "name": "value",
-          "ordinal": 0,
-          "type_info": "Blob"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Right": 1
-      }
-    },
-    "query": "\n            SELECT value FROM state\n            WHERE key=?1\n            "
   },
   "ccb2642624a824721de0d75fede39b8d17362a3d8b66c9e0c0bc7dd1c01c75c5": {
     "describe": {
