@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::{
     acquire, get_one, query,
-    state::{app::PlayerState, TrackListType},
+    state::app::{PlayerState, SavedState},
 };
 
 #[derive(Debug, Clone)]
@@ -176,42 +176,32 @@ impl Database {
 
     pub async fn persist_state(&self, state: PlayerState) {
         if let Ok(mut conn) = acquire!(self) {
-            if let (Some(current_track), Some(playback_track_index)) =
-                (state.current_track(), state.current_track_index())
-            {
-                let playback_track_index = playback_track_index as i32;
-                let playback_track_id = current_track.track.id;
-                let playback_position = state.position().inner_clocktime().mseconds() as i32;
-                let playback_entity_type = state.list_type();
-                let playback_entity_id = match playback_entity_type {
-                    TrackListType::Album => {
-                        state.album().expect("failed to get album id").id.clone()
-                    }
-                    TrackListType::Playlist => state
-                        .playlist()
-                        .expect("failed to get playlist id")
-                        .id
-                        .to_string(),
-                    TrackListType::Track => "".to_string(),
-                    TrackListType::Unknown => "".to_string(),
-                };
+            let saved_state: SavedState = state.into();
+            let playback_entity_type = saved_state.playback_entity_type.to_string();
 
-                if !playback_entity_id.is_empty() {
-                    let playback_entity_type = playback_entity_type.to_string();
+            sqlx::query!(
+                r#"INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"#,
+                saved_state.playback_track_id,
+                saved_state.playback_position,
+                saved_state.playback_track_index,
+                saved_state.playback_entity_id,
+                playback_entity_type
+            )
+            .execute(&mut conn)
+            .await
+            .expect("database failure");
+        }
+    }
 
-                    sqlx::query!(
-                        r#"INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"#,
-                        playback_track_id,
-                        playback_position,
-                        playback_track_index,
-                        playback_entity_id,
-                        playback_entity_type
-                    )
-                    .execute(&mut conn)
-                    .await
-                    .expect("database failure");
-                }
-            }
+    pub async fn get_last_state(&self) -> Option<SavedState> {
+        if let Ok(mut conn) = acquire!(self) {
+            Some(get_one!(
+                r#"SELECT * FROM player_state ORDER BY rowid DESC LIMIT 1;"#,
+                SavedState,
+                conn
+            ))
+        } else {
+            None
         }
     }
 

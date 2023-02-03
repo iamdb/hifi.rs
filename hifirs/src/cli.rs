@@ -182,9 +182,10 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let player = player::new(client.clone(), data, true).await;
+            let mut player = player::new(client.clone(), data).await;
 
-            player.play().await;
+            player.resume().await?;
+            player.play(true).await;
 
             if no_tui {
                 wait!(player.state());
@@ -197,7 +198,7 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let player = player::new(client.clone(), data, true).await;
+            let player = player::new(client.clone(), data).await;
 
             player.play_uri(uri, Some(client.quality())).await;
 
@@ -236,7 +237,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), data, true).await;
+                let player = player::new(client.clone(), data).await;
 
                 if no_tui {
                     wait!(player.state());
@@ -267,7 +268,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), data, true).await;
+                let player = player::new(client.clone(), data).await;
 
                 if no_tui {
                     wait!(player.state());
@@ -294,7 +295,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let player = player::new(client.clone(), data, true).await;
+                let player = player::new(client.clone(), data).await;
 
                 if no_tui {
                     wait!(player.state());
@@ -324,7 +325,7 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let player = player::new(client.clone(), data, false).await;
+            let player = player::new(client.clone(), data).await;
 
             let track = client.track(track_id).await?;
 
@@ -353,7 +354,7 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let player = player::new(client.clone(), data, false).await;
+            let player = player::new(client.clone(), data).await;
             player.play_album(album, Some(quality)).await;
 
             if no_tui {

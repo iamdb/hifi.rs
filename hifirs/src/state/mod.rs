@@ -268,6 +268,17 @@ impl Display for TrackListType {
     }
 }
 
+impl From<&str> for TrackListType {
+    fn from(tracklist_type: &str) -> Self {
+        match tracklist_type {
+            "album" => TrackListType::Album,
+            "playlist" => TrackListType::Playlist,
+            "track" => TrackListType::Track,
+            _ => TrackListType::Unknown,
+        }
+    }
+}
+
 /// A tracklist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct TrackListValue {
