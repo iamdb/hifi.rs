@@ -51,7 +51,7 @@ album:
   label:
     name: Ace Records
     id: 151088
-    albums_count: 953
+    albums_count: 960
     supplier_id: 17
     slug: ace-records-2
   maximum_bit_depth: 16
@@ -62,9 +62,9 @@ album:
   parental_warning: false
   popularity: 0
   previewable: true
-  product_sales_factors_monthly: 0.1
+  product_sales_factors_monthly: 1
   product_sales_factors_weekly: 0
-  product_sales_factors_yearly: 9.7
+  product_sales_factors_yearly: 10.7
   product_type: album
   product_url: /fr-fr/album/pieces-of-a-man-gil-scott-heron/kjv5c8zne4n8b
   purchasable: true
@@ -121,3 +121,4 @@ streamable_at: 1667980800
 title: The Revolution Will Not Be Televised
 track_number: 1
 version: ~
+

@@ -336,7 +336,9 @@ impl PlayerState {
 
     pub async fn persist(&self) {
         debug!("persisting state to database");
-        self.db.persist_state(self.clone()).await;
+        if self.current_track.is_some() {
+            self.db.persist_state(self.clone()).await;
+        }
     }
 
     pub async fn load_last_state(&mut self) {

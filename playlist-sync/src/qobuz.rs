@@ -50,10 +50,10 @@ impl<'q> Qobuz<'q> {
             .await
             .expect("failed to refresh config");
         self.client.login().await.expect("failed to login");
-        // self.client
-        //     .test_secrets()
-        //     .await
-        //     .expect("failed to test secrets");
+        self.client
+            .test_secrets()
+            .await
+            .expect("failed to test secrets");
         self.progress.set_message("signed into Qobuz");
     }
 

@@ -174,10 +174,7 @@ pub async fn run() -> Result<(), Error> {
 
     let mut client = api::new(Some(creds.clone()), None, None, None, None).await?;
 
-    if cli.username.is_none() && cli.password.is_none() {
-        debug!("setting up qobuz client");
-        client = qobuz::setup_client(client.clone(), data.clone()).await;
-    }
+    client = qobuz::setup_client(client.clone(), data.clone()).await;
 
     // CLI COMMANDS
     match cli.command {
@@ -237,7 +234,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), data).await;
+                let mut player = player::new(client.clone(), data).await;
+                player.resume().await?;
 
                 if no_tui {
                     wait!(player.state());
@@ -268,7 +266,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let player = player::new(client.clone(), data).await;
+                let mut player = player::new(client.clone(), data).await;
+                player.resume().await?;
 
                 if no_tui {
                     wait!(player.state());
@@ -295,7 +294,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let player = player::new(client.clone(), data).await;
+                let mut player = player::new(client.clone(), data).await;
+                player.resume().await?;
 
                 if no_tui {
                     wait!(player.state());
