@@ -346,13 +346,28 @@ impl PlayerState {
             match entity_type {
                 TrackListType::Album => {
                     if let Ok(album) = self.client.album(last_state.playback_entity_id).await {
-                        self.tracklist =
-                            TrackListValue::new(album.to_tracklist(AudioQuality::HIFI192));
+                        self.replace_list(TrackListValue::new(
+                            album.to_tracklist(AudioQuality::HIFI192),
+                        ));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
-                        self.position = ClockValue::from(ClockTime::from_mseconds(
-                            last_state.playback_position as u64,
-                        ));
+
+                        if let Some(track) = self
+                            .tracklist
+                            .find_track_by_index(last_state.playback_track_index as usize)
+                        {
+                            let duration = ClockTime::from_seconds(track.track.duration as u64);
+                            let position =
+                                ClockTime::from_mseconds(last_state.playback_position as u64);
+
+                            let remaining = duration - position;
+                            let progress = position.seconds() as f64 / duration.seconds() as f64;
+
+                            self.set_position(position.into());
+                            self.set_duration(duration.into());
+                            self.set_duration_remaining(remaining.into());
+                            self.set_current_progress(progress.into());
+                        }
 
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),

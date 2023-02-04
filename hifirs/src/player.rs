@@ -87,14 +87,9 @@ pub struct Player {
 pub async fn new(client: Client, db: Database) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
 
-    let state = Arc::new(Mutex::new(PlayerState::new(client.clone(), db)));
-
     let playbin = gst::ElementFactory::make("playbin")
         .build()
         .expect("failed to create gst element");
-    let controls = Controls::new();
-
-    let connection = mpris::init(state.clone(), controls.clone()).await;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -117,6 +112,10 @@ pub async fn new(client: Client, db: Database) -> Player {
 
         None
     });
+
+    let state = Arc::new(Mutex::new(PlayerState::new(client.clone(), db)));
+    let controls = Controls::new();
+    let connection = mpris::init(state.clone(), controls.clone()).await;
 
     let player = Player {
         connection,
@@ -238,7 +237,9 @@ impl Player {
                 self.ready(true).await;
                 self.pause(true).await;
                 let position = state.position();
+
                 drop(state);
+
                 self.seek(position, None).await;
 
                 Ok(())
@@ -317,6 +318,7 @@ impl Player {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
+                // Need to drop state before any dbus calls.
                 drop(state);
                 self.dbus_seeked_signal(ClockValue::default()).await;
                 self.dbus_metadata_changed().await;
@@ -412,6 +414,7 @@ impl Player {
         state.attach_track_url(&mut first_track).await;
         state.set_current_track(first_track.clone());
 
+        // Need to drop state before any dbus calls.
         drop(state);
 
         self.playbin
@@ -480,6 +483,8 @@ impl Player {
             let mut state = self.state.lock().await;
             state.replace_list(tracklist);
             state.set_current_track(first_track.clone());
+
+            // Need to drop state before any dbus calls.
             drop(state);
 
             if let Some(tracks) = playlist.tracks {
@@ -642,6 +647,8 @@ impl Player {
 
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Playing.into());
+
+                                        // Need to drop state before any dbus calls.
                                         drop(state);
 
                                         iface
@@ -654,6 +661,8 @@ impl Player {
                                         debug!("player state changed to Paused");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Paused.into());
+
+                                        // Need to drop state before any dbus calls.
                                         drop(state);
 
                                         iface
@@ -665,6 +674,8 @@ impl Player {
                                         debug!("player state changed to Ready");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Ready.into());
+
+                                        // Need to drop state before any dbus calls.
                                         drop(state);
 
                                         iface
@@ -677,6 +688,8 @@ impl Player {
                                         debug!("player state changed to VoidPending");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::VoidPending.into());
+
+                                        // Need to drop state before any dbus calls.
                                         drop(state);
 
                                         iface
@@ -689,6 +702,8 @@ impl Player {
                                         debug!("player state changed to Null");
                                         let mut state = self.state.lock().await;
                                         state.set_status(gstreamer::State::Null.into());
+
+                                        // Need to drop state before any dbus calls.
                                         drop(state);
 
                                         iface
