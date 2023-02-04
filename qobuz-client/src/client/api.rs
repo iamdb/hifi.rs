@@ -846,13 +846,24 @@ async fn can_use_methods() {
     client.test_secrets().await.expect("failed to test secrets");
 
     assert_yaml_snapshot!(client
-        .user_playlists()
-        .await
-        .expect("failed to fetch user playlists"), { ".user.id" => "[id]", ".user.login" => "[login]" });
+    .user_playlists()
+    .await
+    .expect("failed to fetch user playlists"),
+    {
+            ".user.id" => "[id]",
+            ".user.login" => "[login]",
+            ".playlists.items[].users_count" => "0",
+            ".playlists.items[].updated_at" => "0",
+            ".playlists.total" => "0"
+    });
     assert_yaml_snapshot!(client
-        .search_albums("a love supreme".to_string(), Some(10))
-        .await
-        .expect("failed to search for albums"));
+    .search_albums("a love supreme".to_string(), Some(10))
+    .await
+    .expect("failed to search for albums"),
+    {
+        ".albums.total" => "0",
+        ".albums.items[].artist.albums_count" => "0"
+    });
     assert_yaml_snapshot!(client
         .album("lhrak0dpdxcbc".to_string())
         .await

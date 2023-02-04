@@ -6,13 +6,13 @@ query: a love supreme
 albums:
   limit: 10
   offset: 0
-  total: 70
+  total: "0"
   items:
     - artist:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2598
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -69,12 +69,12 @@ albums:
       qobuz_id: 9883169
       recording_information: ~
       relative_url: ~
-      release_date_download: 1965-02-01
-      release_date_original: 1965-02-01
-      release_date_stream: 1965-02-01
+      release_date_download: 2016-05-06
+      release_date_original: 2016-05-06
+      release_date_stream: 2016-05-06
       release_tags: ~
       release_type: ~
-      released_at: -155091600
+      released_at: 1462485600
       sampleable: true
       slug: ~
       streamable: true
@@ -90,7 +90,7 @@ albums:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2598
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -168,7 +168,7 @@ albums:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2598
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -246,7 +246,7 @@ albums:
         image: ~
         name: Branford Marsalis
         id: 148753
-        albums_count: 62
+        albums_count: "0"
         slug: branford-marsalis
         albums: ~
       artists:
@@ -324,7 +324,7 @@ albums:
         image: ~
         name: KA MA Quartet
         id: 2706804
-        albums_count: 2
+        albums_count: "0"
         slug: ka-ma-quartet
         albums: ~
       artists:
@@ -406,7 +406,7 @@ albums:
         image: ~
         name: The Campbell Brothers
         id: 112776
-        albums_count: 7
+        albums_count: "0"
         slug: the-campbell-brothers
         albums: ~
       artists:
@@ -484,7 +484,7 @@ albums:
         image: ~
         name: Dal Sasso/Belmondo Big Band
         id: 1678299
-        albums_count: 1
+        albums_count: "0"
         slug: dal-sasso-belmondo-big-band
         albums: ~
       artists:
@@ -562,7 +562,7 @@ albums:
         image: ~
         name: Jazz At Lincoln Center Orchestra
         id: 1015052
-        albums_count: 48
+        albums_count: "0"
         slug: jazz-at-lincoln-center-orchestra
         albums: ~
       artists:
@@ -644,7 +644,7 @@ albums:
         image: ~
         name: Will Downing
         id: 37586
-        albums_count: 64
+        albums_count: "0"
         slug: will-downing
         albums: ~
       artists:
@@ -723,7 +723,7 @@ albums:
         image: ~
         name: Sean Khan
         id: 597427
-        albums_count: 20
+        albums_count: "0"
         slug: sean-khan
         albums: ~
       artists:

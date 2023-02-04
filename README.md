@@ -15,3 +15,9 @@ Qobuz only officially supports Linux through the browser. There are ways of acce
 - TUI can be disabled to use as a headless player controlled via MPRIS
 
 I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
+
+### Known Issues
+
+- If left paused for a while, the player will crash when attempting to play again.
+- When resuming and seeking to the spot in the track, mpris does not update with the correct time. If the player is seeked again the correct time is reported again.
+- UI will freeze during loading of long lists.

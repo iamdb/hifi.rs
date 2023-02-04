@@ -1,9 +1,6 @@
 [env]
 CARGO_MAKE_CLIPPY_ARGS = "--all-features -- -D warnings"
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 
-[tasks.build]
-args = ["build", "--all-features", "--release"]
-
-[tasks.install]
-command = "cargo"
-args = ["install", "--path", "."]
+[tasks.test]
+condition = { env = { CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER = "qobuz-client" }}

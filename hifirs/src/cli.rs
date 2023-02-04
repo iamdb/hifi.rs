@@ -174,7 +174,10 @@ pub async fn run() -> Result<(), Error> {
 
     let mut client = api::new(Some(creds.clone()), None, None, None, None).await?;
 
-    client = qobuz::setup_client(client.clone(), data.clone()).await;
+    if cli.username.is_none() && cli.password.is_none() {
+        debug!("setting up qobuz client");
+        client = qobuz::setup_client(client.clone(), data.clone()).await;
+    }
 
     // CLI COMMANDS
     match cli.command {

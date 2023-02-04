@@ -1,0 +1,3 @@
+[tasks.sqlx-check]
+command = "cargo"
+args = ["sqlx", "prepare", "--check", "--database-url", "'$(pwd)/hifirs/dev.db'"]

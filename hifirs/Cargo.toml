@@ -26,7 +26,7 @@ regex = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.7"
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "all-types", "default", "offline" ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "all-types", "offline" ] }
 termion = "1.5"
 textwrap = "0.16"
 tokio = { version = "1.0", features = ["full"]}
