@@ -52,14 +52,8 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: make
-        args: check-format-ci-flow
-    - name: Run Clippy
+    - name: Run CI Flow
       uses: actions-rs/cargo@v1
       with:
         command: make
-        args: clippy-ci-flow
-    - name: Run Tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: make
-        args: test
+        args: ci-flow
