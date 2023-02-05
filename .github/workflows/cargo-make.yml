@@ -48,10 +48,6 @@ jobs:
         version: 1.26.0
     - name: Checkout
       uses: actions/checkout@v2
-    - name: Run Checks
-      uses: actions-rs/cargo@v1
-      with:
-        command: make
     - name: Run CI Flow
       uses: actions-rs/cargo@v1
       with:
