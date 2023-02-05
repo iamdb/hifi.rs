@@ -1,14 +1,15 @@
 use qobuz_client::client::{ApiConfig, AudioQuality};
 use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 use std::path::PathBuf;
-use tokio::sync::broadcast::{Receiver, Sender};
 
-use crate::{acquire, get_one, query};
+use crate::{
+    acquire, get_one, query,
+    state::app::{PlayerState, SavedState},
+};
 
 #[derive(Debug, Clone)]
 pub struct Database {
     pool: Pool<Sqlite>,
-    quit_sender: Sender<bool>,
 }
 
 pub async fn new() -> Database {
@@ -27,6 +28,8 @@ pub async fn new() -> Database {
         url
     };
 
+    debug!("DATABASE_URL: {}", database_url.to_string_lossy());
+
     let options = SqliteConnectOptions::new()
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .filename(database_url)
@@ -41,9 +44,7 @@ pub async fn new() -> Database {
         .await
         .expect("migration failed");
 
-    let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
-
-    let db = Database { pool, quit_sender };
+    let db = Database { pool };
     db.create_config().await;
 
     db
@@ -173,21 +174,38 @@ impl Database {
         }
     }
 
+    pub async fn persist_state(&self, state: PlayerState) {
+        if let Ok(mut conn) = acquire!(self) {
+            let saved_state: SavedState = state.into();
+            let playback_entity_type = saved_state.playback_entity_type.to_string();
+
+            sqlx::query!(
+                r#"INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"#,
+                saved_state.playback_track_id,
+                saved_state.playback_position,
+                saved_state.playback_track_index,
+                saved_state.playback_entity_id,
+                playback_entity_type
+            )
+            .execute(&mut conn)
+            .await
+            .expect("database failure");
+        }
+    }
+
+    pub async fn get_last_state(&self) -> Option<SavedState> {
+        if let Ok(mut conn) = acquire!(self) {
+            Some(get_one!(
+                r#"SELECT * FROM player_state ORDER BY rowid DESC LIMIT 1;"#,
+                SavedState,
+                conn
+            ))
+        } else {
+            None
+        }
+    }
+
     pub async fn close(&self) {
         self.pool.close().await;
-    }
-
-    pub fn quitter(&self) -> Receiver<bool> {
-        self.quit_sender.subscribe()
-    }
-
-    pub fn quit(&self) {
-        self.quit_sender
-            .send(true)
-            .expect("failed to send quit message");
-
-        futures::executor::block_on(async {
-            self.pool.close().await;
-        });
     }
 }

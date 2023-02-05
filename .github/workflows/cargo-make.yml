@@ -1,0 +1,56 @@
+name: On Pull Request To Main
+on:
+  pull_request:
+    branches:
+      - main
+env:
+  CLICOLOR_FORCE: 1
+jobs:
+  pre-merge:
+    name: Pre-merge checks
+    runs-on: ${{ matrix.os }}
+    env:
+      QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
+      QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable]
+        os: [ubuntu-latest]
+    steps:
+    - uses: awalsh128/cache-apt-pkgs-action@latest
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      with:
+        packages: libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+    - name: Install Rust Toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          components: rustfmt, clippy
+    - name: Install cargo-make
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-make
+        version: 0.36.4
+    - name: Install cargo-insta
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-insta
+        version: 1.26.0
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Run Clippy
+      uses: actions-rs/cargo@v1
+      with:
+        command: make
+        args: clippy
+    - name: Run Checks
+      uses: actions-rs/cargo@v1
+      with:
+        command: make
+        args: check
+    - name: Run Tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: make
+        args: test

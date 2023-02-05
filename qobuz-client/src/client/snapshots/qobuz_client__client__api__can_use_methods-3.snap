@@ -50,7 +50,7 @@ is_official: true
 label:
   name: Mercury Records
   id: 17487
-  albums_count: 729
+  albums_count: 750
   supplier_id: 1
   slug: mercury-records
 maximum_bit_depth: 24
@@ -67,7 +67,7 @@ product_sales_factors_yearly: 4.2
 product_type: album
 product_url: /fr-fr/album/motor-booty-affair-parliament/lhrak0dpdxcbc
 purchasable: true
-purchasable_at: 1667113200
+purchasable_at: 1671955200
 qobuz_id: 131792380
 recording_information: ""
 relative_url: /album/motor-booty-affair-parliament/lhrak0dpdxcbc
@@ -80,7 +80,7 @@ released_at: 280364400
 sampleable: true
 slug: motor-booty-affair-parliament
 streamable: true
-streamable_at: 1667113200
+streamable_at: 1671955200
 subtitle: Parliament
 title: Motor-Booty Affair
 tracks:
@@ -111,13 +111,13 @@ tracks:
       performers: "George Clinton, Producer, ComposerLyricist - Bernie Worrell, ComposerLyricist - Parliament, MainArtist - M. Hampton, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: Mr. Wiggles
       track_number: 1
       version: ~
@@ -144,13 +144,13 @@ tracks:
       performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: Rumpofsteelskin
       track_number: 2
       version: ~
@@ -177,13 +177,13 @@ tracks:
       performers: "George Clinton, Producer, ComposerLyricist - Garry Marshall Shider, ComposerLyricist - Parliament, MainArtist - Griffith, ComposerLyricist - J.S. Theracon, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: "(You're A Fish And I'm A) Water Sign"
       track_number: 3
       version: ~
@@ -210,13 +210,13 @@ tracks:
       performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, Recording Arranger, AssociatedPerformer, ComposerLyricist - Bernie Worrell, ComposerLyricist - Parliament, MainArtist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: Aquaboogie (A Psychoalphadiscobetabioaquadoloop)
       track_number: 4
       version: ~
@@ -243,13 +243,13 @@ tracks:
       performers: "George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - Ronald Alfred Banks, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: One Of Those Funky Thangs
       track_number: 5
       version: ~
@@ -276,13 +276,13 @@ tracks:
       performers: "Nicky Brown, ComposerLyricist - Bishop, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - Vitti, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: Liquid Sunshine
       track_number: 6
       version: ~
@@ -309,13 +309,13 @@ tracks:
       performers: "Ronald Ford, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Garry Marshall Shider, ComposerLyricist - Parliament, MainArtist - J.S. Theracon, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: The Motor-Booty Affair
       track_number: 7
       version: ~
@@ -342,13 +342,13 @@ tracks:
       performers: "William Earl Collins, ComposerLyricist - George Clinton, Producer, ComposerLyricist - Parliament, MainArtist - J.S. Theracon, ComposerLyricist"
       previewable: true
       purchasable: true
-      purchasable_at: 1667113200
+      purchasable_at: 1671955200
       release_date_download: ~
       release_date_original: ~
       release_date_stream: ~
       sampleable: true
       streamable: true
-      streamable_at: 1667113200
+      streamable_at: 1671955200
       title: Deep
       track_number: 8
       version: ~
@@ -356,3 +356,4 @@ tracks_count: 8
 upc: "0602435861524"
 url: "https://www.qobuz.com/fr-fr/album/motor-booty-affair-parliament/lhrak0dpdxcbc"
 version: ~
+

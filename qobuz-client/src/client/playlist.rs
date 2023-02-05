@@ -78,10 +78,7 @@ impl Playlist {
         }
     }
 
-    pub fn to_tracklist(
-        &mut self,
-        quality: Option<AudioQuality>,
-    ) -> Option<VecDeque<TrackListTrack>> {
+    pub fn to_tracklist(&mut self, quality: AudioQuality) -> Option<VecDeque<TrackListTrack>> {
         self.tracks.as_ref().map(|tracks| {
             tracks
                 .items
@@ -93,7 +90,7 @@ impl Playlist {
                         t,
                         Some(i + 1),
                         Some(tracks.items.len()),
-                        quality.clone(),
+                        Some(quality.clone()),
                         None,
                     )
                 })

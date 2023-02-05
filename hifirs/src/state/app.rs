@@ -1,12 +1,16 @@
 use crate::{
-    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListValue},
+    sql::db::Database,
+    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
     ui::components::{Row, TableRows},
 };
+use futures::executor;
+use gstreamer::ClockTime;
 use qobuz_client::client::{
     album::Album,
     api::Client,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
+    AudioQuality,
 };
 use snafu::prelude::*;
 use std::{fmt::Display, sync::Arc};
@@ -33,6 +37,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
+    db: Database,
     client: Client,
     current_track: Option<TrackListTrack>,
     tracklist: TrackListValue,
@@ -44,11 +49,54 @@ pub struct PlayerState {
     is_buffering: bool,
     resume: bool,
     active_screen: ActiveScreen,
-    target_status: StatusValue,
     quit_sender: BroadcastSender<bool>,
 }
 
 pub type SafePlayerState = Arc<Mutex<PlayerState>>;
+
+#[derive(Debug, Clone, Default)]
+pub struct SavedState {
+    pub rowid: i64,
+    pub playback_track_id: i64,
+    pub playback_position: i64,
+    pub playback_track_index: i64,
+    pub playback_entity_id: String,
+    pub playback_entity_type: String,
+}
+
+impl From<PlayerState> for SavedState {
+    fn from(state: PlayerState) -> Self {
+        if let (Some(current_track), Some(playback_track_index)) =
+            (state.current_track(), state.current_track_index())
+        {
+            let playback_track_index = playback_track_index as i64;
+            let playback_track_id = current_track.track.id as i64;
+            let playback_position = state.position().inner_clocktime().mseconds() as i64;
+            let playback_entity_type = state.list_type();
+            let playback_entity_id = match playback_entity_type {
+                TrackListType::Album => state.album().expect("failed to get album id").id.clone(),
+                TrackListType::Playlist => state
+                    .playlist()
+                    .expect("failed to get playlist id")
+                    .id
+                    .to_string(),
+                TrackListType::Track => "".to_string(),
+                TrackListType::Unknown => "".to_string(),
+            };
+
+            Self {
+                rowid: 0,
+                playback_position,
+                playback_track_id,
+                playback_entity_id,
+                playback_entity_type: playback_entity_type.to_string(),
+                playback_track_index,
+            }
+        } else {
+            Self::default()
+        }
+    }
+}
 
 impl PlayerState {
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
@@ -127,6 +175,10 @@ impl PlayerState {
         self.tracklist.get_album()
     }
 
+    pub fn list_type(&self) -> TrackListType {
+        self.tracklist.list_type.clone()
+    }
+
     pub fn playlist(&self) -> Option<&Playlist> {
         self.tracklist.get_playlist()
     }
@@ -180,29 +232,23 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
-        let next_track_index = if let Some(current_track_index) = self.current_track_index() {
+        let next_track_index = if let Some(i) = index {
+            if i < self.tracklist.len() {
+                Some(i)
+            } else {
+                None
+            }
+        } else if let Some(current_track_index) = self.current_track_index() {
             match direction {
                 SkipDirection::Forward => {
-                    if let Some(i) = index {
-                        if i < self.tracklist.len() {
-                            Some(i)
-                        } else {
-                            None
-                        }
-                    } else if current_track_index < self.tracklist.len() - 1 {
+                    if current_track_index < self.tracklist.len() - 1 {
                         Some(current_track_index + 1)
                     } else {
                         None
                     }
                 }
                 SkipDirection::Backward => {
-                    if let Some(i) = index {
-                        if i < self.tracklist.len() {
-                            Some(i)
-                        } else {
-                            None
-                        }
-                    } else if current_track_index > 1 {
+                    if current_track_index > 1 {
                         Some(current_track_index - 1)
                     } else {
                         Some(0)
@@ -249,17 +295,11 @@ impl PlayerState {
     }
 
     pub fn quit(&self) {
+        executor::block_on(self.persist());
+
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
-    }
-
-    pub fn set_target_status(&mut self, status: StatusValue) {
-        self.target_status = status;
-    }
-
-    pub fn target_status(&self) -> StatusValue {
-        self.target_status.clone()
     }
 
     pub fn reset(&mut self) {
@@ -273,11 +313,12 @@ impl PlayerState {
         self.is_buffering = false;
         self.resume = false;
     }
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, db: Database) -> Self {
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
         Self {
+            db,
             current_track: None,
             client,
             tracklist,
@@ -285,12 +326,82 @@ impl PlayerState {
             duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
-            target_status: StatusValue(gstreamer::State::Null),
             current_progress: FloatValue(0.0),
             is_buffering: false,
             resume: false,
             active_screen: ActiveScreen::NowPlaying,
             quit_sender,
+        }
+    }
+
+    pub async fn persist(&self) {
+        debug!("persisting state to database");
+        if self.current_track.is_some() {
+            self.db.persist_state(self.clone()).await;
+        }
+    }
+
+    pub async fn load_last_state(&mut self) {
+        if let Some(last_state) = self.db.get_last_state().await {
+            let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
+
+            match entity_type {
+                TrackListType::Album => {
+                    if let Ok(album) = self.client.album(last_state.playback_entity_id).await {
+                        self.replace_list(TrackListValue::new(
+                            album.to_tracklist(AudioQuality::HIFI192),
+                        ));
+                        self.tracklist.set_list_type(TrackListType::Album);
+                        self.tracklist.set_album(album);
+
+                        if let Some(track) = self
+                            .tracklist
+                            .find_track_by_index(last_state.playback_track_index as usize)
+                        {
+                            let duration = ClockTime::from_seconds(track.track.duration as u64);
+                            let position =
+                                ClockTime::from_mseconds(last_state.playback_position as u64);
+
+                            let remaining = duration - position;
+                            let progress = position.seconds() as f64 / duration.seconds() as f64;
+
+                            self.set_position(position.into());
+                            self.set_duration(duration.into());
+                            self.set_duration_remaining(remaining.into());
+                            self.set_current_progress(progress.into());
+                        }
+
+                        self.skip_track(
+                            Some(last_state.playback_track_index as usize),
+                            SkipDirection::Forward,
+                        )
+                        .await;
+                    }
+                }
+                TrackListType::Playlist => {
+                    if let Ok(mut playlist) = self
+                        .client
+                        .playlist(
+                            last_state
+                                .playback_entity_id
+                                .parse::<i64>()
+                                .expect("failed to parse integer"),
+                        )
+                        .await
+                    {
+                        if let Some(tracklist_tracks) = playlist.to_tracklist(AudioQuality::HIFI192)
+                        {
+                            self.tracklist.set_list_type(TrackListType::Playlist);
+                            self.tracklist.set_playlist(playlist);
+                            self.tracklist.queue = tracklist_tracks;
+                        }
+                    }
+                }
+                TrackListType::Track => {
+                    self.tracklist.set_list_type(TrackListType::Track);
+                }
+                TrackListType::Unknown => unreachable!(),
+            }
         }
     }
 }

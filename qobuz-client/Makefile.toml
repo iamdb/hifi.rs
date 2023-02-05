@@ -1,0 +1,2 @@
+[tasks.test]
+args = ["insta", "test", "-p", "qobuz-client", "--lib"]

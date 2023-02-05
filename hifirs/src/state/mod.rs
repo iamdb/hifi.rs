@@ -250,9 +250,33 @@ impl From<Bytes> for TrackListTrack {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TrackListType {
-    #[default]
     Album,
     Playlist,
+    Track,
+    #[default]
+    Unknown,
+}
+
+impl Display for TrackListType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrackListType::Album => f.write_fmt(format_args!("album")),
+            TrackListType::Playlist => f.write_fmt(format_args!("playlist")),
+            TrackListType::Track => f.write_fmt(format_args!("track")),
+            TrackListType::Unknown => f.write_fmt(format_args!("unknown")),
+        }
+    }
+}
+
+impl From<&str> for TrackListType {
+    fn from(tracklist_type: &str) -> Self {
+        match tracklist_type {
+            "album" => TrackListType::Album,
+            "playlist" => TrackListType::Playlist,
+            "track" => TrackListType::Track,
+            _ => TrackListType::Unknown,
+        }
+    }
 }
 
 /// A tracklist is a list of tracks.
@@ -261,7 +285,7 @@ pub struct TrackListValue {
     queue: VecDeque<TrackListTrack>,
     album: Option<Album>,
     playlist: Option<Playlist>,
-    list_type: Option<TrackListType>,
+    list_type: TrackListType,
 }
 
 impl From<Bytes> for TrackListValue {
@@ -311,12 +335,12 @@ impl TrackListValue {
             queue,
             album: None,
             playlist: None,
-            list_type: None,
+            list_type: TrackListType::Unknown,
         }
     }
 
     pub fn clear(&mut self) {
-        self.list_type = None;
+        self.list_type = TrackListType::Unknown;
         self.album = None;
         self.playlist = None;
         self.queue.clear();
@@ -326,7 +350,7 @@ impl TrackListValue {
         debug!("setting tracklist album");
         self.album = Some(album);
         debug!("setting tracklist list type");
-        self.list_type = Some(TrackListType::Album);
+        self.list_type = TrackListType::Album;
     }
 
     pub fn get_album(&self) -> Option<&Album> {
@@ -335,7 +359,7 @@ impl TrackListValue {
 
     pub fn set_playlist(&mut self, playlist: Playlist) {
         self.playlist = Some(playlist);
-        self.list_type = Some(TrackListType::Playlist);
+        self.list_type = TrackListType::Playlist;
     }
 
     pub fn get_playlist(&self) -> Option<&Playlist> {
@@ -343,11 +367,11 @@ impl TrackListValue {
     }
 
     pub fn set_list_type(&mut self, list_type: TrackListType) {
-        self.list_type = Some(list_type);
+        self.list_type = list_type;
     }
 
-    pub fn list_type(&self) -> Option<&TrackListType> {
-        self.list_type.as_ref()
+    pub fn list_type(&self) -> &TrackListType {
+        &self.list_type
     }
 
     pub fn find_track(&self, track_id: usize) -> Option<TrackListTrack> {

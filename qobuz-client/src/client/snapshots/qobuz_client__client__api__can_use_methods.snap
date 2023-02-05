@@ -8,12 +8,12 @@ user:
 playlists:
   offset: 0
   limit: 500
-  total: 3
+  total: "0"
   items:
     - owner:
         id: 1418967
         name: David
-      users_count: 0
+      users_count: "0"
       images150: ~
       images: []
       is_collaborative: false
@@ -22,7 +22,7 @@ playlists:
       created_at: 1664568712
       images300: ~
       duration: 0
-      updated_at: 1664568712
+      updated_at: "0"
       published_to: ~
       tracks_count: 0
       name: test
@@ -40,7 +40,7 @@ playlists:
     - owner:
         id: 1418967
         name: David
-      users_count: 0
+      users_count: "0"
       images150:
         - "https://static.qobuz.com/images/covers/62/88/0000881118862_150.jpg"
         - "https://static.qobuz.com/images/covers/34/25/0088807202534_150.jpg"
@@ -60,10 +60,10 @@ playlists:
         - "https://static.qobuz.com/images/covers/34/25/0088807202534_300.jpg"
         - "https://static.qobuz.com/images/covers/pc/8a/cvv2e35988apc_300.jpg"
         - "https://static.qobuz.com/images/covers/ca/68/tnmluv61b68ca_300.jpg"
-      duration: 310012
-      updated_at: 1667363796
+      duration: 328456
+      updated_at: "0"
       published_to: ~
-      tracks_count: 921
+      tracks_count: 973
       name: Assignments
       is_public: true
       published_from: ~
@@ -79,7 +79,7 @@ playlists:
     - owner:
         id: 922179
         name: Qobuz USA
-      users_count: 344125
+      users_count: "0"
       images150:
         - "https://static.qobuz.com/images/covers/32/10/0603497941032_150.jpg"
         - "https://static.qobuz.com/images/covers/89/21/0060255732189_150.jpg"
@@ -100,7 +100,7 @@ playlists:
         - "https://static.qobuz.com/images/covers/95/15/0060253771595_300.jpg"
         - "https://static.qobuz.com/images/covers/mb/zg/q64kzhpj3zgmb_300.jpg"
       duration: 14912
-      updated_at: 1668618683
+      updated_at: "0"
       published_to: 2145913200
       tracks_count: 53
       name: Welcome to Qobuz
@@ -118,3 +118,4 @@ playlists:
       stores:
         - US-en
       tracks: ~
+

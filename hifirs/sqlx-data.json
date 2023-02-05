@@ -20,15 +20,63 @@
     },
     "query": "\n            UPDATE config\n            SET default_quality=?1\n            WHERE ROWID = 1\n            "
   },
-  "7eba1046119434a49419e494dfae1bec2f66cc3ef19861feb82824604be33468": {
+  "4f528d52c78b3d778e064369fc36af49ddc8c06bdde609f9579eaf2ea709b6e1": {
+    "describe": {
+      "columns": [
+        {
+          "name": "rowid",
+          "ordinal": 0,
+          "type_info": "Int64"
+        },
+        {
+          "name": "playback_track_id",
+          "ordinal": 1,
+          "type_info": "Int64"
+        },
+        {
+          "name": "playback_position",
+          "ordinal": 2,
+          "type_info": "Int64"
+        },
+        {
+          "name": "playback_track_index",
+          "ordinal": 3,
+          "type_info": "Int64"
+        },
+        {
+          "name": "playback_entity_id",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "playback_entity_type",
+          "ordinal": 5,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Right": 0
+      }
+    },
+    "query": "SELECT * FROM player_state ORDER BY rowid DESC LIMIT 1;"
+  },
+  "823e42cefeae8136283f6045d5dfed38d076c0cd725928bf7e022c3b27af52fc": {
     "describe": {
       "columns": [],
       "nullable": [],
       "parameters": {
-        "Right": 2
+        "Right": 5
       }
     },
-    "query": "\n                INSERT INTO state (key,value)\n                VALUES (?1, ?2)\n                "
+    "query": "INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);"
   },
   "b5343e80f499af892e1632ff03d0fc58c84187bea1df62a4230f27086cf16b32": {
     "describe": {
@@ -107,24 +155,6 @@
       }
     },
     "query": "\n            UPDATE config\n            SET active_secret=?1\n            WHERE ROWID = 1\n            "
-  },
-  "cc291ede46adb74a1bf18d40783360a080bfd38a142262d9c409fc751c1e5964": {
-    "describe": {
-      "columns": [
-        {
-          "name": "value",
-          "ordinal": 0,
-          "type_info": "Blob"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Right": 1
-      }
-    },
-    "query": "\n            SELECT value FROM state\n            WHERE key=?1\n            "
   },
   "ccb2642624a824721de0d75fede39b8d17362a3d8b66c9e0c0bc7dd1c01c75c5": {
     "describe": {

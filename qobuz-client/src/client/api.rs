@@ -239,12 +239,6 @@ impl Client {
         Ok(self)
     }
 
-    pub async fn refresh(&mut self) -> Result<()> {
-        self.get_config().await?;
-
-        Ok(())
-    }
-
     /// Login a user
     pub async fn login(&mut self) -> Result<()> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
@@ -720,7 +714,7 @@ impl Client {
 
     // ported from https://github.com/vitiko98/qobuz-dl/blob/master/qobuz_dl/bundle.py
     // Retrieve the app_id and generate the secrets needed to authenticate
-    async fn get_config(&mut self) -> Result<()> {
+    pub async fn refresh(&mut self) -> Result<()> {
         let play_url = "https://play.qobuz.com";
         let login_page = self
             .client
@@ -790,28 +784,22 @@ impl Client {
         let secrets = self.secrets.clone();
         debug!("testing secrets: {secrets:?}");
 
-        let mut active_secret: Option<String> = None;
-
         for (timezone, secret) in secrets.iter() {
             let response = self
-                .track_url(5966783, Some(AudioQuality::Mp3), Some(secret.to_string()))
+                .track_url(64868955, Some(AudioQuality::Mp3), Some(secret.to_string()))
                 .await;
 
             if response.is_ok() {
                 debug!("found good secret: {}\t{}", timezone, secret);
                 let secret_string = secret.to_string();
-                active_secret = Some(secret_string);
 
-                break;
-            };
+                self.set_active_secret(secret_string);
+
+                return Ok(());
+            }
         }
 
-        if let Some(secret) = active_secret {
-            self.set_active_secret(secret);
-            Ok(())
-        } else {
-            Err(Error::ActiveSecret)
-        }
+        Err(Error::ActiveSecret)
     }
 }
 
@@ -840,6 +828,8 @@ use crate::client::{
 
 #[tokio::test]
 async fn can_use_methods() {
+    pretty_env_logger::init();
+
     use insta::assert_yaml_snapshot;
 
     let creds = Credentials {
@@ -853,15 +843,27 @@ async fn can_use_methods() {
 
     client.refresh().await.expect("failed to refresh config");
     client.login().await.expect("failed to login");
+    client.test_secrets().await.expect("failed to test secrets");
 
     assert_yaml_snapshot!(client
-        .user_playlists()
-        .await
-        .expect("failed to fetch user playlists"), { ".user.id" => "[id]", ".user.login" => "[login]" });
+    .user_playlists()
+    .await
+    .expect("failed to fetch user playlists"),
+    {
+            ".user.id" => "[id]",
+            ".user.login" => "[login]",
+            ".playlists.items[].users_count" => "0",
+            ".playlists.items[].updated_at" => "0",
+            ".playlists.total" => "0"
+    });
     assert_yaml_snapshot!(client
-        .search_albums("a love supreme".to_string(), Some(10))
-        .await
-        .expect("failed to search for albums"));
+    .search_albums("a love supreme".to_string(), Some(10))
+    .await
+    .expect("failed to search for albums"),
+    {
+        ".albums.total" => "0",
+        ".albums.items[].artist.albums_count" => "0"
+    });
     assert_yaml_snapshot!(client
         .album("lhrak0dpdxcbc".to_string())
         .await
@@ -876,7 +878,7 @@ async fn can_use_methods() {
         .expect("failed to get artist"));
     assert_yaml_snapshot!(client.track(155999429).await.expect("failed to get track"));
     assert_yaml_snapshot!(client
-        .track_url(155999429, Some(AudioQuality::Mp3), None)
+        .track_url(64868955, Some(AudioQuality::Mp3), None)
         .await
         .expect("failed to get track url"), { ".url" => "[url]" });
 

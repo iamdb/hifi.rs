@@ -6,13 +6,13 @@ query: a love supreme
 albums:
   limit: 10
   offset: 0
-  total: 65
+  total: "0"
   items:
     - artist:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2517
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -48,7 +48,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 467
+        albums_count: 487
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 24
@@ -65,20 +65,20 @@ albums:
       product_type: ~
       product_url: ~
       purchasable: true
-      purchasable_at: 1662015600
+      purchasable_at: 1674288000
       qobuz_id: 9883169
       recording_information: ~
       relative_url: ~
-      release_date_download: 1965-01-01
-      release_date_original: 1965-01-01
-      release_date_stream: 1965-01-01
+      release_date_download: 2016-05-06
+      release_date_original: 2016-05-06
+      release_date_stream: 2016-05-06
       release_tags: ~
       release_type: ~
-      released_at: -157770000
+      released_at: 1462485600
       sampleable: true
       slug: ~
       streamable: true
-      streamable_at: 1660633200
+      streamable_at: 1674288000
       subtitle: ~
       title: A Love Supreme
       tracks: ~
@@ -90,7 +90,7 @@ albums:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2517
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -126,7 +126,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 467
+        albums_count: 487
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 24
@@ -143,7 +143,7 @@ albums:
       product_type: ~
       product_url: ~
       purchasable: true
-      purchasable_at: 1668326400
+      purchasable_at: 1672128000
       qobuz_id: 135238664
       recording_information: ~
       relative_url: ~
@@ -156,7 +156,7 @@ albums:
       sampleable: true
       slug: ~
       streamable: true
-      streamable_at: 1668326400
+      streamable_at: 1672128000
       subtitle: ~
       title: "A Love Supreme: Live In Seattle"
       tracks: ~
@@ -168,7 +168,7 @@ albums:
         image: ~
         name: John Coltrane
         id: 26028
-        albums_count: 2517
+        albums_count: "0"
         slug: john-coltrane
         albums: ~
       artists:
@@ -204,7 +204,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 467
+        albums_count: 487
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 16
@@ -221,7 +221,7 @@ albums:
       product_type: ~
       product_url: ~
       purchasable: true
-      purchasable_at: 1655967600
+      purchasable_at: 1674633600
       qobuz_id: 28265362
       recording_information: ~
       relative_url: ~
@@ -234,7 +234,7 @@ albums:
       sampleable: true
       slug: ~
       streamable: true
-      streamable_at: 1655967600
+      streamable_at: 1674633600
       subtitle: ~
       title: "A Love Supreme: The Complete Masters"
       tracks: ~
@@ -244,170 +244,9 @@ albums:
       version: Super Deluxe Edition
     - artist:
         image: ~
-        name: Sean Khan
-        id: 597427
-        albums_count: 20
-        slug: sean-khan
-        albums: ~
-      artists:
-        - id: 597427
-          name: Sean Khan
-          roles:
-            - main-artist
-      catchline: ~
-      composer: ~
-      copyright: ~
-      created_at: ~
-      description: ~
-      displayable: true
-      downloadable: true
-      duration: 5773
-      genre:
-        path:
-          - 127
-          - 131
-        color: "#5eabc1"
-        name: Funk
-        id: 131
-        slug: funk
-      genres_list: ~
-      hires: true
-      hires_streamable: true
-      id: na7f53zqeqtwb
-      image:
-        small: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_230.jpg"
-        thumbnail: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_50.jpg"
-        large: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_600.jpg"
-        back: ~
-      is_official: ~
-      label:
-        name: BBE Music
-        id: 276273
-        albums_count: 663
-        supplier_id: 17
-        slug: bbe-music
-      maximum_bit_depth: 24
-      maximum_channel_count: 2
-      maximum_sampling_rate: 44.1
-      maximum_technical_specifications: ~
-      media_count: 1
-      parental_warning: false
-      popularity: 0
-      previewable: true
-      product_sales_factors_monthly: ~
-      product_sales_factors_weekly: ~
-      product_sales_factors_yearly: ~
-      product_type: ~
-      product_url: ~
-      purchasable: true
-      purchasable_at: 1646640000
-      qobuz_id: 126078305
-      recording_information: ~
-      relative_url: ~
-      release_date_download: 2021-11-19
-      release_date_original: 2021-11-19
-      release_date_stream: 2021-11-19
-      release_tags: ~
-      release_type: ~
-      released_at: 1637276400
-      sampleable: true
-      slug: ~
-      streamable: true
-      streamable_at: 1646640000
-      subtitle: ~
-      title: "Supreme Love: a Journey Through Coltrane"
-      tracks: ~
-      tracks_count: 17
-      upc: "0196006169527"
-      url: "https://www.qobuz.com/fr-fr/album/supreme-love-a-journey-through-coltrane-sean-khan/na7f53zqeqtwb"
-      version: ~
-    - artist:
-        image: ~
-        name: KA MA Quartet
-        id: 2706804
-        albums_count: 2
-        slug: ka-ma-quartet
-        albums: ~
-      artists:
-        - id: 2706804
-          name: KA MA Quartet
-          roles:
-            - main-artist
-        - id: 2523489
-          name: Nippy Noya
-          roles:
-            - main-artist
-      catchline: ~
-      composer: ~
-      copyright: ~
-      created_at: ~
-      description: ~
-      displayable: true
-      downloadable: true
-      duration: 3766
-      genre:
-        path:
-          - 80
-        color: "#5eabc1"
-        name: Jazz
-        id: 80
-        slug: jazz
-      genres_list: ~
-      hires: true
-      hires_streamable: true
-      id: "4012116414134"
-      image:
-        small: "https://static.qobuz.com/images/covers/34/41/4012116414134_230.jpg"
-        thumbnail: "https://static.qobuz.com/images/covers/34/41/4012116414134_50.jpg"
-        large: "https://static.qobuz.com/images/covers/34/41/4012116414134_600.jpg"
-        back: ~
-      is_official: ~
-      label:
-        name: Neuklang
-        id: 27782
-        albums_count: 380
-        supplier_id: 32
-        slug: neuklang
-      maximum_bit_depth: 24
-      maximum_channel_count: 2
-      maximum_sampling_rate: 96
-      maximum_technical_specifications: ~
-      media_count: 1
-      parental_warning: false
-      popularity: 0
-      previewable: true
-      product_sales_factors_monthly: ~
-      product_sales_factors_weekly: ~
-      product_sales_factors_yearly: ~
-      product_type: ~
-      product_url: ~
-      purchasable: true
-      purchasable_at: 1662015600
-      qobuz_id: 33439043
-      recording_information: ~
-      relative_url: ~
-      release_date_download: 2016-09-02
-      release_date_original: 2016-09-02
-      release_date_stream: 2016-09-02
-      release_tags: ~
-      release_type: ~
-      released_at: 1472767200
-      sampleable: true
-      slug: ~
-      streamable: true
-      streamable_at: 1658991600
-      subtitle: ~
-      title: A Love Supreme / Universal Tone
-      tracks: ~
-      tracks_count: 7
-      upc: "4012116414134"
-      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-universal-tone-ka-ma-quartet-nippy-noya/4012116414134"
-      version: ~
-    - artist:
-        image: ~
         name: Branford Marsalis
         id: 148753
-        albums_count: 62
+        albums_count: "0"
         slug: branford-marsalis
         albums: ~
       artists:
@@ -483,9 +322,91 @@ albums:
       version: ~
     - artist:
         image: ~
+        name: KA MA Quartet
+        id: 2706804
+        albums_count: "0"
+        slug: ka-ma-quartet
+        albums: ~
+      artists:
+        - id: 2706804
+          name: KA MA Quartet
+          roles:
+            - main-artist
+        - id: 2523489
+          name: Nippy Noya
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 3766
+      genre:
+        path:
+          - 80
+        color: "#5eabc1"
+        name: Jazz
+        id: 80
+        slug: jazz
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: "4012116414134"
+      image:
+        small: "https://static.qobuz.com/images/covers/34/41/4012116414134_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/34/41/4012116414134_50.jpg"
+        large: "https://static.qobuz.com/images/covers/34/41/4012116414134_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: Neuklang
+        id: 27782
+        albums_count: 398
+        supplier_id: 32
+        slug: neuklang
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 96
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1674201600
+      qobuz_id: 33439043
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2016-09-02
+      release_date_original: 2016-09-02
+      release_date_stream: 2016-09-02
+      release_tags: ~
+      release_type: ~
+      released_at: 1472767200
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1674028800
+      subtitle: ~
+      title: A Love Supreme / Universal Tone
+      tracks: ~
+      tracks_count: 7
+      upc: "4012116414134"
+      url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-universal-tone-ka-ma-quartet-nippy-noya/4012116414134"
+      version: ~
+    - artist:
+        image: ~
         name: The Campbell Brothers
         id: 112776
-        albums_count: 7
+        albums_count: "0"
         slug: the-campbell-brothers
         albums: ~
       artists:
@@ -563,7 +484,7 @@ albums:
         image: ~
         name: Dal Sasso/Belmondo Big Band
         id: 1678299
-        albums_count: 1
+        albums_count: "0"
         slug: dal-sasso-belmondo-big-band
         albums: ~
       artists:
@@ -641,7 +562,7 @@ albums:
         image: ~
         name: Jazz At Lincoln Center Orchestra
         id: 1015052
-        albums_count: 48
+        albums_count: "0"
         slug: jazz-at-lincoln-center-orchestra
         albums: ~
       artists:
@@ -723,7 +644,7 @@ albums:
         image: ~
         name: Will Downing
         id: 37586
-        albums_count: 62
+        albums_count: "0"
         slug: will-downing
         albums: ~
       artists:
@@ -760,7 +681,7 @@ albums:
       label:
         name: UMC (Universal Music Catalogue)
         id: 92555
-        albums_count: 3410
+        albums_count: 3510
         supplier_id: 1
         slug: umc-universal-music-catalogue
       maximum_bit_depth: 16
@@ -777,7 +698,7 @@ albums:
       product_type: ~
       product_url: ~
       purchasable: true
-      purchasable_at: 1650351600
+      purchasable_at: 1671868800
       qobuz_id: 32496951
       recording_information: ~
       relative_url: ~
@@ -790,7 +711,7 @@ albums:
       sampleable: true
       slug: ~
       streamable: true
-      streamable_at: 1650351600
+      streamable_at: 1671868800
       subtitle: ~
       title: A Love Supreme
       tracks: ~
@@ -798,3 +719,83 @@ albums:
       upc: "0060075365936"
       url: "https://www.qobuz.com/fr-fr/album/a-love-supreme-will-downing/0060075365936"
       version: Remixes
+    - artist:
+        image: ~
+        name: Sean Khan
+        id: 597427
+        albums_count: "0"
+        slug: sean-khan
+        albums: ~
+      artists:
+        - id: 597427
+          name: Sean Khan
+          roles:
+            - main-artist
+      catchline: ~
+      composer: ~
+      copyright: ~
+      created_at: ~
+      description: ~
+      displayable: true
+      downloadable: true
+      duration: 5773
+      genre:
+        path:
+          - 127
+          - 131
+        color: "#5eabc1"
+        name: Funk
+        id: 131
+        slug: funk
+      genres_list: ~
+      hires: true
+      hires_streamable: true
+      id: na7f53zqeqtwb
+      image:
+        small: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_230.jpg"
+        thumbnail: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_50.jpg"
+        large: "https://static.qobuz.com/images/covers/wb/qt/na7f53zqeqtwb_600.jpg"
+        back: ~
+      is_official: ~
+      label:
+        name: BBE Music
+        id: 276273
+        albums_count: 663
+        supplier_id: 17
+        slug: bbe-music
+      maximum_bit_depth: 24
+      maximum_channel_count: 2
+      maximum_sampling_rate: 44.1
+      maximum_technical_specifications: ~
+      media_count: 1
+      parental_warning: false
+      popularity: 0
+      previewable: true
+      product_sales_factors_monthly: ~
+      product_sales_factors_weekly: ~
+      product_sales_factors_yearly: ~
+      product_type: ~
+      product_url: ~
+      purchasable: true
+      purchasable_at: 1646640000
+      qobuz_id: 126078305
+      recording_information: ~
+      relative_url: ~
+      release_date_download: 2021-11-19
+      release_date_original: 2021-11-19
+      release_date_stream: 2021-11-19
+      release_tags: ~
+      release_type: ~
+      released_at: 1637276400
+      sampleable: true
+      slug: ~
+      streamable: true
+      streamable_at: 1646640000
+      subtitle: ~
+      title: "Supreme Love: a Journey Through Coltrane"
+      tracks: ~
+      tracks_count: 17
+      upc: "0196006169527"
+      url: "https://www.qobuz.com/fr-fr/album/supreme-love-a-journey-through-coltrane-sean-khan/na7f53zqeqtwb"
+      version: ~
+
