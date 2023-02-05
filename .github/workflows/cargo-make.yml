@@ -14,27 +14,68 @@ jobs:
       matrix:
         rust: [stable]
         os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            sccache-path: /home/runner/.cache/sccache
+          - os: macos-latest
+            sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
+        exclude:
+          - os: macos-latest
+            rust: stable
+            make:
+              name: Clippy
+    env:
+      RUST_BACKTRACE: full
+      RUSTC_WRAPPER: sccache
+      RUSTV: ${{ matrix.rust }}
+      SCCACHE_CACHE_SIZE: 2G
+      SCCACHE_DIR: ${{ matrix.sccache-path }}
+      # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
     steps:
-    - name: Checkout
+    - name: Checkout Repository
       uses: actions/checkout@v2
-    - uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - uses: awalsh128/cache-apt-pkgs-action@latest
-      if: ${{ matrix.os == 'ubuntu-latest' }}
-      with:
-        packages: libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+    - name: Install gstreamer (ubuntu-latest)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+    - name: Install sccache (ubuntu-latest)
+      if: matrix.os == 'ubuntu-latest'
+      env:
+        LINK: https://github.com/mozilla/sccache/releases/download
+        SCCACHE_VERSION: 0.3.3
+      run: |
+        SCCACHE_FILE=sccache-$SCCACHE_VERSION-x86_64-unknown-linux-musl
+        mkdir -p $HOME/.local/bin
+        curl -L "$LINK/$SCCACHE_VERSION/$SCCACHE_FILE.tar.gz" | tar xz
+        mv -f $SCCACHE_FILE/sccache $HOME/.local/bin/sccache
+        echo "$HOME/.local/bin" >> $GITHUB_PATH   
+    - name: Install gstreamer & sccache (macos-latest)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly
     - name: Install Rust Toolchain
       uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
         toolchain: stable
         components: rustfmt, clippy
+    - name: Cache Cargo Artifacts 
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-cargo-
+    - name: Save sccache
+      uses: actions/cache@v3
+      continue-on-error: false
+      with:
+        path: ${{ matrix.sccache-path }}
+        key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: ${{ runner.os }}-sccache-
     - name: Install cargo-make
       uses: baptiste0928/cargo-install@v1
       with:
@@ -45,6 +86,8 @@ jobs:
       with:
         crate: cargo-insta
         version: 1.26.0
+    - name: Start sccache server
+      run: sccache --start-server
     - name: Run CI Flow
       uses: actions-rs/cargo@v1
       env:
@@ -53,3 +96,7 @@ jobs:
       with:
         command: make
         args: ci-flow
+    - name: Print sccache stats
+      run: sccache --show-stats
+    - name: Stop sccache server
+      run: sccache --stop-server || true
