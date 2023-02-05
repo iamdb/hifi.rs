@@ -22,8 +22,6 @@ jobs:
         exclude:
           - os: macos-latest
             rust: stable
-            make:
-              name: Clippy
     env:
       RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
