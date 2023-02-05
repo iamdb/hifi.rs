@@ -27,6 +27,15 @@ jobs:
       with:
           toolchain: stable
           components: rustfmt, clippy
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Install cargo-make
       uses: baptiste0928/cargo-install@v1
       with:
@@ -39,16 +48,16 @@ jobs:
         version: 1.26.0
     - name: Checkout
       uses: actions/checkout@v2
+    - name: Run Checks
+      uses: actions-rs/cargo@v1
+      with:
+        command: make
+        args: check-format-ci-flow
     - name: Run Clippy
       uses: actions-rs/cargo@v1
       with:
         command: make
         args: clippy-ci-flow
-    - name: Run Checks
-      uses: actions-rs/cargo@v1
-      with:
-        command: make
-        args: check
     - name: Run Tests
       uses: actions-rs/cargo@v1
       with:
