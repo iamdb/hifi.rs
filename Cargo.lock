@@ -1202,7 +1202,7 @@ name = "hifi-rs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "base64 0.13.1",
+ "base64 0.21.0",
  "bincode",
  "byteorder",
  "chrono",
@@ -2215,7 +2215,7 @@ dependencies = [
 name = "qobuz-client"
 version = "0.1.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.21.0",
  "bincode",
  "chrono",
  "clap",
