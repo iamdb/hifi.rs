@@ -35,7 +35,7 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('./Cargo.lock') }}
     - name: Install cargo-make
       uses: baptiste0928/cargo-install@v1
       with:
