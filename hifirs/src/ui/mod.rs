@@ -23,7 +23,7 @@ use termion::{
     event::{Event as TermEvent, Key, MouseEvent},
     input::{MouseTerminal, TermRead},
     raw::{IntoRawMode, RawTerminal},
-    screen::AlternateScreen,
+    screen::{AlternateScreen, IntoAlternateScreen},
 };
 use tokio::{select, sync::Mutex, time};
 use tokio_stream::StreamExt;
@@ -101,7 +101,10 @@ pub async fn new(
     let stdout = std::io::stdout();
     let stdout = stdout.into_raw_mode()?;
     let stdout = MouseTerminal::from(stdout);
-    let stdout = AlternateScreen::from(stdout);
+    let stdout = stdout
+        .into_alternate_screen()
+        .expect("failed to convert to alternative screen");
+
     let backend = TermionBackend::new(stdout);
     let terminal = Terminal::new(backend).unwrap();
 
