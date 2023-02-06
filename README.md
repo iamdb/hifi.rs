@@ -4,11 +4,11 @@
 
 Powered by [Qobuz](https://www.qobuz.com). Requires a paid subscription. This does not allow you to listen for free.
 
-Qobuz only officially supports Linux through the browser and has no officially supported API. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on being able to quickly find and play an album inside the console.
+Qobuz only supports Linux through the browser and has no officially supported API. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on being able to quickly find and play an album inside the console.
 
 ## Player Features
 
-- [GStreamer](https://gstreamer.freedesktop.org/)-backed player
+- [GStreamer](https://gstreamer.freedesktop.org/)-backed player, SQLite database
 - High resolution audio: Supports up to 24bit/192Khz (max quality Qobuz offers)
 - MPRIS support (control via [playerctl](https://github.com/altdesktop/playerctl) or other D-Bus client)
 - Resume previous session
@@ -18,8 +18,15 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
 
-### Known Issues
+## Todo
 
-- If left paused for a while, the player will crash when attempting to play again.
-- When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync.
-- UI will freeze during loading of long lists.
+- Build binaries and make Github releases
+- Enable searching for albums, tracks and playlists in the UI
+- Re-enable outputing search to json, tsv, csv, etc.
+- Sortable lists
+
+## Known Issues
+
+- If left paused for a while, the player will crash when attempting to play again
+- When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync
+- UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior.
