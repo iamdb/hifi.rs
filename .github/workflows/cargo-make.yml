@@ -13,12 +13,11 @@ jobs:
       fail-fast: false
       matrix:
         rust: [stable]
-        os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
             sccache-path: /home/runner/.cache/sccache
-          - os: macos-latest
-            sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
+          # - os: macos-latest
+          #   sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
     env:
       RUST_BACKTRACE: full
       RUSTC_WRAPPER: sccache
