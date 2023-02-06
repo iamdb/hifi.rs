@@ -140,20 +140,8 @@ impl Screen for NowPlayingScreen {
                     Some(())
                 }
             }
-            Key::Char(c) => match c {
-                ' ' => {
-                    self.controls.play_pause().await;
-                    Some(())
-                }
-                'N' => {
-                    self.controls.next().await;
-                    Some(())
-                }
-                'P' => {
-                    self.controls.previous().await;
-                    Some(())
-                }
-                '\n' => {
+            Key::Char(c) => {
+                if let '\n' = c {
                     if let Some(selection) = self.track_list.selected() {
                         if let Some(state) = &self.state {
                             if let Some(current_index) = state.current_track_index() {
@@ -182,9 +170,10 @@ impl Screen for NowPlayingScreen {
                     }
 
                     Some(())
+                } else {
+                    None
                 }
-                _ => None,
-            },
+            }
 
             _ => None,
         }

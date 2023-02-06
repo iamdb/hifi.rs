@@ -864,16 +864,20 @@ async fn can_use_methods() {
     .expect("failed to search for albums"),
     {
         ".albums.total" => "0",
-        ".albums.items[].artist.albums_count" => "0"
+        ".albums.items[].artist.albums_count" => "0",
+        ".albums.items[].purchasable_at" => "0"
     });
     assert_yaml_snapshot!(client
         .album("lhrak0dpdxcbc".to_string())
         .await
         .expect("failed to get album"));
     assert_yaml_snapshot!(client
-        .search_artists("pink floyd".to_string(), Some(10))
-        .await
-        .expect("failed to search artists"));
+    .search_artists("pink floyd".to_string(), Some(10))
+    .await
+    .expect("failed to search artists"),
+    {
+        ".artists.items[].albums_count" => "0"
+    });
     assert_yaml_snapshot!(client
         .artist(148745, Some(10))
         .await

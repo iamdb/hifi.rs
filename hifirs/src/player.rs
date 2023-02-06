@@ -80,11 +80,10 @@ pub struct Player {
     state: SafePlayerState,
     controls: Controls,
     connection: Connection,
-    is_buffering: bool,
-    resume: bool,
+    quit_when_done: bool,
 }
 
-pub async fn new(client: Client, db: Database) -> Player {
+pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Player {
     gst::init().expect("Couldn't initialize Gstreamer");
 
     let playbin = gst::ElementFactory::make("playbin")
@@ -122,9 +121,8 @@ pub async fn new(client: Client, db: Database) -> Player {
         client,
         playbin,
         controls,
-        is_buffering: false,
-        resume: false,
         state,
+        quit_when_done,
     };
 
     let p = player.clone();
@@ -215,37 +213,30 @@ impl Player {
             SeekFlags::FLUSH | SeekFlags::KEY_UNIT
         };
 
-        match self.playbin.seek_simple(flags, time.inner_clocktime()) {
-            Ok(_) => {
-                if !self.resume {
-                    let mut state = self.state.lock().await;
-                    state.set_position(time.clone());
-
-                    drop(state);
-                }
-
-                self.dbus_seeked_signal(time).await;
-            }
-            Err(error) => {
-                error!("{}", error.message);
-            }
-        }
+        self.playbin
+            .seek_simple(flags, time.inner_clocktime())
+            .expect("failed to seek player");
     }
     /// Load the previous player state and seek to the last known position.
-    pub async fn resume(&mut self) -> Result<()> {
-        self.resume = true;
-
+    pub async fn resume(&mut self, autoplay: bool) -> Result<()> {
         let mut state = self.state.lock().await;
         state.load_last_state().await;
+        state.set_resume(true);
+
+        if autoplay {
+            state.set_target_status(GstState::Playing);
+        } else {
+            state.set_target_status(GstState::Paused);
+        }
 
         if let Some(track) = state.current_track() {
             if let Some(url) = track.track_url {
                 self.playbin.set_property("uri", url.url);
+
                 self.ready(true).await;
                 self.pause(true).await;
-                let position = state.position();
 
-                drop(state);
+                let position = state.position();
 
                 self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
                     .await;
@@ -262,10 +253,6 @@ impl Player {
     pub fn controls(&self) -> Controls {
         self.controls.clone()
     }
-    /// Reset player state.
-    pub async fn reset_state(&self) {
-        self.state.lock().await.reset();
-    }
     /// Jump forward in the currently playing track +10 seconds.
     pub async fn jump_forward(&self) {
         if let (Some(current_position), Some(duration)) = (
@@ -277,10 +264,8 @@ impl Player {
 
             if next_position < duration {
                 self.seek(next_position.into(), None).await;
-                self.state.lock().await.set_position(next_position.into());
             } else {
                 self.seek(duration.into(), None).await;
-                self.state.lock().await.set_position(duration.into());
             }
         }
     }
@@ -289,16 +274,11 @@ impl Player {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
                 self.seek(ClockTime::default().into(), None).await;
-                self.state
-                    .lock()
-                    .await
-                    .set_position(ClockTime::default().into());
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
 
                 self.seek(seek_position.into(), None).await;
-                self.state.lock().await.set_position(seek_position.into());
             }
         }
     }
@@ -324,10 +304,9 @@ impl Player {
             }
         }
 
-        self.ready(true).await;
+        self.ready(false).await;
 
         let mut state = self.state.lock().await;
-        state.reset_player();
 
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
@@ -340,7 +319,7 @@ impl Player {
 
                 self.playbin.set_property("uri", Some(track_url.url));
 
-                self.play(true).await;
+                self.play(false).await;
             }
         }
         Ok(())
@@ -402,8 +381,6 @@ impl Player {
             self.stop(true).await;
         }
 
-        self.reset_state().await;
-
         if album.tracks.is_none() {
             album.attach_tracks(self.client.clone()).await;
         }
@@ -428,6 +405,7 @@ impl Player {
 
         state.attach_track_url(&mut first_track).await;
         state.set_current_track(first_track.clone());
+        state.set_target_status(GstState::Playing);
 
         // Need to drop state before any dbus calls.
         drop(state);
@@ -479,8 +457,6 @@ impl Player {
             self.stop(true).await;
         }
 
-        self.reset_state().await;
-
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -498,6 +474,7 @@ impl Player {
             let mut state = self.state.lock().await;
             state.replace_list(tracklist);
             state.set_current_track(first_track.clone());
+            state.set_target_status(GstState::Playing);
 
             // Need to drop state before any dbus calls.
             drop(state);
@@ -521,14 +498,13 @@ impl Player {
     /// Starts the player.
     async fn start(&self, mut track: TrackListTrack, quality: AudioQuality) {
         debug!("starting player");
-        let playbin = &self.playbin;
-
         if let Ok(track_url) = self
             .client
             .track_url(track.track.id, Some(quality.clone()), None)
             .await
         {
-            playbin.set_property("uri", Some(track_url.url.as_str()));
+            self.playbin
+                .set_property("uri", Some(track_url.url.as_str()));
             track.set_track_url(track_url);
 
             self.play(true).await;
@@ -615,10 +591,27 @@ impl Player {
                     match msg.view() {
                         MessageView::Eos(_) => {
                             debug!("END OF STREAM");
-                            self.state.lock().await.quit();
+                            if self.quit_when_done {
+                                self.state.lock().await.quit();
+                            }
                         },
                         MessageView::StreamStart(_) => {
+                            debug!("stream started");
                             self.dbus_metadata_changed().await;
+                        }
+                        MessageView::AsyncDone(_) => {
+                            if let Some(position)= self.position() {
+                                debug!("async done");
+                                let mut state = self.state.lock().await;
+
+                                debug!("setting updated position");
+                                state.set_position(position.clone());
+
+                                // Drop state before dbus call;
+                                drop(state);
+
+                                self.dbus_seeked_signal(position).await;
+                            }
                         }
                         MessageView::DurationChanged(_) => {
                             if let Some(duration) = self.duration() {
@@ -632,13 +625,17 @@ impl Player {
                             let percent = buffering.percent();
                             let mut state = self.state.lock().await;
 
-                            if !self.is_buffering && percent < 100 {
-                                debug!("buffering {}%", percent);
+                            debug!("buffering {}%", percent);
+
+                            if !state.buffering() && percent < 100 {
+                                if self.is_playing() {
+                                    self.pause(false).await;
+                                }
+
                                 state.set_buffering(true);
-                                self.is_buffering = true;
-                            } else if self.is_buffering && percent > 99 {
+                            } else if state.buffering() && percent > 99 {
+                                self.set_player_state(state.target_status().into(), true).await;
                                 state.set_buffering(false);
-                                self.is_buffering = false;
                             }
                         }
                         MessageView::StateChanged(state_changed) => {
@@ -670,7 +667,6 @@ impl Player {
                                             .playback_status_changed(iface_ref.signal_context())
                                             .await
                                             .expect("failed");
-
                                     }
                                     GstState::Paused => {
                                         debug!("player state changed to Paused");
