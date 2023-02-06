@@ -24,6 +24,7 @@ jobs:
       RUSTV: ${{ matrix.rust }}
       SCCACHE_CACHE_SIZE: 2G
       SCCACHE_DIR: ${{ matrix.sccache-path }}
+      SCCACHE_GHA_ENABLED: on
       # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
     steps:
     - name: Checkout Repository
