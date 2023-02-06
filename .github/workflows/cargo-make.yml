@@ -20,25 +20,11 @@ jobs:
           #   sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
     env:
       RUST_BACKTRACE: full
-      RUSTC_WRAPPER: sccache
-      RUSTV: ${{ matrix.rust }}
-      SCCACHE_CACHE_SIZE: 2G
-      SCCACHE_DIR: ${{ matrix.sccache-path }}
-      SCCACHE_GHA_ENABLED: on
-      # SCCACHE_RECACHE: 1 # Uncomment this to clear cache, then comment it back out
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
-    - name: Configure sccache
-      uses: actions/github-script@v6
-      with:
-        script: |
-          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-    - name: Run sccache-cache
-      uses: mozilla/sccache-action@v0.0.1
-      with:
-        version: "v0.3.3"
+      uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
+      shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
     - name: Install gstreamer (ubuntu-latest)
       if: matrix.os == 'ubuntu-latest'
       run: |
@@ -55,21 +41,6 @@ jobs:
         profile: minimal
         toolchain: stable
         components: rustfmt, clippy
-    - name: Cache Cargo Artifacts 
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: ${{ runner.os }}-cargo-
-    - name: Save sccache
-      uses: actions/cache@v3
-      continue-on-error: false
-      with:
-        path: ${{ matrix.sccache-path }}
-        key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: ${{ runner.os }}-sccache-
     - name: Install cargo-make
       uses: baptiste0928/cargo-install@v1
       with:
@@ -80,8 +51,6 @@ jobs:
       with:
         crate: cargo-insta
         version: 1.26.0
-    - name: Start sccache server
-      run: sccache --start-server
     - name: Run CI Flow
       uses: actions-rs/cargo@v1
       env:
@@ -90,6 +59,3 @@ jobs:
       with:
         command: make
         args: ci-flow
-    - name: Run sccache stat for check
-      shell: bash
-      run: ${SCCACHE_PATH} --show-stats
