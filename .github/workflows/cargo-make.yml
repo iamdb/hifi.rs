@@ -1,6 +1,10 @@
 name: On Pull Request To Main
 on:
   pull_request:
+    paths:
+      - '**.rs'
+      - '**/Cargo.lock'
+      - '**/Cargo.toml'
     branches:
       - main
 env:
