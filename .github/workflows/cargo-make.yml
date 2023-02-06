@@ -9,24 +9,39 @@ jobs:
   pre-merge:
     name: Pre-merge checks
     runs-on: ${{ matrix.os }}
-    env:
-      QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
-      QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
     strategy:
       fail-fast: false
       matrix:
         rust: [stable]
-        os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            sccache-path: /home/runner/.cache/sccache
+          # - os: macos-latest
+          #   sccache-path: /Users/runner/Library/Caches/Mozilla.sccache
+    env:
+      RUST_BACKTRACE: full
     steps:
-    - uses: awalsh128/cache-apt-pkgs-action@latest
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
       with:
-        packages: libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 gstreamer1.0-qt5 gstreamer1.0-pulseaudio
+        shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install gstreamer (ubuntu-latest)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+    - name: Install gstreamer & sccache (macos-latest)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly
     - name: Install Rust Toolchain
       uses: actions-rs/toolchain@v1
       with:
-          toolchain: stable
-          components: rustfmt, clippy
+        profile: minimal
+        toolchain: stable
+        components: rustfmt, clippy
     - name: Install cargo-make
       uses: baptiste0928/cargo-install@v1
       with:
@@ -37,20 +52,11 @@ jobs:
       with:
         crate: cargo-insta
         version: 1.26.0
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Run Clippy
+    - name: Run CI Flow
       uses: actions-rs/cargo@v1
+      env:
+        QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
+        QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
       with:
         command: make
-        args: clippy
-    - name: Run Checks
-      uses: actions-rs/cargo@v1
-      with:
-        command: make
-        args: check
-    - name: Run Tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: make
-        args: test
+        args: ci-flow

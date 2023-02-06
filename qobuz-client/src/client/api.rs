@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use clap::ValueEnum;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -762,8 +763,9 @@ impl Client {
 
                         let chars = format!("{seed}{info}{extras}");
                         let encoded_secret = chars[..chars.len() - 44].to_string();
-                        let decoded_secret =
-                            base64::decode(encoded_secret).expect("failed to decode base64 secret");
+                        let decoded_secret = general_purpose::URL_SAFE
+                            .decode(encoded_secret)
+                            .expect("failed to decode base64 secret");
                         let secret_utf8 = std::str::from_utf8(&decoded_secret)
                             .expect("failed to convert base64 to string")
                             .to_string();
