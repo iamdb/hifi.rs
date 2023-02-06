@@ -217,7 +217,13 @@ impl Player {
 
         match self.playbin.seek_simple(flags, time.inner_clocktime()) {
             Ok(_) => {
-                self.state.lock().await.set_position(time.clone());
+                if !self.resume {
+                    let mut state = self.state.lock().await;
+                    state.set_position(time.clone());
+
+                    drop(state);
+                }
+
                 self.dbus_seeked_signal(time).await;
             }
             Err(error) => {
@@ -225,6 +231,7 @@ impl Player {
             }
         }
     }
+    /// Load the previous player state and seek to the last known position.
     pub async fn resume(&mut self) -> Result<()> {
         self.resume = true;
 
@@ -240,7 +247,8 @@ impl Player {
 
                 drop(state);
 
-                self.seek(position, None).await;
+                self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
+                    .await;
 
                 Ok(())
             } else {
@@ -268,9 +276,11 @@ impl Player {
             let next_position = current_position + ten_seconds;
 
             if next_position < duration {
-                self.seek(next_position.into(), None).await
+                self.seek(next_position.into(), None).await;
+                self.state.lock().await.set_position(next_position.into());
             } else {
-                self.seek(duration.into(), None).await
+                self.seek(duration.into(), None).await;
+                self.state.lock().await.set_position(duration.into());
             }
         }
     }
@@ -279,11 +289,16 @@ impl Player {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
                 self.seek(ClockTime::default().into(), None).await;
+                self.state
+                    .lock()
+                    .await
+                    .set_position(ClockTime::default().into());
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
 
                 self.seek(seek_position.into(), None).await;
+                self.state.lock().await.set_position(seek_position.into());
             }
         }
     }

@@ -28,8 +28,8 @@ pub(crate) fn progress<B>(
 
         f.render_widget(loading, area);
     } else if duration.inner_clocktime() > ClockTime::default() {
-        let position = position.to_string().as_str()[3..7].to_string();
-        let duration = duration.to_string().as_str()[3..7].to_string();
+        let position = position.to_string().as_str()[2..7].to_string();
+        let duration = duration.to_string().as_str()[2..7].to_string();
         let prog = if progress >= FloatValue(0.0) {
             progress
         } else {
