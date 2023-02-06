@@ -4,7 +4,7 @@ use crate::{
     ui::components::{Row, TableRows},
 };
 use futures::executor;
-use gstreamer::ClockTime;
+use gstreamer::{ClockTime, State as GstState};
 use qobuz_client::client::{
     album::Album,
     api::Client,
@@ -48,6 +48,7 @@ pub struct PlayerState {
     status: StatusValue,
     is_buffering: bool,
     resume: bool,
+    target_status: StatusValue,
     active_screen: ActiveScreen,
     quit_sender: BroadcastSender<bool>,
 }
@@ -139,6 +140,10 @@ impl PlayerState {
         self.resume = resume;
     }
 
+    pub fn resume(&self) -> bool {
+        self.resume
+    }
+
     pub fn set_current_progress(&mut self, progress: FloatValue) {
         self.current_progress = progress;
     }
@@ -202,6 +207,14 @@ impl PlayerState {
 
     pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
         self.tracklist.set_track_status(track_id, status);
+    }
+
+    pub fn target_status(&self) -> StatusValue {
+        self.target_status.clone()
+    }
+
+    pub fn set_target_status(&mut self, target: GstState) {
+        self.target_status = target.into();
     }
 
     pub fn rows(&self) -> Vec<Row> {
@@ -326,6 +339,7 @@ impl PlayerState {
             duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
+            target_status: StatusValue(gstreamer::State::Null),
             current_progress: FloatValue(0.0),
             is_buffering: false,
             resume: false,

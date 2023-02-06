@@ -22,6 +22,10 @@ struct Cli {
     #[clap(short, long)]
     /// Provide a password. (overrides any database value)
     pub password: Option<String>,
+    #[clap(short, long)]
+    /// Quit after done playing
+    pub quit_when_done: Option<bool>,
+
     #[clap(subcommand)]
     pub command: Commands,
 }
@@ -179,13 +183,18 @@ pub async fn run() -> Result<(), Error> {
         client = qobuz::setup_client(client.clone(), data.clone()).await;
     }
 
+    let mut quit_when_done = false;
+
+    if let Some(should_quit) = cli.quit_when_done {
+        quit_when_done = should_quit;
+    }
+
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let mut player = player::new(client.clone(), data).await;
+            let mut player = player::new(client.clone(), data, quit_when_done).await;
 
-            player.resume().await?;
-            player.play(true).await;
+            player.resume(true).await?;
 
             if no_tui {
                 wait!(player.state());
@@ -198,7 +207,7 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let player = player::new(client.clone(), data).await;
+            let player = player::new(client.clone(), data, quit_when_done).await;
 
             player.play_uri(uri, Some(client.quality())).await;
 
@@ -237,8 +246,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data).await;
-                player.resume().await?;
+                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                player.resume(false).await?;
 
                 if no_tui {
                     wait!(player.state());
@@ -269,8 +278,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data).await;
-                player.resume().await?;
+                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                player.resume(false).await?;
 
                 if no_tui {
                     wait!(player.state());
@@ -297,8 +306,8 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 println!("nothing to show");
             } else {
-                let mut player = player::new(client.clone(), data).await;
-                player.resume().await?;
+                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                player.resume(false).await?;
 
                 if no_tui {
                     wait!(player.state());
@@ -328,7 +337,7 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let player = player::new(client.clone(), data).await;
+            let player = player::new(client.clone(), data, quit_when_done).await;
 
             let track = client.track(track_id).await?;
 
@@ -357,7 +366,7 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let player = player::new(client.clone(), data).await;
+            let player = player::new(client.clone(), data, quit_when_done).await;
             player.play_album(album, Some(quality)).await;
 
             if no_tui {

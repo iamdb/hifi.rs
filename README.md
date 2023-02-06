@@ -21,5 +21,5 @@ I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](htt
 ### Known Issues
 
 - If left paused for a while, the player will crash when attempting to play again.
-- When resuming and seeking to the spot in the track, mpris does not always update with the correct time. If the player is seeked again the correct time is reported again.
+- When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync.
 - UI will freeze during loading of long lists.
