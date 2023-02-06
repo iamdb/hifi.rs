@@ -1,6 +1,6 @@
 name: On Pull Request To Main
 on:
-  pull_request:
+  push:
     paths:
       - '**.rs'
       - '**/Cargo.lock'
