@@ -20,7 +20,7 @@ pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
     };
     let mpris_tracklist = MprisTrackList { controls, state };
 
-    ConnectionBuilder::session()
+    let conn = ConnectionBuilder::session()
         .unwrap()
         .serve_at("/org/mpris/MediaPlayer2", mpris)
         .unwrap()
@@ -31,8 +31,16 @@ pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
         .name("org.mpris.MediaPlayer2.hifirs")
         .unwrap()
         .build()
-        .await
-        .expect("error connecting to dbus")
+        .await;
+
+    match conn {
+        Ok(c) => c,
+        Err(err) => {
+            println!("There was an error with mpris and I must exit.");
+            println!("Message: {err}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]

@@ -29,8 +29,8 @@ impl From<spotify::Error> for Error {
     }
 }
 
-impl From<qobuz::Error> for Error {
-    fn from(e: qobuz::Error) -> Self {
+impl From<qobuz_client::Error> for Error {
+    fn from(e: qobuz_client::Error) -> Self {
         Error::ClientError {
             error: e.to_string(),
         }

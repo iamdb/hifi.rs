@@ -3,7 +3,7 @@ use futures::stream::TryStreamExt;
 use indicatif::ProgressBar;
 use log::debug;
 use rspotify::{
-    model::{FullPlaylist, FullTrack, PlayableItem, PlaylistId, PlaylistItem, SimplifiedPlaylist},
+    model::{FullTrack, PlayableItem, PlaylistId, PlaylistItem, SimplifiedPlaylist},
     prelude::*,
     scopes, AuthCodeSpotify, Config, Credentials as SpotifyCredentials, OAuth,
 };
@@ -18,9 +18,7 @@ use warp::Filter;
 
 const TOKEN_CACHE: &str = "/tmp/.spotify_token_cache.json";
 
-#[allow(unused)]
 pub struct SpotifyFullPlaylist {
-    spotify_playlist: FullPlaylist,
     all_tracks: Vec<FullTrack>,
 }
 
@@ -55,7 +53,7 @@ pub async fn new<'s>(progress: &'_ ProgressBar) -> Spotify<'_> {
 }
 
 impl<'s> Spotify<'s> {
-    pub async fn auth(&mut self) {
+    pub async fn auth(&mut self) -> Result<()> {
         self.progress.set_message("signing into Spotify");
         if let Ok(Some(token)) = self.client.read_token_cache(true).await {
             debug!("found token in cache: {:?}", token);
@@ -64,26 +62,26 @@ impl<'s> Spotify<'s> {
             *self.client.get_token().lock().await.unwrap() = Some(token);
 
             if expired {
-                match self
-                    .client
-                    .refetch_token()
-                    .await
-                    .expect("failed to refetch token")
-                {
-                    Some(refreshed_token) => {
-                        debug!("cached token refreshed");
-                        *self.client.get_token().lock().await.unwrap() = Some(refreshed_token);
-                    }
-                    None => {
-                        debug!("no cached token, getting auth url");
-                        let url = self.client.get_authorize_url(true).unwrap();
-
-                        if webbrowser::open(&url).is_ok() {
-                            self.wait_for_auth().await;
-                        } else {
-                            println!("There was a problem opening the browser, please open this url manually:\n{url}");
-                            self.wait_for_auth().await;
+                match self.client.refetch_token().await {
+                    Ok(refresh_token) => match refresh_token {
+                        Some(refreshed_token) => {
+                            debug!("cached token refreshed");
+                            *self.client.get_token().lock().await.unwrap() = Some(refreshed_token);
                         }
+                        None => {
+                            debug!("no cached token, getting auth url");
+                            let url = self.client.get_authorize_url(true).unwrap();
+
+                            if webbrowser::open(&url).is_ok() {
+                                self.wait_for_auth().await?;
+                            } else {
+                                println!("There was a problem opening the browser, please open this url manually:\n{url}");
+                                self.wait_for_auth().await?;
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        error!("error refreshing token {err}");
                     }
                 }
             }
@@ -92,18 +90,20 @@ impl<'s> Spotify<'s> {
             let url = self.client.get_authorize_url(true).unwrap();
 
             if webbrowser::open(&url).is_ok() {
-                self.wait_for_auth().await;
+                self.wait_for_auth().await?;
             } else {
                 println!(
                     "There was a problem opening the browser, please open this url manually:\n{url}",
                 );
-                self.wait_for_auth().await;
+                self.wait_for_auth().await?;
             }
         }
         self.progress.set_message("signed into Spotify");
+
+        Ok(())
     }
 
-    pub async fn wait_for_auth(&mut self) {
+    pub async fn wait_for_auth(&mut self) -> Result<()> {
         let (tx, rx) = flume::bounded::<String>(1);
 
         let oauth_callback = warp::path!("callback")
@@ -125,7 +125,7 @@ impl<'s> Spotify<'s> {
                 Ok(code) = rx.recv_async() => {
                     debug!("received code: {}", code);
 
-                    self.client.request_token(code.as_str()).await.expect("failed to get auth token");
+                    self.client.request_token(code.as_str()).await?;
                     server_handle.abort();
                     break;
                 }
@@ -133,6 +133,8 @@ impl<'s> Spotify<'s> {
         }
 
         self.progress.set_message("authorization received");
+
+        Ok(())
     }
 
     pub async fn user_playlists(&self) -> Vec<SimplifiedPlaylist> {
@@ -152,12 +154,6 @@ impl<'s> Spotify<'s> {
     pub async fn playlist(&self, playlist_id: PlaylistId<'_>) -> Result<SpotifyFullPlaylist> {
         self.progress
             .set_message(format!("fetching playlist: {playlist_id}"));
-        debug!("fetching playlist {}", playlist_id.to_string());
-
-        let spotify_playlist = self
-            .client
-            .playlist(playlist_id.clone(), None, None)
-            .await?;
 
         debug!("fetching all spotify playlist items");
         let items = self.client.playlist_items(playlist_id, None, None);
@@ -186,10 +182,7 @@ impl<'s> Spotify<'s> {
                     .cloned()
                     .collect::<Vec<FullTrack>>();
 
-                Ok(SpotifyFullPlaylist {
-                    spotify_playlist,
-                    all_tracks,
-                })
+                Ok(SpotifyFullPlaylist { all_tracks })
             }
             Err(error) => Err(Error::ClientError {
                 error: error.to_string(),

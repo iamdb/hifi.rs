@@ -1,28 +1,10 @@
-use std::collections::HashSet;
-
 use crate::Isrc;
 use indicatif::ProgressBar;
-use qobuz_client::client::{
-    api::{Client, Credentials as QobuzCredentials},
-    playlist::Playlist,
-    track::Track,
+use qobuz_client::{
+    client::{api::Client, playlist::Playlist, track::Track},
+    Credentials as QobuzCredentials,
 };
-use snafu::prelude::*;
-
-#[derive(Snafu, Debug)]
-pub enum Error {
-    ClientError { error: String },
-}
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-impl From<qobuz_client::client::api::Error> for Error {
-    fn from(error: qobuz_client::client::api::Error) -> Self {
-        Error::ClientError {
-            error: error.to_string(),
-        }
-    }
-}
+use std::collections::HashSet;
 
 pub struct Qobuz<'q> {
     client: Client,
@@ -37,27 +19,27 @@ pub async fn new<'q>(progress: &'_ ProgressBar) -> Qobuz<'_> {
 
     let client = qobuz_client::client::api::new(Some(creds.clone()), None, None, None, None)
         .await
-        .expect("failed to create client");
+        .unwrap_or_else(|err| {
+            println!("There was a problem creating the api client.");
+            println!("Message {err}");
+            std::process::exit(1);
+        });
 
     Qobuz { client, progress }
 }
 
 impl<'q> Qobuz<'q> {
-    pub async fn auth(&mut self) {
+    pub async fn auth(&mut self) -> qobuz_client::Result<()> {
         self.progress.set_message("signing into Qobuz");
-        self.client
-            .refresh()
-            .await
-            .expect("failed to refresh config");
-        self.client.login().await.expect("failed to login");
-        self.client
-            .test_secrets()
-            .await
-            .expect("failed to test secrets");
+        self.client.refresh().await?;
+        self.client.login().await?;
+        self.client.test_secrets().await?;
         self.progress.set_message("signed into Qobuz");
+
+        Ok(())
     }
 
-    pub async fn playlist(&self, playlist_id: i64) -> Result<QobuzPlaylist> {
+    pub async fn playlist(&self, playlist_id: i64) -> qobuz_client::Result<QobuzPlaylist> {
         self.progress
             .set_message(format!("fetching playlist: {playlist_id}"));
 
@@ -95,11 +77,17 @@ impl<'q> Qobuz<'q> {
             .set_message(format!("added {track_id} to {playlist_id}"));
     }
 
-    pub async fn update_track_position(&self, playlist_id: String, track_id: String, index: usize) {
+    pub async fn update_track_position(
+        &self,
+        playlist_id: String,
+        track_id: String,
+        index: usize,
+    ) -> qobuz_client::Result<()> {
         self.client
             .playlist_track_position(index, playlist_id, track_id)
-            .await
-            .expect("failed to update playlist track position");
+            .await?;
+
+        Ok(())
     }
 }
 

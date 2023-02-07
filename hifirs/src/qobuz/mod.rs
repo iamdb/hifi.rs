@@ -3,15 +3,20 @@ use crate::{
     ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use enum_as_inner::EnumAsInner;
-use qobuz_client::client::{
-    album::{Album, AlbumSearchResults},
-    api::{Client, Credentials},
-    artist::{Artist, ArtistSearchResults},
-    playlist::{Playlist, Playlists, UserPlaylistsResult},
-    track::Track,
-    AudioQuality,
+use qobuz_client::{
+    client::{
+        album::{Album, AlbumSearchResults},
+        api::Client,
+        artist::{Artist, ArtistSearchResults},
+        playlist::{Playlist, Playlists, UserPlaylistsResult},
+        track::Track,
+        AudioQuality,
+    },
+    Credentials,
 };
 use serde::{Deserialize, Serialize};
+
+pub type Result<T, E = qobuz_client::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;
@@ -19,7 +24,7 @@ pub mod playlist;
 pub mod track;
 
 /// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(mut client: Client, db: Database) -> Client {
+pub async fn setup_client(mut client: Client, db: Database) -> Result<Client> {
     info!("setting up the api client");
 
     if let Some(config) = db.get_config().await {
@@ -51,11 +56,15 @@ pub async fn setup_client(mut client: Client, db: Database) -> Client {
             debug!("refreshing app secret and id");
             if client.refresh().await.is_ok() {
                 debug!("config refreshed, storing for future use");
-                if let Some(app_id) = client.get_app_id() {
+                let app_id = client.get_app_id();
+
+                if !app_id.is_empty() {
                     db.set_app_id(app_id).await;
                 }
 
-                if let Some(secret) = client.get_active_secret() {
+                let secret = client.get_active_secret();
+
+                if !secret.is_empty() {
                     db.set_active_secret(secret).await;
                 }
             };
@@ -72,7 +81,7 @@ pub async fn setup_client(mut client: Client, db: Database) -> Client {
             });
 
             info!("signing in");
-            client.login().await.expect("failed to login");
+            client.login().await?;
 
             info!("signed in successfully, storing user token for future use");
             if let Some(token) = client.get_token() {
@@ -81,7 +90,7 @@ pub async fn setup_client(mut client: Client, db: Database) -> Client {
         }
     }
 
-    client
+    Ok(client)
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

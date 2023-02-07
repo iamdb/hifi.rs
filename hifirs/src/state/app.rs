@@ -12,28 +12,11 @@ use qobuz_client::client::{
     track::{TrackListTrack, TrackStatus},
     AudioQuality,
 };
-use snafu::prelude::*;
 use std::{fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     Mutex,
 };
-
-#[derive(Debug, Snafu)]
-pub enum Error {
-    #[snafu(display("Collection not found."))]
-    CollectionNotFound,
-    #[snafu(display("Unsupported."))]
-    Unsupported,
-    #[snafu(display("Reportable bug."))]
-    ReportableBug,
-    #[snafu(display("Database in use."))]
-    Io,
-    #[snafu(display("Database corrupted."))]
-    Corruption,
-}
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
