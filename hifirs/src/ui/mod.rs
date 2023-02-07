@@ -50,7 +50,6 @@ pub struct Tui {
     terminal: Console,
     screens: HashMap<ActiveScreen, Arc<Mutex<dyn Screen>>>,
     state: SafePlayerState,
-    controls: Controls,
 }
 
 type Console = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
@@ -140,7 +139,6 @@ pub async fn new(
         terminal,
         tx,
         screens,
-        controls,
     };
 
     if let Some(results) = search_results {
@@ -233,15 +231,6 @@ impl Tui {
                 self.render().await;
             }
             Event::Key(key) => match key {
-                Key::Char(' ') => {
-                    self.controls.play_pause().await;
-                }
-                Key::Char('N') => {
-                    self.controls.next().await;
-                }
-                Key::Char('P') => {
-                    self.controls.previous().await;
-                }
                 Key::Char('\t') => {
                     let mut state = self.state.lock().await;
                     let active_screen = state.active_screen();

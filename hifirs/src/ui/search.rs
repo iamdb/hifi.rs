@@ -171,6 +171,26 @@ impl Screen for SearchScreen {
                     return Some(());
                 }
             }
+            Key::Right | Key::Char('l') => {
+                if self.enter_search {
+                    if key == Key::Char('l') {
+                        self.search_query.push('l');
+                    }
+                } else {
+                    self.controls.jump_forward().await;
+                }
+                return Some(());
+            }
+            Key::Left | Key::Char('h') => {
+                if self.enter_search {
+                    if key == Key::Char('h') {
+                        self.search_query.push('h');
+                    }
+                } else {
+                    self.controls.jump_backward().await;
+                }
+                return Some(());
+            }
             Key::Backspace => {
                 if self.enter_search {
                     self.search_query.pop();
@@ -231,6 +251,30 @@ impl Screen for SearchScreen {
                 }
             }
             Key::Char(char) => match char {
+                ' ' => {
+                    if !self.enter_search {
+                        self.controls.play_pause().await;
+                    } else {
+                        self.search_query.push(' ');
+                    }
+                    return Some(());
+                }
+                'N' => {
+                    if !self.enter_search {
+                        self.controls.next().await;
+                    } else {
+                        self.search_query.push('N');
+                    }
+                    return Some(());
+                }
+                'P' => {
+                    if !self.enter_search {
+                        self.controls.previous().await;
+                    } else {
+                        self.search_query.push('P');
+                    }
+                    return Some(());
+                }
                 '\n' => {
                     if self.enter_search {
                         let query = String::from_iter(self.search_query.clone());

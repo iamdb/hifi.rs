@@ -171,9 +171,12 @@ impl Player {
     }
     /// Toggle play and pause.
     pub async fn play_pause(&self) {
+        let mut state = self.state.lock().await;
         if self.is_playing() {
+            state.set_target_status(GstState::Paused);
             self.pause(true).await;
         } else if self.is_paused() {
+            state.set_target_status(GstState::Playing);
             self.play(true).await;
         }
     }
@@ -307,6 +310,7 @@ impl Player {
         self.ready(false).await;
 
         let mut state = self.state.lock().await;
+        state.set_target_status(GstState::Playing);
 
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
@@ -370,10 +374,20 @@ impl Player {
             self.client.quality()
         };
 
-        let playlist_track =
+        let mut playlist_track =
             TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
 
-        self.start(playlist_track, quality).await;
+        let mut state = self.state.lock().await;
+        state.attach_track_url(&mut playlist_track).await;
+        state.set_current_track(playlist_track.clone());
+        state.set_target_status(GstState::Playing);
+
+        if let Some(track_url) = playlist_track.track_url {
+            self.playbin
+                .set_property("uri", Some(track_url.url.to_string()));
+
+            self.play(true).await;
+        }
     }
     /// Plays a full album.
     pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) {
@@ -463,52 +477,42 @@ impl Player {
             self.client.quality()
         };
 
-        if let Some(tracklist) = playlist.to_tracklist(quality.clone()) {
-            debug!("creating playlist");
+        let mut tracklist = TrackListValue::new(playlist.to_tracklist(quality.clone()));
+        tracklist.set_playlist(playlist.clone());
+        tracklist.set_list_type(TrackListType::Playlist);
 
-            let mut tracklist = TrackListValue::new(Some(tracklist));
-            tracklist.set_playlist(playlist.clone());
+        let mut first_track = tracklist.front().unwrap().clone();
+        first_track.status = TrackStatus::Playing;
 
-            let first_track = tracklist.front().unwrap().clone();
+        tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
 
-            let mut state = self.state.lock().await;
-            state.replace_list(tracklist);
-            state.set_current_track(first_track.clone());
-            state.set_target_status(GstState::Playing);
+        let mut state = self.state.lock().await;
+        state.replace_list(tracklist);
 
-            // Need to drop state before any dbus calls.
-            drop(state);
+        state.attach_track_url(&mut first_track).await;
+        state.set_current_track(first_track.clone());
+        state.set_target_status(GstState::Playing);
 
-            if let Some(tracks) = playlist.tracks {
-                let tracks = tracks
-                    .items
-                    .iter()
-                    .map(|t| t.id.to_string())
-                    .collect::<Vec<String>>();
+        // Need to drop state before any dbus calls.
+        drop(state);
 
-                let current = tracks.first().cloned().unwrap();
+        self.playbin
+            .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
+        self.play(true).await;
 
-                self.dbus_track_list_replaced_signal(tracks, current).await;
-            }
+        if let Some(tracks) = playlist.tracks {
+            let tracks = tracks
+                .items
+                .iter()
+                .map(|t| t.id.to_string())
+                .collect::<Vec<String>>();
 
-            self.dbus_metadata_changed().await;
-            self.start(first_track, quality).await;
+            let current = tracks.first().cloned().unwrap();
+
+            self.dbus_track_list_replaced_signal(tracks, current).await;
         }
-    }
-    /// Starts the player.
-    async fn start(&self, mut track: TrackListTrack, quality: AudioQuality) {
-        debug!("starting player");
-        if let Ok(track_url) = self
-            .client
-            .track_url(track.track.id, Some(quality.clone()), None)
-            .await
-        {
-            self.playbin
-                .set_property("uri", Some(track_url.url.as_str()));
-            track.set_track_url(track_url);
 
-            self.play(true).await;
-        }
+        self.dbus_metadata_changed().await;
     }
     /// Handles messages from the player and takes necessary action.
     async fn player_loop(
