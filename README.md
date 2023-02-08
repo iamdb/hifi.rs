@@ -16,17 +16,15 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
-I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
-
-## Todo
-
-- Build binaries and make Github releases
-- Enable searching for albums, tracks and playlists in the UI
-- Re-enable outputing search to json, tsv, csv, etc.
-- Sortable lists
-
 ## Known Issues
 
 - If left paused for a while, the player will crash when attempting to play again
 - When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync
 - UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior.
+
+## Todo
+
+- Build binaries and make Github releases
+- Use unified search endpoint instead of individual
+- Enable searching for albums, tracks and playlists in the UI
+- Sortable lists

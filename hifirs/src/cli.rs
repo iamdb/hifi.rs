@@ -103,7 +103,10 @@ enum Commands {
         no_tui: bool,
     },
     /// Retreive information about a specific playlist.
-    Playlist { playlist_id: i64 },
+    Playlist {
+        playlist_id: i64,
+        output_format: Option<OutputFormat>,
+    },
     /// Reset the player state
     Reset,
     /// Set configuration options
@@ -306,7 +309,10 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
-            if no_tui {
+            if let Ok(playlists) = client.user_playlists().await {
+                let results = SearchResults::UserPlaylists(playlists);
+                output!(results, output_format)
+            } else if no_tui {
                 println!("nothing to show");
             } else {
                 let mut player = player::new(client.clone(), data, quit_when_done).await?;
@@ -327,18 +333,13 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::Playlist { playlist_id } => {
-            let results = client.playlist(playlist_id).await?;
-            if let Ok(json) = serde_json::to_string(&results) {
-                print!("{json}");
-                Ok(())
-            } else {
-                Err(Error::ClientError {
-                    error: qobuz_client::Error::DeserializeJSON {
-                        message: "failed to deserialize playlist response".to_string(),
-                    },
-                })
-            }
+        Commands::Playlist {
+            playlist_id,
+            output_format,
+        } => {
+            let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
+            output!(results, output_format);
+            Ok(())
         }
         Commands::StreamTrack {
             track_id,
