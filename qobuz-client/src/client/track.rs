@@ -65,12 +65,6 @@ impl Track {
     }
 }
 
-impl From<Track> for Vec<u8> {
-    fn from(track: Track) -> Self {
-        bincode::serialize(&track).expect("failed to serialize track")
-    }
-}
-
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TrackStatus {
     Played,

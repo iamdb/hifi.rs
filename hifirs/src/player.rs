@@ -10,7 +10,10 @@ use crate::{
 };
 use flume::{Receiver, Sender};
 use futures::prelude::*;
-use gst::{bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState};
+use gst::{
+    bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState,
+    StateChangeError,
+};
 use gstreamer::{self as gst, prelude::*};
 use qobuz_client::client::{
     self,
@@ -33,6 +36,46 @@ pub enum Error {
     Seek,
     #[snafu(display("Sorry, could not resume previous session."))]
     Resume,
+    #[snafu(display("Gstreamer failed."))]
+    GStreamer {
+        message: String,
+    },
+    Client {
+        message: String,
+    },
+    App,
+}
+
+impl From<glib::Error> for Error {
+    fn from(value: glib::Error) -> Self {
+        Error::GStreamer {
+            message: value.to_string(),
+        }
+    }
+}
+
+impl From<glib::BoolError> for Error {
+    fn from(value: glib::BoolError) -> Self {
+        Error::GStreamer {
+            message: value.to_string(),
+        }
+    }
+}
+
+impl From<StateChangeError> for Error {
+    fn from(value: StateChangeError) -> Self {
+        Error::GStreamer {
+            message: value.to_string(),
+        }
+    }
+}
+
+impl From<qobuz_client::Error> for Error {
+    fn from(value: qobuz_client::Error) -> Self {
+        Error::Client {
+            message: value.to_string(),
+        }
+    }
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
@@ -83,12 +126,10 @@ pub struct Player {
     quit_when_done: bool,
 }
 
-pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Player {
-    gst::init().expect("Couldn't initialize Gstreamer");
+pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Result<Player> {
+    gst::init()?;
 
-    let playbin = gst::ElementFactory::make("playbin")
-        .build()
-        .expect("failed to create gst element");
+    let playbin = gst::ElementFactory::make("playbin").build()?;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
     let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
@@ -132,34 +173,38 @@ pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Player {
 
     let mut p = player.clone();
     tokio::spawn(async move {
-        p.player_loop(about_to_finish_rx, next_track_tx).await;
+        p.player_loop(about_to_finish_rx, next_track_tx)
+            .await
+            .expect("failed to start player loop");
     });
 
-    player
+    Ok(player)
 }
 
 impl Player {
     /// Play the player.
-    pub async fn play(&self, wait: bool) {
-        self.set_player_state(gst::State::Playing, wait).await;
+    pub async fn play(&self, wait: bool) -> Result<()> {
+        self.set_player_state(gst::State::Playing, wait).await?;
+        Ok(())
     }
     /// Pause the player.
-    pub async fn pause(&self, wait: bool) {
-        self.set_player_state(gst::State::Paused, wait).await;
+    pub async fn pause(&self, wait: bool) -> Result<()> {
+        self.set_player_state(gst::State::Paused, wait).await?;
+        Ok(())
     }
     /// Ready the player.
-    pub async fn ready(&self, wait: bool) {
-        self.set_player_state(gst::State::Ready, wait).await;
+    pub async fn ready(&self, wait: bool) -> Result<()> {
+        self.set_player_state(gst::State::Ready, wait).await?;
+        Ok(())
     }
     /// Stop the player.
-    pub async fn stop(&self, wait: bool) {
-        self.set_player_state(gst::State::Null, wait).await;
+    pub async fn stop(&self, wait: bool) -> Result<()> {
+        self.set_player_state(gst::State::Null, wait).await?;
+        Ok(())
     }
     /// Sets the player to a specific state.
-    pub async fn set_player_state(&self, state: gst::State, wait: bool) {
-        self.playbin
-            .set_state(state)
-            .expect("failed to set player state {state}");
+    pub async fn set_player_state(&self, state: gst::State, wait: bool) -> Result<()> {
+        self.playbin.set_state(state)?;
 
         if wait {
             let mut interval = tokio::time::interval(Duration::from_millis(500));
@@ -168,14 +213,21 @@ impl Player {
                 interval.tick().await;
             }
         }
+
+        Ok(())
     }
     /// Toggle play and pause.
-    pub async fn play_pause(&self) {
+    pub async fn play_pause(&self) -> Result<()> {
+        let mut state = self.state.lock().await;
         if self.is_playing() {
-            self.pause(true).await;
+            state.set_target_status(GstState::Paused);
+            self.pause(true).await?;
         } else if self.is_paused() {
-            self.play(true).await;
+            state.set_target_status(GstState::Playing);
+            self.play(true).await?;
         }
+
+        Ok(())
     }
     /// Retreive the current player state.
     pub fn state(&self) -> SafePlayerState {
@@ -206,16 +258,16 @@ impl Player {
             .map(|duration| duration.into())
     }
     /// Seek to a specified time in the current track.
-    pub async fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) {
+    pub async fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
         let flags = if let Some(flags) = flags {
             flags
         } else {
             SeekFlags::FLUSH | SeekFlags::KEY_UNIT
         };
 
-        self.playbin
-            .seek_simple(flags, time.inner_clocktime())
-            .expect("failed to seek player");
+        self.playbin.seek_simple(flags, time.inner_clocktime())?;
+
+        Ok(())
     }
     /// Load the previous player state and seek to the last known position.
     pub async fn resume(&mut self, autoplay: bool) -> Result<()> {
@@ -233,13 +285,13 @@ impl Player {
             if let Some(url) = track.track_url {
                 self.playbin.set_property("uri", url.url);
 
-                self.ready(true).await;
-                self.pause(true).await;
+                self.ready(true).await?;
+                self.pause(true).await?;
 
                 let position = state.position();
 
                 self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
-                    .await;
+                    .await?;
 
                 Ok(())
             } else {
@@ -254,7 +306,7 @@ impl Player {
         self.controls.clone()
     }
     /// Jump forward in the currently playing track +10 seconds.
-    pub async fn jump_forward(&self) {
+    pub async fn jump_forward(&self) -> Result<()> {
         if let (Some(current_position), Some(duration)) = (
             self.playbin.query_position::<ClockTime>(),
             self.playbin.query_duration::<ClockTime>(),
@@ -263,24 +315,28 @@ impl Player {
             let next_position = current_position + ten_seconds;
 
             if next_position < duration {
-                self.seek(next_position.into(), None).await;
+                self.seek(next_position.into(), None).await?;
             } else {
-                self.seek(duration.into(), None).await;
+                self.seek(duration.into(), None).await?;
             }
         }
+
+        Ok(())
     }
     /// Jump forward in the currently playing track -10 seconds.
-    pub async fn jump_backward(&self) {
+    pub async fn jump_backward(&self) -> Result<()> {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
-                self.seek(ClockTime::default().into(), None).await;
+                self.seek(ClockTime::default().into(), None).await?;
             } else {
                 let ten_seconds = ClockTime::from_seconds(10);
                 let seek_position = current_position - ten_seconds;
 
-                self.seek(seek_position.into(), None).await;
+                self.seek(seek_position.into(), None).await?;
             }
         }
+
+        Ok(())
     }
     /// Skip to the next, previous or specific track in the playlist.
     pub async fn skip(&self, direction: SkipDirection, num: Option<usize>) -> Result<()> {
@@ -294,7 +350,7 @@ impl Player {
 
                 if current_position > one_second && num.is_none() {
                     debug!("current track position >1s, seeking to start of track");
-                    self.seek(ClockTime::default().into(), None).await;
+                    self.seek(ClockTime::default().into(), None).await?;
 
                     self.dbus_seeked_signal(ClockValue::default()).await;
                     self.dbus_metadata_changed().await;
@@ -304,9 +360,10 @@ impl Player {
             }
         }
 
-        self.ready(false).await;
+        self.ready(false).await?;
 
         let mut state = self.state.lock().await;
+        state.set_target_status(GstState::Playing);
 
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
@@ -319,7 +376,7 @@ impl Player {
 
                 self.playbin.set_property("uri", Some(track_url.url));
 
-                self.play(false).await;
+                self.play(false).await?;
             }
         }
         Ok(())
@@ -359,9 +416,9 @@ impl Player {
         Ok(())
     }
     /// Plays a single track.
-    pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) {
+    pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() {
-            self.stop(true).await;
+            self.stop(true).await?;
         }
 
         let quality = if let Some(quality) = quality {
@@ -370,15 +427,27 @@ impl Player {
             self.client.quality()
         };
 
-        let playlist_track =
+        let mut playlist_track =
             TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
 
-        self.start(playlist_track, quality).await;
+        let mut state = self.state.lock().await;
+        state.attach_track_url(&mut playlist_track).await;
+        state.set_current_track(playlist_track.clone());
+        state.set_target_status(GstState::Playing);
+
+        if let Some(track_url) = playlist_track.track_url {
+            self.playbin
+                .set_property("uri", Some(track_url.url.to_string()));
+
+            self.play(true).await?;
+        }
+
+        Ok(())
     }
     /// Plays a full album.
-    pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) {
+    pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() || self.is_paused() {
-            self.stop(true).await;
+            self.stop(true).await?;
         }
 
         if album.tracks.is_none() {
@@ -412,7 +481,7 @@ impl Player {
 
         self.playbin
             .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
-        self.play(true).await;
+        self.play(true).await?;
 
         if let Some(tracks) = album.tracks {
             let tracks = tracks
@@ -423,13 +492,16 @@ impl Player {
 
             let current = tracks.first().cloned().unwrap();
 
-            self.dbus_track_list_replaced_signal(tracks, current).await;
+            self.dbus_track_list_replaced_signal(tracks, current)
+                .await?;
         }
 
         self.dbus_metadata_changed().await;
+
+        Ok(())
     }
     /// Play an item from Qobuz web uri
-    pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) {
+    pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -440,21 +512,27 @@ impl Player {
             match url {
                 client::UrlType::Album { id } => {
                     if let Ok(album) = self.client.album(id).await {
-                        self.play_album(album, Some(quality)).await;
+                        self.play_album(album, Some(quality)).await?;
                     }
                 }
                 client::UrlType::Playlist { id } => {
                     if let Ok(playlist) = self.client.playlist(id).await {
-                        self.play_playlist(playlist, Some(quality)).await;
+                        self.play_playlist(playlist, Some(quality)).await?;
                     }
                 }
             }
         }
+
+        Ok(())
     }
     /// Plays all tracks in a playlist.
-    pub async fn play_playlist(&self, mut playlist: Playlist, quality: Option<AudioQuality>) {
+    pub async fn play_playlist(
+        &self,
+        mut playlist: Playlist,
+        quality: Option<AudioQuality>,
+    ) -> Result<()> {
         if self.is_playing() || self.is_paused() {
-            self.stop(true).await;
+            self.stop(true).await?;
         }
 
         let quality = if let Some(quality) = quality {
@@ -463,59 +541,52 @@ impl Player {
             self.client.quality()
         };
 
-        if let Some(tracklist) = playlist.to_tracklist(quality.clone()) {
-            debug!("creating playlist");
+        let mut tracklist = TrackListValue::new(playlist.to_tracklist(quality.clone()));
+        tracklist.set_playlist(playlist.clone());
+        tracklist.set_list_type(TrackListType::Playlist);
 
-            let mut tracklist = TrackListValue::new(Some(tracklist));
-            tracklist.set_playlist(playlist.clone());
+        let mut first_track = tracklist.front().unwrap().clone();
+        first_track.status = TrackStatus::Playing;
 
-            let first_track = tracklist.front().unwrap().clone();
+        tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
 
-            let mut state = self.state.lock().await;
-            state.replace_list(tracklist);
-            state.set_current_track(first_track.clone());
-            state.set_target_status(GstState::Playing);
+        let mut state = self.state.lock().await;
+        state.replace_list(tracklist);
 
-            // Need to drop state before any dbus calls.
-            drop(state);
+        state.attach_track_url(&mut first_track).await;
+        state.set_current_track(first_track.clone());
+        state.set_target_status(GstState::Playing);
 
-            if let Some(tracks) = playlist.tracks {
-                let tracks = tracks
-                    .items
-                    .iter()
-                    .map(|t| t.id.to_string())
-                    .collect::<Vec<String>>();
+        // Need to drop state before any dbus calls.
+        drop(state);
 
-                let current = tracks.first().cloned().unwrap();
+        self.playbin
+            .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
+        self.play(true).await?;
 
-                self.dbus_track_list_replaced_signal(tracks, current).await;
-            }
+        if let Some(tracks) = playlist.tracks {
+            let tracks = tracks
+                .items
+                .iter()
+                .map(|t| t.id.to_string())
+                .collect::<Vec<String>>();
 
-            self.dbus_metadata_changed().await;
-            self.start(first_track, quality).await;
+            let current = tracks.first().cloned().unwrap();
+
+            self.dbus_track_list_replaced_signal(tracks, current)
+                .await?;
         }
-    }
-    /// Starts the player.
-    async fn start(&self, mut track: TrackListTrack, quality: AudioQuality) {
-        debug!("starting player");
-        if let Ok(track_url) = self
-            .client
-            .track_url(track.track.id, Some(quality.clone()), None)
-            .await
-        {
-            self.playbin
-                .set_property("uri", Some(track_url.url.as_str()));
-            track.set_track_url(track_url);
 
-            self.play(true).await;
-        }
+        self.dbus_metadata_changed().await;
+
+        Ok(())
     }
     /// Handles messages from the player and takes necessary action.
     async fn player_loop(
         &mut self,
         about_to_finish_rx: Receiver<bool>,
         next_track_tx: Sender<String>,
-    ) {
+    ) -> Result<()> {
         let action_rx = self.controls.action_receiver();
         let mut messages = self.message_stream().await;
         let mut quitter = self.state.lock().await.quitter();
@@ -532,12 +603,12 @@ impl Player {
                                 let status = self.current_state();
                                 if status == GstState::Playing.into() {
                                     debug!("pausing player");
-                                    self.pause(true).await;
+                                    self.pause(true).await?;
                                 }
 
                                 if status != GstState::Null.into() {
                                     debug!("stopping player");
-                                    self.stop(true).await;
+                                    self.stop(true).await?;
                                 }
 
                                 std::process::exit(0);
@@ -558,33 +629,32 @@ impl Player {
                 }
                 Some(action) = actions.next() => {
                     match action {
-                        Action::JumpBackward => self.jump_backward().await,
-                        Action::JumpForward => self.jump_forward().await,
-                        Action::Next => self.skip(SkipDirection::Forward,None).await.expect("failed to skip forward"),
-                        Action::Pause => self.pause(true).await,
-                        Action::Play => self.play(true).await,
-                        Action::PlayPause => self.play_pause().await,
-                        Action::Previous => self.skip(SkipDirection::Backward,None).await.expect("failed to skip backward"),
-                        Action::Stop => self.stop(true).await,
+                        Action::JumpBackward => self.jump_backward().await?,
+                        Action::JumpForward => self.jump_forward().await?,
+                        Action::Next => self.skip(SkipDirection::Forward,None).await?,
+                        Action::Pause => self.pause(true).await?,
+                        Action::Play => self.play(true).await?,
+                        Action::PlayPause => self.play_pause().await?,
+                        Action::Previous => self.skip(SkipDirection::Backward,None).await?,
+                        Action::Stop => self.stop(true).await?,
                         Action::PlayAlbum { album_id } => {
                             if let Ok(album) = self.client.album(album_id).await {
-                                self.play_album(album, None).await;
+                                self.play_album(album, None).await?;
                             }
                         },
                         Action::PlayTrack { track_id } => {
                             if let Ok(track) = self.client.track(track_id).await {
-                                self.play_track(track, None).await;
+                                self.play_track(track, None).await?;
                             }
                         },
-                        Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await,
+                        Action::PlayUri { uri } => self.play_uri(uri, Some(self.client.quality())).await?,
                         Action::PlayPlaylist { playlist_id } => {
-                            if let Ok(playlist) = self.client.playlist(playlist_id).await {
-                                self.play_playlist(playlist, Some(self.client.quality())).await
-                            }
+                            let playlist = self.client.playlist(playlist_id).await?;
+                            self.play_playlist(playlist, Some(self.client.quality())).await?;
                         },
                         Action::Quit => self.state.lock().await.quit(),
-                        Action::SkipTo { num, direction } => self.skip(direction, Some(num)).await.expect("failed to skip to track"),
-                        Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await.expect("failed to skip to track"),
+                        Action::SkipTo { num, direction } => self.skip(direction, Some(num)).await?,
+                        Action::SkipToById { track_id } => self.skip_to_by_id(track_id).await?
                     }
                 }
                 Some(msg) = messages.next() => {
@@ -629,12 +699,12 @@ impl Player {
 
                             if !state.buffering() && percent < 100 {
                                 if self.is_playing() {
-                                    self.pause(false).await;
+                                    self.pause(false).await?;
                                 }
 
                                 state.set_buffering(true);
                             } else if state.buffering() && percent > 99 {
-                                self.set_player_state(state.target_status().into(), true).await;
+                                self.set_player_state(state.target_status().into(), true).await?;
                                 state.set_buffering(false);
                             }
                         }
@@ -742,6 +812,8 @@ impl Player {
                 }
             }
         }
+
+        Ok(())
     }
     /// Inserts the most recent position, duration and progress values into the state
     /// at a set interval.
@@ -777,7 +849,11 @@ impl Player {
             }
         }
     }
-    async fn dbus_track_list_replaced_signal(&self, tracks: Vec<String>, current: String) {
+    async fn dbus_track_list_replaced_signal(
+        &self,
+        tracks: Vec<String>,
+        current: String,
+    ) -> Result<()> {
         debug!("replacing dbus tracklist");
         let object_server = self.connection.object_server();
 
@@ -789,6 +865,8 @@ impl Player {
         MprisTrackList::track_list_replaced(iface_ref.signal_context(), tracks, current)
             .await
             .expect("failed to send track list replaced signal");
+
+        Ok(())
     }
     async fn player_iface(&self) -> zbus::InterfaceRef<MprisPlayer> {
         let object_server = self.connection.object_server();

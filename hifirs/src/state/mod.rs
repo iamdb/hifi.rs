@@ -7,7 +7,6 @@ use qobuz_client::client::{
     album::Album,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
-    AudioQuality,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -39,43 +38,9 @@ impl ActiveScreen {
     }
 }
 
-impl From<Bytes> for ActiveScreen {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: ActiveScreen =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
-
-        deserialized
-    }
-}
-
-impl From<ActiveScreen> for Bytes {
-    fn from(screen: ActiveScreen) -> Self {
-        bincode::serialize(&screen)
-            .expect("failed to serialize string value")
-            .into()
-    }
-}
-
 /// A wrapper for string values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StringValue(String);
-
-impl From<Bytes> for StringValue {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: StringValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
-
-        deserialized
-    }
-}
-
-impl From<StringValue> for Bytes {
-    fn from(string_value: StringValue) -> Self {
-        bincode::serialize(&string_value)
-            .expect("failed to serialize string value")
-            .into()
-    }
-}
 
 impl From<String> for StringValue {
     fn from(string: String) -> Self {
@@ -98,15 +63,6 @@ impl StringValue {
 /// A wrapper for gstreamer state values
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StatusValue(GstState);
-
-impl From<Bytes> for StatusValue {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: StatusValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize status value");
-
-        deserialized
-    }
-}
 
 impl From<GstState> for StatusValue {
     fn from(state: GstState) -> Self {
@@ -144,20 +100,6 @@ impl ClockValue {
     }
 }
 
-impl From<ClockValue> for Bytes {
-    fn from(clock_value: ClockValue) -> Self {
-        bincode::serialize(&clock_value)
-            .expect("failed to serialize clock value")
-            .into()
-    }
-}
-
-impl From<Bytes> for ClockValue {
-    fn from(bytes: Bytes) -> Self {
-        bincode::deserialize(&bytes.vec()).expect("failed to deserialize vec<u8>")
-    }
-}
-
 impl From<ClockTime> for ClockValue {
     fn from(time: ClockTime) -> Self {
         ClockValue(time)
@@ -180,15 +122,6 @@ impl Display for ClockValue {
 #[derive(Debug, Clone, Serialize, PartialEq, PartialOrd, Deserialize)]
 pub struct FloatValue(pub f64);
 
-impl From<Bytes> for FloatValue {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: FloatValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize float value");
-
-        deserialized
-    }
-}
-
 impl From<f64> for FloatValue {
     fn from(float: f64) -> Self {
         FloatValue(float)
@@ -198,53 +131,6 @@ impl From<f64> for FloatValue {
 impl From<FloatValue> for f64 {
     fn from(float: FloatValue) -> Self {
         float.0
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Bytes(Vec<u8>);
-
-impl From<Vec<u8>> for Bytes {
-    fn from(vec: Vec<u8>) -> Self {
-        Bytes(vec)
-    }
-}
-
-impl From<Bytes> for Vec<u8> {
-    fn from(bytes: Bytes) -> Self {
-        bytes.0
-    }
-}
-
-impl Bytes {
-    pub fn vec(&self) -> Vec<u8> {
-        self.0.clone()
-    }
-}
-
-impl From<Bytes> for AudioQuality {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: AudioQuality =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize audio quality");
-
-        deserialized
-    }
-}
-
-impl From<AudioQuality> for Bytes {
-    fn from(audio_quality: AudioQuality) -> Self {
-        bincode::serialize(&audio_quality)
-            .expect("failed to serialize audio quality")
-            .into()
-    }
-}
-
-impl From<Bytes> for TrackListTrack {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: TrackListTrack =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize playlist track");
-
-        deserialized
     }
 }
 
@@ -286,23 +172,6 @@ pub struct TrackListValue {
     album: Option<Album>,
     playlist: Option<Playlist>,
     list_type: TrackListType,
-}
-
-impl From<Bytes> for TrackListValue {
-    fn from(bytes: Bytes) -> Self {
-        let deserialized: TrackListValue =
-            bincode::deserialize(&bytes.vec()).expect("failed to deserialize tracklist value");
-
-        deserialized
-    }
-}
-
-impl From<TrackListValue> for Bytes {
-    fn from(playlist: TrackListValue) -> Self {
-        bincode::serialize(&playlist)
-            .expect("failed to serialize playlist")
-            .into()
-    }
 }
 
 impl TableRows for TrackListValue {

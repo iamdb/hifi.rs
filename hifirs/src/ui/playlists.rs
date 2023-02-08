@@ -282,102 +282,123 @@ impl<'m> Screen for MyPlaylistsScreen<'m> {
             };
         }
 
-        if self.show_selected_playlist {
-            match key {
-                Key::Down | Key::Char('j') => {
-                    self.selected_playlist_table.next();
-                    return Some(());
-                }
-                Key::Up | Key::Char('k') => {
-                    self.selected_playlist_table.previous();
-                    return Some(());
-                }
-                Key::Esc => {
-                    self.show_selected_playlist = false;
-                    return Some(());
-                }
-                Key::Home => {
-                    self.selected_playlist_table.home();
-                    return Some(());
-                }
-                Key::End => {
-                    self.selected_playlist_table.end();
-                    return Some(());
-                }
-                Key::PageDown => {
-                    let page_height = self.screen_height / 2;
-
-                    if let Some(selected) = self.selected_playlist_table.selected() {
-                        if selected == 0 {
-                            self.selected_playlist_table.select(page_height * 2);
-                            return Some(());
-                        } else if selected + page_height > self.selected_playlist_table.len() - 1 {
-                            self.selected_playlist_table
-                                .select(self.selected_playlist_table.len() - 1);
-                            return Some(());
-                        } else {
-                            self.selected_playlist_table.select(selected + page_height);
-                            return Some(());
-                        }
-                    } else {
-                        self.selected_playlist_table.select(page_height);
-                        return Some(());
-                    }
-                }
-                Key::PageUp => {
-                    let page_height = self.screen_height / 2;
-
-                    if let Some(selected) = self.selected_playlist_table.selected() {
-                        if selected < page_height {
-                            self.selected_playlist_table.select(0);
-                            return Some(());
-                        } else {
-                            self.selected_playlist_table.select(selected - page_height);
-                            return Some(());
-                        }
-                    } else {
-                        self.selected_playlist_table.select(page_height);
-                        return Some(());
-                    }
-                }
-                Key::Char('\n') => {
-                    self.show_album_or_track_popup = true;
-                    return Some(());
-                }
-                _ => return None,
-            };
-        }
-
         match key {
             Key::Down | Key::Char('j') => {
-                self.mylists.next();
-                Some(())
+                if self.show_selected_playlist {
+                    self.selected_playlist_table.next();
+                } else {
+                    self.mylists.next();
+                }
+                return Some(());
             }
             Key::Up | Key::Char('k') => {
-                self.mylists.previous();
-                Some(())
+                if self.show_selected_playlist {
+                    self.selected_playlist_table.previous();
+                } else {
+                    self.mylists.previous();
+                }
+                return Some(());
+            }
+            Key::Right | Key::Char('l') => {
+                self.controls.jump_forward().await;
+                return Some(());
+            }
+            Key::Left | Key::Char('h') => {
+                self.controls.jump_backward().await;
+                return Some(());
+            }
+            Key::Esc => {
+                self.show_selected_playlist = false;
+                return Some(());
             }
             Key::Home => {
-                self.mylists.select(0);
-                Some(())
+                if self.show_selected_playlist {
+                    self.selected_playlist_table.home();
+                } else {
+                    self.mylists.select(0);
+                }
+                return Some(());
             }
             Key::End => {
-                self.mylists.select(self.mylists.len() - 1);
-                Some(())
+                if self.show_selected_playlist {
+                    self.selected_playlist_table.end();
+                } else {
+                    self.mylists.select(self.mylists.len() - 1);
+                }
+                return Some(());
+            }
+            Key::PageDown => {
+                let page_height = self.screen_height / 2;
+
+                if let Some(selected) = self.selected_playlist_table.selected() {
+                    if selected == 0 {
+                        self.selected_playlist_table.select(page_height * 2);
+                        return Some(());
+                    } else if selected + page_height > self.selected_playlist_table.len() - 1 {
+                        self.selected_playlist_table
+                            .select(self.selected_playlist_table.len() - 1);
+                        return Some(());
+                    } else {
+                        self.selected_playlist_table.select(selected + page_height);
+                        return Some(());
+                    }
+                } else {
+                    self.selected_playlist_table.select(page_height);
+                    return Some(());
+                }
+            }
+            Key::PageUp => {
+                let page_height = self.screen_height / 2;
+
+                if let Some(selected) = self.selected_playlist_table.selected() {
+                    if selected < page_height {
+                        self.selected_playlist_table.select(0);
+                        return Some(());
+                    } else {
+                        self.selected_playlist_table.select(selected - page_height);
+                        return Some(());
+                    }
+                } else {
+                    self.selected_playlist_table.select(page_height);
+                    return Some(());
+                }
             }
             Key::Char(char) => match char {
-                'r' => {
-                    self.refresh_lists().await;
-                    Some(())
-                }
                 '\n' => {
-                    self.show_play_or_open_popup = true;
-                    Some(())
+                    if self.show_selected_playlist {
+                        self.show_play_or_open_popup = false;
+                        self.show_album_or_track_popup = true;
+                    } else {
+                        self.show_album_or_track_popup = false;
+                        self.show_play_or_open_popup = true;
+                    }
+                    return Some(());
                 }
-                _ => None,
+                'r' => {
+                    if !self.show_selected_playlist {
+                        self.refresh_lists().await;
+                        return Some(());
+                    } else {
+                        return None;
+                    }
+                }
+                ' ' => {
+                    self.controls.play_pause().await;
+                    return Some(());
+                }
+                'N' => {
+                    self.controls.next().await;
+                    return Some(());
+                }
+                'P' => {
+                    self.controls.previous().await;
+                    return Some(());
+                }
+                _ => {
+                    return None;
+                }
             },
-
-            _ => None,
-        }
+            _ => return None,
+        };
     }
 }

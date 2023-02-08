@@ -1,4 +1,4 @@
-use crate::{qobuz, spotify, Result};
+use crate::{qobuz, spotify};
 use clap::Parser;
 use console::Term;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -32,7 +32,7 @@ struct Cli {
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("Client Error: {error}"))]
-    QobuzError { error: qobuz::Error },
+    QobuzError { error: qobuz_client::Error },
     #[snafu(display("Client Error: {error}"))]
     SpotifyError { error: spotify::Error },
 }
@@ -43,8 +43,8 @@ impl From<spotify::Error> for Error {
     }
 }
 
-impl From<qobuz::Error> for Error {
-    fn from(error: qobuz::Error) -> Self {
+impl From<qobuz_client::Error> for Error {
+    fn from(error: qobuz_client::Error) -> Self {
         Error::QobuzError { error }
     }
 }
@@ -72,7 +72,7 @@ pub async fn run() -> Result<(), Error> {
     prog.add(spotify_prog.clone());
 
     let mut spotify = spotify::new(&spotify_prog).await;
-    spotify.auth().await;
+    spotify.auth().await?;
 
     let qobuz_prog = ProgressBar::new_spinner().with_prefix("qobuz  ");
     qobuz_prog.enable_steady_tick(Duration::from_secs(1));
@@ -85,7 +85,7 @@ pub async fn run() -> Result<(), Error> {
     prog.add(qobuz_prog.clone());
 
     let mut qobuz = qobuz::new(&qobuz_prog).await;
-    qobuz.auth().await;
+    qobuz.auth().await?;
 
     let spotify_playlist = spotify
         .playlist(
@@ -126,7 +126,7 @@ pub async fn run() -> Result<(), Error> {
                                 found.id.to_string(),
                                 missing.index - 1,
                             )
-                            .await;
+                            .await?;
                     }
                 }
             }

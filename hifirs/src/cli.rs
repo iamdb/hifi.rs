@@ -7,9 +7,12 @@ use crate::{
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
-use qobuz_client::client::{
-    api::{self, Credentials, OutputFormat},
-    AudioQuality,
+use qobuz_client::{
+    client::{
+        api::{self, OutputFormat},
+        AudioQuality,
+    },
+    Credentials,
 };
 use snafu::prelude::*;
 
@@ -100,7 +103,10 @@ enum Commands {
         no_tui: bool,
     },
     /// Retreive information about a specific playlist.
-    Playlist { playlist_id: i64 },
+    Playlist {
+        playlist_id: i64,
+        output_format: Option<OutputFormat>,
+    },
     /// Reset the player state
     Reset,
     /// Set configuration options
@@ -131,7 +137,7 @@ pub enum ConfigCommands {
 pub enum Error {
     #[snafu(display("Client Error: {error}"))]
     ClientError {
-        error: api::Error,
+        error: qobuz_client::Error,
     },
     PlayerError {
         error: player::Error,
@@ -141,8 +147,8 @@ pub enum Error {
     },
 }
 
-impl From<api::Error> for Error {
-    fn from(error: api::Error) -> Self {
+impl From<qobuz_client::Error> for Error {
+    fn from(error: qobuz_client::Error) -> Self {
         Error::ClientError { error }
     }
 }
@@ -180,7 +186,7 @@ pub async fn run() -> Result<(), Error> {
 
     if cli.username.is_none() && cli.password.is_none() {
         debug!("setting up qobuz client");
-        client = qobuz::setup_client(client.clone(), data.clone()).await;
+        client = qobuz::setup_client(client.clone(), data.clone()).await?;
     }
 
     let mut quit_when_done = false;
@@ -192,7 +198,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
-            let mut player = player::new(client.clone(), data, quit_when_done).await;
+            let mut player = player::new(client.clone(), data, quit_when_done).await?;
 
             player.resume(true).await?;
 
@@ -207,9 +213,9 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
-            let player = player::new(client.clone(), data, quit_when_done).await;
+            let player = player::new(client.clone(), data, quit_when_done).await?;
 
-            player.play_uri(uri, Some(client.quality())).await;
+            player.play_uri(uri, Some(client.quality())).await?;
 
             if no_tui {
                 wait!(player.state());
@@ -246,7 +252,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                let mut player = player::new(client.clone(), data, quit_when_done).await?;
                 player.resume(false).await?;
 
                 if no_tui {
@@ -278,7 +284,7 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                let mut player = player::new(client.clone(), data, quit_when_done).await?;
                 player.resume(false).await?;
 
                 if no_tui {
@@ -303,10 +309,13 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
-            if no_tui {
+            if let Ok(playlists) = client.user_playlists().await {
+                let results = SearchResults::UserPlaylists(playlists);
+                output!(results, output_format)
+            } else if no_tui {
                 println!("nothing to show");
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await;
+                let mut player = player::new(client.clone(), data, quit_when_done).await?;
                 player.resume(false).await?;
 
                 if no_tui {
@@ -324,12 +333,12 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::Playlist { playlist_id } => {
-            let results = client.playlist(playlist_id).await?;
-            let json =
-                serde_json::to_string(&results).expect("failed to convert results to string");
-
-            print!("{json}");
+        Commands::Playlist {
+            playlist_id,
+            output_format,
+        } => {
+            let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
+            output!(results, output_format);
             Ok(())
         }
         Commands::StreamTrack {
@@ -337,11 +346,11 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
-            let player = player::new(client.clone(), data, quit_when_done).await;
+            let player = player::new(client.clone(), data, quit_when_done).await?;
 
             let track = client.track(track_id).await?;
 
-            player.play_track(track, Some(quality.unwrap())).await;
+            player.play_track(track, Some(quality.unwrap())).await?;
 
             if no_tui {
                 wait!(player.state());
@@ -366,8 +375,8 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let player = player::new(client.clone(), data, quit_when_done).await;
-            player.play_album(album, Some(quality)).await;
+            let player = player::new(client.clone(), data, quit_when_done).await?;
+            player.play_album(album, Some(quality)).await?;
 
             if no_tui {
                 wait!(player.state());
@@ -389,31 +398,29 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::Config { command } => match command {
             ConfigCommands::Username {} => {
-                let username: String = Input::new()
+                if let Ok(username) = Input::new()
                     .with_prompt("Enter your username / email")
                     .interact_text()
-                    .expect("failed to get username");
+                {
+                    data.set_username(username).await;
 
-                data.set_username(username).await;
-
-                println!("Username saved.");
-
+                    println!("Username saved.");
+                }
                 Ok(())
             }
             ConfigCommands::Password {} => {
-                let password: String = Password::new()
+                if let Ok(password) = Password::new()
                     .with_prompt("Enter your password (hidden)")
                     .interact()
-                    .expect("failed to get password");
+                {
+                    let md5_pw = format!("{:x}", md5::compute(password));
 
-                let md5_pw = format!("{:x}", md5::compute(password));
+                    debug!("saving password to database: {}", md5_pw);
 
-                debug!("saving password to database: {}", md5_pw);
+                    data.set_password(md5_pw).await;
 
-                data.set_password(md5_pw).await;
-
-                println!("Password saved.");
-
+                    println!("Password saved.");
+                }
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
@@ -424,18 +431,16 @@ pub async fn run() -> Result<(), Error> {
                 Ok(())
             }
             ConfigCommands::Clear {} => {
-                if Confirm::new()
+                if let Ok(ok) = Confirm::new()
                     .with_prompt("This will clear the configuration in the database.\nDo you want to continue?")
                     .interact()
-                    .expect("failed to get response")
                 {
-                    data.clear_state().await;
-                    println!("Database cleared.");
-
-                    Ok(())
-                } else {
-                    Ok(())
+                    if ok {
+                        data.clear_state().await;
+                        println!("Database cleared.");
+                    }
                 }
+                Ok(())
             }
         },
     }

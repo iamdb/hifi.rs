@@ -1,3 +1,4 @@
+use crate::{Credentials, Error, Result};
 use base64::{engine::general_purpose, Engine as _};
 use clap::ValueEnum;
 use reqwest::{
@@ -6,7 +7,6 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use snafu::prelude::*;
 use std::collections::HashMap;
 
 const BUNDLE_REGEX: &str =
@@ -21,73 +21,11 @@ macro_rules! info_regex {
     };
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Credentials {
-    pub username: Option<String>,
-    pub password: Option<String>,
-}
-
-impl From<Vec<u8>> for Credentials {
-    fn from(bytes: Vec<u8>) -> Self {
-        let deserialized: Credentials =
-            bincode::deserialize(&bytes).expect("failed to deserialize status value");
-
-        deserialized
-    }
-}
-
-impl From<Credentials> for Vec<u8> {
-    fn from(creds: Credentials) -> Self {
-        bincode::serialize(&creds).expect("failed to serialize string value")
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum Error {
-    #[snafu(display("No username provided."))]
-    NoPassword,
-    #[snafu(display("No password provided."))]
-    NoUsername,
-    #[snafu(display("No audio quality provided."))]
-    NoQuality,
-    #[snafu(display("Failed to get a usable secret from Qobuz."))]
-    ActiveSecret,
-    #[snafu(display("Failed to get an app id from Qobuz."))]
-    AppID,
-    #[snafu(display("Failed to login."))]
-    Login,
-    #[snafu(display("Authorization missing."))]
-    Authorization,
-    #[snafu(display("Failed to create client"))]
-    Create,
-    #[snafu(display("{message}"))]
-    Api { message: String },
-    #[snafu(display("Failed to deserialize json: {message}"))]
-    DeserializeJSON { message: String },
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(error: reqwest::Error) -> Self {
-        let status = error.status();
-
-        match status {
-            Some(status) => Error::Api {
-                message: status.to_string(),
-            },
-            None => Error::Api {
-                message: "Error calling the API".to_string(),
-            },
-        }
-    }
-}
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
 #[derive(Debug, Clone)]
 pub struct Client {
     secrets: HashMap<String, String>,
-    active_secret: Option<String>,
-    app_id: Option<String>,
+    active_secret: String,
+    app_id: String,
     credentials: Option<Credentials>,
     base_url: String,
     client: reqwest::Client,
@@ -124,6 +62,18 @@ pub async fn new(
         quality
     } else {
         AudioQuality::Mp3
+    };
+
+    let app_id = if let Some(id) = app_id {
+        id
+    } else {
+        "".to_string()
+    };
+
+    let active_secret = if let Some(id) = active_secret {
+        id
+    } else {
+        "".to_string()
     };
 
     Ok(Client {
@@ -225,12 +175,12 @@ impl Client {
 
         let mut refresh_config = false;
 
-        if self.app_id.is_none() || self.active_secret.is_none() {
+        if self.app_id.is_empty() || self.active_secret.is_empty() {
             refresh_config = true;
         }
 
         if refresh_config {
-            self.refresh().await.expect("failed to refresh secrets");
+            self.refresh().await?;
         }
 
         if self.credentials.is_none() {
@@ -243,45 +193,38 @@ impl Client {
     /// Login a user
     pub async fn login(&mut self) -> Result<()> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
-        let app_id = self.app_id.clone().unwrap();
-        let username = self
-            .credentials
-            .as_ref()
-            .unwrap()
-            .username
-            .clone()
-            .expect("tried to login without username.");
-        let password = self
-            .credentials
-            .as_ref()
-            .unwrap()
-            .password
-            .clone()
-            .expect("tried to login without password.");
 
-        info!(
-            "logging in with email ({}) and password **HIDDEN** for app_id {}",
-            username, app_id
-        );
+        if let Some(creds) = &self.credentials {
+            if let (Some(username), Some(password)) = (&creds.username, &creds.password) {
+                info!(
+                    "logging in with email ({}) and password **HIDDEN** for app_id {}",
+                    username, self.app_id
+                );
 
-        let params = vec![
-            ("email", username.as_str()),
-            ("password", password.as_str()),
-            ("app_id", app_id.as_str()),
-        ];
+                let params = vec![
+                    ("email", username.as_str()),
+                    ("password", password.as_str()),
+                    ("app_id", self.app_id.as_str()),
+                ];
 
-        match self.make_get_call(endpoint, Some(params)).await {
-            Ok(response) => {
-                let json: Value = serde_json::from_str(response.as_str()).unwrap();
-                info!("Successfully logged in");
-                debug!("{}", json);
-                let mut token = json["user_auth_token"].to_string();
-                token = token[1..token.len() - 1].to_string();
+                match self.make_get_call(endpoint, Some(params)).await {
+                    Ok(response) => {
+                        let json: Value = serde_json::from_str(response.as_str()).unwrap();
+                        info!("Successfully logged in");
+                        debug!("{}", json);
+                        let mut token = json["user_auth_token"].to_string();
+                        token = token[1..token.len() - 1].to_string();
 
-                self.user_token = Some(token);
-                Ok(())
+                        self.user_token = Some(token);
+                        Ok(())
+                    }
+                    Err(_) => Err(Error::Login),
+                }
+            } else {
+                Err(Error::Login)
             }
-            Err(_) => Err(Error::Login),
+        } else {
+            Err(Error::Login)
         }
     }
 
@@ -491,8 +434,8 @@ impl Client {
         let now = format!("{}", chrono::Utc::now().timestamp());
         let secret = if let Some(secret) = sec {
             secret
-        } else if let Some(secret) = &self.active_secret {
-            secret.clone()
+        } else if !self.active_secret.is_empty() {
+            self.active_secret.clone()
         } else {
             return Err(Error::ActiveSecret);
         };
@@ -561,7 +504,6 @@ impl Client {
     // Retrieve information about an artist
     pub async fn artist(&self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
-        let app_id = self.app_id.clone();
         let limit = if let Some(limit) = limit {
             limit.to_string()
         } else {
@@ -572,13 +514,7 @@ impl Client {
 
         let params = vec![
             ("artist_id", artistid_string.as_str()),
-            (
-                "app_id",
-                app_id
-                    .as_ref()
-                    .expect("missing app id. this should not have happened.")
-                    .as_str(),
-            ),
+            ("app_id", &self.app_id),
             ("limit", limit.as_str()),
             ("offset", "0"),
             ("extra", "albums"),
@@ -616,12 +552,12 @@ impl Client {
 
     // Set an app_id for authentication
     pub fn set_app_id(&mut self, app_id: String) {
-        self.app_id = Some(app_id);
+        self.app_id = app_id;
     }
 
     // Set an app secret for authentication
     pub fn set_active_secret(&mut self, active_secret: String) {
-        self.active_secret = Some(active_secret);
+        self.active_secret = active_secret;
     }
 
     pub fn set_default_quality(&mut self, quality: AudioQuality) {
@@ -632,20 +568,23 @@ impl Client {
         self.user_token.clone()
     }
 
-    pub fn get_active_secret(&self) -> Option<String> {
+    pub fn get_active_secret(&self) -> String {
         self.active_secret.clone()
     }
 
-    pub fn get_app_id(&self) -> Option<String> {
+    pub fn get_app_id(&self) -> String {
         self.app_id.clone()
     }
 
     fn client_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
-        if let Some(app_id) = &self.app_id {
-            info!("adding app_id to request headers: {}", app_id);
-            headers.insert("X-App-Id", HeaderValue::from_str(app_id.as_str()).unwrap());
+        if !self.app_id.is_empty() {
+            info!("adding app_id to request headers: {}", self.app_id);
+            headers.insert(
+                "X-App-Id",
+                HeaderValue::from_str(self.app_id.as_str()).unwrap(),
+            );
         } else {
             error!("no app_id");
         }
@@ -717,65 +656,71 @@ impl Client {
     // Retrieve the app_id and generate the secrets needed to authenticate
     pub async fn refresh(&mut self) -> Result<()> {
         let play_url = "https://play.qobuz.com";
-        let login_page = self
-            .client
-            .get(format!("{play_url}/login"))
-            .send()
-            .await
-            .expect("failed to get login page. something is very wrong.");
+        let login_page = self.client.get(format!("{play_url}/login")).send().await?;
 
         let contents = login_page.text().await.unwrap();
 
-        let bundle_path = self
-            .bundle_regex
-            .captures(contents.as_str())
-            .expect("regex failed")
-            .get(1)
-            .map_or("", |m| m.as_str());
+        if let Some(captures) = self.bundle_regex.captures(contents.as_str()) {
+            let bundle_path = captures.get(1).map_or("", |m| m.as_str());
+            let bundle_url = format!("{play_url}{bundle_path}");
+            if let Ok(bundle_page) = self.client.get(bundle_url).send().await {
+                if let Ok(bundle_contents) = bundle_page.text().await {
+                    if let Some(captures) = self.app_id_regex.captures(bundle_contents.as_str()) {
+                        let app_id = captures
+                            .name("app_id")
+                            .map_or("".to_string(), |m| m.as_str().to_string());
 
-        let bundle_url = format!("{play_url}{bundle_path}");
-        let bundle_page = self.client.get(bundle_url).send().await.unwrap();
+                        self.app_id = app_id.clone();
 
-        let bundle_contents = bundle_page.text().await.unwrap();
+                        let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 
-        if let Some(captures) = self.app_id_regex.captures(bundle_contents.as_str()) {
-            let app_id = captures
-                .name("app_id")
-                .map_or("".to_string(), |m| m.as_str().to_string());
+                        seed_data.for_each(|s| {
+                            let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
+                            let timezone =
+                                s.name("timezone").map_or("", |m| m.as_str()).to_string();
 
-            self.app_id = Some(app_id.clone());
+                            let info_regex = format!(info_regex!(), util::capitalize(&timezone));
+                            let info_regex_str = info_regex.as_str();
+                            regex::Regex::new(info_regex_str)
+                                .unwrap()
+                                .captures_iter(bundle_contents.as_str())
+                                .for_each(|c| {
+                                    let timezone =
+                                        c.name("timezone").map_or("", |m| m.as_str()).to_string();
+                                    let info =
+                                        c.name("info").map_or("", |m| m.as_str()).to_string();
+                                    let extras =
+                                        c.name("extras").map_or("", |m| m.as_str()).to_string();
 
-            let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
+                                    let chars = format!("{seed}{info}{extras}");
+                                    let encoded_secret = chars[..chars.len() - 44].to_string();
+                                    let decoded_secret = general_purpose::URL_SAFE
+                                        .decode(encoded_secret)
+                                        .expect("failed to decode base64 secret");
+                                    let secret_utf8 = std::str::from_utf8(&decoded_secret)
+                                        .expect("failed to convert base64 to string")
+                                        .to_string();
 
-            seed_data.for_each(|s| {
-                let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
-                let timezone = s.name("timezone").map_or("", |m| m.as_str()).to_string();
+                                    debug!(
+                                        "{}\t{}\t{}",
+                                        app_id,
+                                        timezone.to_lowercase(),
+                                        secret_utf8
+                                    );
+                                    self.secrets.insert(timezone, secret_utf8);
+                                });
+                        });
 
-                let info_regex = format!(info_regex!(), util::capitalize(&timezone));
-                let info_regex_str = info_regex.as_str();
-                regex::Regex::new(info_regex_str)
-                    .unwrap()
-                    .captures_iter(bundle_contents.as_str())
-                    .for_each(|c| {
-                        let timezone = c.name("timezone").map_or("", |m| m.as_str()).to_string();
-                        let info = c.name("info").map_or("", |m| m.as_str()).to_string();
-                        let extras = c.name("extras").map_or("", |m| m.as_str()).to_string();
-
-                        let chars = format!("{seed}{info}{extras}");
-                        let encoded_secret = chars[..chars.len() - 44].to_string();
-                        let decoded_secret = general_purpose::URL_SAFE
-                            .decode(encoded_secret)
-                            .expect("failed to decode base64 secret");
-                        let secret_utf8 = std::str::from_utf8(&decoded_secret)
-                            .expect("failed to convert base64 to string")
-                            .to_string();
-
-                        debug!("{}\t{}\t{}", app_id, timezone.to_lowercase(), secret_utf8);
-                        self.secrets.insert(timezone, secret_utf8);
-                    });
-            });
-
-            Ok(())
+                        Ok(())
+                    } else {
+                        Err(Error::AppID)
+                    }
+                } else {
+                    Err(Error::AppID)
+                }
+            } else {
+                Err(Error::AppID)
+            }
         } else {
             Err(Error::AppID)
         }

@@ -16,17 +16,36 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
-I've spent [![n hours](https://wakatime.com/badge/github/iamdb/hifi.rs.svg)](https://wakatime.com/badge/github/iamdb/hifi.rs) building this.
+## Keyboard Shortcuts
 
-## Todo
+Switch screen: <kbd>tab</kbd>
 
-- Build binaries and make Github releases
-- Enable searching for albums, tracks and playlists in the UI
-- Re-enable outputing search to json, tsv, csv, etc.
-- Sortable lists
+Play/Pause: <kbd>space</kbd>
+Next track: <kbd>N</kbd>
+Previous track: <kbd>P</kbd>
+Jump forward: <kbd>right Arrow</kbd> or <kbd>l</kbd>
+Jump backward: <kbd>left Arrow</kbd> or <kbd>h</kbd>
+Quit: <kbd>ctrl</kbd> + <kbd>c</kbd>
+
+Move up in list: <kbd>k</kbd>
+Move down in list: <kbd>j</kbd>
+Select item in list: <kbd>enter</kbd>
+
+Dismiss popup: <kbd>esc</kbd>
+
+### Search
+
+Enter search query: <kbd>/</kbd>
 
 ## Known Issues
 
 - If left paused for a while, the player will crash when attempting to play again
 - When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync
 - UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior.
+
+## Todo
+
+- Build binaries and make Github releases
+- Use unified search endpoint instead of individual
+- Enable searching for albums, tracks and playlists in the UI
+- Sortable lists
