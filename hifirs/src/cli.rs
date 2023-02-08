@@ -226,7 +226,6 @@ pub async fn run() -> Result<(), Error> {
             }
             Ok(())
         }
-        #[allow(unused)]
         Commands::Search {
             query,
             limit,
@@ -304,7 +303,6 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        #[allow(unused_variables)]
         Commands::MyPlaylists {
             no_tui,
             output_format,

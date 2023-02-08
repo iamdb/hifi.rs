@@ -74,7 +74,6 @@ where
     f.render_widget(p, area);
 }
 
-#[allow(unused)]
 pub fn list<B>(f: &mut Frame<B>, list: &'_ mut List<'_>, title: &str, area: Rect)
 where
     B: Backend,
