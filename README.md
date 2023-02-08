@@ -18,24 +18,20 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 ## Keyboard Shortcuts
 
-Switch screen: <kbd>tab</kbd>
-
-Play/Pause: <kbd>space</kbd>
-Next track: <kbd>N</kbd>
-Previous track: <kbd>P</kbd>
-Jump forward: <kbd>right Arrow</kbd> or <kbd>l</kbd>
-Jump backward: <kbd>left Arrow</kbd> or <kbd>h</kbd>
-Quit: <kbd>ctrl</kbd> + <kbd>c</kbd>
-
-Move up in list: <kbd>k</kbd>
-Move down in list: <kbd>j</kbd>
-Select item in list: <kbd>enter</kbd>
-
-Dismiss popup: <kbd>esc</kbd>
-
-### Search
-
-Enter search query: <kbd>/</kbd>
+| Command | Keys |
+|--------------- | --------------- |
+| Switch screen   | <kbd>tab</kbd>   |
+| Play/Pause | <kbd>space</kbd> |
+| Next track | <kbd>N</kbd> |
+| Previous track | <kbd>P</kbd> |
+| Jump forward | <kbd>right Arrow</kbd> or <kbd>l</kbd> |
+| Jump backward | <kbd>left Arrow</kbd> or <kbd>h</kbd> |
+| Quit | <kbd>ctrl</kbd> + <kbd>c</kbd> |
+| Move up in list | <kbd>k</kbd> |
+| Move down in list | <kbd>j</kbd> |
+| Select item in list | <kbd>enter</kbd> |
+| Dismiss popup | <kbd>esc</kbd> |
+| Enter search query | <kbd>/</kbd> |
 
 ## Known Issues
 
