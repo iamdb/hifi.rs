@@ -309,11 +309,11 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
-            if let Ok(playlists) = client.user_playlists().await {
-                let results = SearchResults::UserPlaylists(playlists);
-                output!(results, output_format)
-            } else if no_tui {
-                println!("nothing to show");
+            if output_format.is_some() {
+                if let Ok(playlists) = client.user_playlists().await {
+                    let results = SearchResults::UserPlaylists(playlists);
+                    output!(results, output_format)
+                }
             } else {
                 let mut player = player::new(client.clone(), data, quit_when_done).await?;
                 player.resume(false).await?;
