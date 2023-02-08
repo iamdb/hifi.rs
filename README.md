@@ -6,11 +6,14 @@ Powered by [Qobuz](https://www.qobuz.com). Requires a paid subscription. This do
 
 Qobuz only supports Linux through the browser and has no officially supported API. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on being able to quickly find and play an album inside the console.
 
+<img width="50%" src="hifi-rs.png" alt="screenshot" />
+
 ## Player Features
 
 - [GStreamer](https://gstreamer.freedesktop.org/)-backed player, SQLite database
 - High resolution audio: Supports up to 24bit/192Khz (max quality Qobuz offers)
 - MPRIS support (control via [playerctl](https://github.com/altdesktop/playerctl) or other D-Bus client)
+- Gapless playback
 - Resume previous session
 - TUI can be disabled to use as a headless player controlled via MPRIS
 
@@ -18,14 +21,14 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 ## Keyboard Shortcuts
 
-| Command | Keys |
+| Command | Key(s) |
 |--------------- | --------------- |
 | Switch screen   | <kbd>tab</kbd>   |
 | Play/Pause | <kbd>space</kbd> |
 | Next track | <kbd>N</kbd> |
 | Previous track | <kbd>P</kbd> |
-| Jump forward | <kbd>right Arrow</kbd> or <kbd>l</kbd> |
-| Jump backward | <kbd>left Arrow</kbd> or <kbd>h</kbd> |
+| Jump forward | <kbd>l</kbd> or <kbd>right arrow</kbd> |
+| Jump backward | <kbd>h</kbd> or <kbd>left arrow</kbd> |
 | Quit | <kbd>ctrl</kbd> + <kbd>c</kbd> |
 | Move up in list | <kbd>k</kbd> |
 | Move down in list | <kbd>j</kbd> |
@@ -45,3 +48,4 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 - Use unified search endpoint instead of individual
 - Enable searching for albums, tracks and playlists in the UI
 - Sortable lists
+- Switch to [Cursive](https://crates.io/crates/cursive) for UI library
