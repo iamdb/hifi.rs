@@ -2,5 +2,19 @@
 CARGO_MAKE_CLIPPY_ARGS = "--all-features -- -D warnings"
 CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
 
+[tasks.ci-flow]
+dependencies = [
+  "pre-ci-flow",
+  "print-env-flow",
+  "check-format-ci-flow",
+  "clippy-ci-flow",
+  "test-flow",
+  "examples-ci-flow",
+  "bench-ci-flow",
+  "outdated-ci-flow",
+  "ci-coverage-flow",
+  "post-ci-flow",
+]
+
 [tasks.test]
 condition = { env = { CARGO_MAKE_CRATE_CURRENT_WORKSPACE_MEMBER = "qobuz-client" }}
