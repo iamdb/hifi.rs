@@ -30,13 +30,8 @@ pub(crate) fn progress<B>(
     } else if duration.inner_clocktime() > ClockTime::default() {
         let position = position.to_string().as_str()[2..7].to_string();
         let duration = duration.to_string().as_str()[2..7].to_string();
-        let prog = if progress >= FloatValue(0.0) {
-            progress
-        } else {
-            FloatValue(0.0)
-        };
 
-        let progress = Gauge::default()
+        let prog = Gauge::default()
             .label(format!("{position} / {duration}"))
             .use_unicode(true)
             .block(Block::default().style(Style::default().bg(Color::Indexed(236))))
@@ -46,8 +41,8 @@ pub(crate) fn progress<B>(
                     .fg(Color::Indexed(38))
                     .add_modifier(Modifier::BOLD),
             )
-            .ratio(prog.into());
-        f.render_widget(progress, area);
+            .ratio(progress.into());
+        f.render_widget(prog, area);
     } else {
         let text = "LOADING";
         let loading = Paragraph::new(text)

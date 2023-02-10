@@ -359,8 +359,16 @@ impl PlayerState {
                             let position =
                                 ClockTime::from_mseconds(last_state.playback_position as u64);
 
-                            let remaining = duration - position;
-                            let progress = position.seconds() as f64 / duration.seconds() as f64;
+                            let remaining = if duration > position {
+                                duration - position
+                            } else {
+                                ClockTime::default()
+                            };
+                            let progress = if duration > position {
+                                position.seconds() as f64 / duration.seconds() as f64
+                            } else {
+                                0.0
+                            };
 
                             self.set_position(position.into());
                             self.set_duration(duration.into());

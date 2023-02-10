@@ -340,10 +340,10 @@ impl Player {
     }
     /// Skip to the next, previous or specific track in the playlist.
     pub async fn skip(&self, direction: SkipDirection, num: Option<usize>) -> Result<()> {
-        // If the track is greater than 1 second into playing,
-        // then we just want to go back to the beginning.
-        // If triggered again within a second after playing,
-        // it will skip to the previous track.
+        // Typical previous skip functionality where if,
+        // the track is greater than 1 second into playing,
+        // then it goes to the beginning. If triggered again
+        // within a second after playing, it will skip to the previous track.
         if direction == SkipDirection::Backward {
             if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
                 let one_second = ClockTime::from_seconds(1);
@@ -360,23 +360,26 @@ impl Player {
             }
         }
 
-        self.ready(false).await?;
+        self.ready(true).await?;
 
         let mut state = self.state.lock().await;
-        state.set_target_status(GstState::Playing);
 
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
-                // Need to drop state before any dbus calls.
-                drop(state);
-                self.dbus_seeked_signal(ClockValue::default()).await;
-                self.dbus_metadata_changed().await;
-
                 self.playbin.set_property("uri", Some(track_url.url));
 
-                self.play(false).await?;
+                if state.target_status() == GstState::Playing.into() {
+                    self.play(true).await?;
+                } else if state.target_status() == GstState::Paused.into() {
+                    self.pause(true).await?;
+                }
+
+                // Need to drop state before any dbus calls.
+                drop(state);
+
+                self.dbus_metadata_changed().await;
             }
         }
         Ok(())
@@ -845,6 +848,12 @@ impl Player {
                     state.set_current_progress(progress.into());
                     state.set_duration_remaining(remaining.into());
                     state.set_duration(duration.into());
+
+                    drop(state);
+
+                    if self.current_state() == GstState::Playing.into() {
+                        self.dbus_seeked_signal(position.into()).await;
+                    }
                 }
             }
         }

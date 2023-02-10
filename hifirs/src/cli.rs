@@ -226,6 +226,7 @@ pub async fn run() -> Result<(), Error> {
             }
             Ok(())
         }
+        #[allow(unused_variables)]
         Commands::Search {
             query,
             limit,
