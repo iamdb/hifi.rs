@@ -664,6 +664,9 @@ impl Player {
                     match msg.view() {
                         MessageView::Eos(_) => {
                             debug!("END OF STREAM");
+
+                            self.stop(true).await?;
+
                             if self.quit_when_done {
                                 self.state.lock().await.quit();
                             }
