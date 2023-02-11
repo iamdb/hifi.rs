@@ -111,7 +111,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> &'static str {
-        self.state.lock().await.status().as_str()
+        self.state.read().await.status().as_str()
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -128,7 +128,7 @@ impl MprisPlayer {
     #[dbus_interface(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         debug!("dbus metadata");
-        if let Some(next_up) = self.state.lock().await.current_track() {
+        if let Some(next_up) = self.state.read().await.current_track() {
             track_to_meta(next_up)
         } else {
             HashMap::new()
@@ -141,7 +141,7 @@ impl MprisPlayer {
     #[dbus_interface(property, name = "Position")]
     async fn position(&self) -> i64 {
         self.state
-            .lock()
+            .read()
             .await
             .position()
             .inner_clocktime()
@@ -205,7 +205,7 @@ impl MprisTrackList {
         tracks: Vec<String>,
     ) -> Vec<HashMap<&'static str, zvariant::Value>> {
         self.state
-            .lock()
+            .read()
             .await
             .unplayed_tracks()
             .into_iter()
@@ -232,7 +232,7 @@ impl MprisTrackList {
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
         self.state
-            .lock()
+            .read()
             .await
             .unplayed_tracks()
             .iter()

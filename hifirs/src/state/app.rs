@@ -15,7 +15,7 @@ use qobuz_client::client::{
 use std::{fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
-    Mutex,
+    RwLock,
 };
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ pub struct PlayerState {
     quit_sender: BroadcastSender<bool>,
 }
 
-pub type SafePlayerState = Arc<Mutex<PlayerState>>;
+pub type SafePlayerState = Arc<RwLock<PlayerState>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct SavedState {
@@ -359,8 +359,16 @@ impl PlayerState {
                             let position =
                                 ClockTime::from_mseconds(last_state.playback_position as u64);
 
-                            let remaining = duration - position;
-                            let progress = position.seconds() as f64 / duration.seconds() as f64;
+                            let remaining = if duration > position {
+                                duration - position
+                            } else {
+                                ClockTime::default()
+                            };
+                            let progress = if duration > position {
+                                position.seconds() as f64 / duration.seconds() as f64
+                            } else {
+                                0.0
+                            };
 
                             self.set_position(position.into());
                             self.set_duration(duration.into());

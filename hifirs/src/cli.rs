@@ -226,6 +226,7 @@ pub async fn run() -> Result<(), Error> {
             }
             Ok(())
         }
+        #[allow(unused_variables)]
         Commands::Search {
             query,
             limit,
@@ -324,7 +325,7 @@ pub async fn run() -> Result<(), Error> {
 
                     let state = player.state();
 
-                    switch_screen!(state.lock().await, ActiveScreen::Playlists);
+                    switch_screen!(state.write().await, ActiveScreen::Playlists);
                     tui.event_loop().await?;
                 }
             }
@@ -383,7 +384,7 @@ pub async fn run() -> Result<(), Error> {
                     ui::new(player.state(), player.controls(), client, None, None).await?;
 
                 let state = player.state();
-                switch_screen!(state.lock().await, ActiveScreen::NowPlaying);
+                switch_screen!(state.write().await, ActiveScreen::NowPlaying);
 
                 tui.event_loop().await?;
             }
@@ -447,11 +448,11 @@ pub async fn run() -> Result<(), Error> {
 #[macro_export]
 macro_rules! wait {
     ($state:expr) => {
-        let mut quitter = $state.lock().await.quitter();
+        let mut quitter = $state.read().await.quitter();
 
         let state = $state.clone();
         ctrlc::set_handler(move || {
-            state.blocking_lock().quit();
+            state.blocking_read().quit();
             std::process::exit(0);
         })
         .expect("error setting ctrlc handler");

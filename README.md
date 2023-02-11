@@ -10,12 +10,13 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 ## Player Features
 
-- [GStreamer](https://gstreamer.freedesktop.org/)-backed player, SQLite database
+- Low resource usage
+- [GStreamer](https://gstreamer.freedesktop.org/)-backed player, [SQLite](https://www.sqlite.org/index.html) database
 - High resolution audio: Supports up to 24bit/192Khz (max quality Qobuz offers)
 - MPRIS support (control via [playerctl](https://github.com/altdesktop/playerctl) or other D-Bus client)
 - Gapless playback
-- Resume previous session
-- TUI can be disabled to use as a headless player controlled via MPRIS
+- Resume last session
+- TUI can be disabled to use as a headless player, controlled via MPRIS
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
@@ -39,13 +40,12 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 ## Known Issues
 
 - If left paused for a while, the player will crash when attempting to play again
-- When resuming and seeking to the spot in the track, pressing play will cause mpris and the player to go out of sync
-- UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior.
+- UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior. Probably best solved when switching to Cursive.
 
 ## Todo
 
 - Build binaries and make Github releases
 - Use unified search endpoint instead of individual
+- Switch to [Cursive](https://crates.io/crates/cursive) for UI library
 - Enable searching for albums, tracks and playlists in the UI
 - Sortable lists
-- Switch to [Cursive](https://crates.io/crates/cursive) for UI library

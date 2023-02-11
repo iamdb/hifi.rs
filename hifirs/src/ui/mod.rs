@@ -142,7 +142,7 @@ pub async fn new(
     };
 
     if let Some(results) = search_results {
-        let mut state = state.lock().await;
+        let mut state = state.write().await;
 
         match results {
             SearchResults::UserPlaylists(_) => {
@@ -164,7 +164,7 @@ impl Tui {
         }
     }
     async fn render(&mut self) {
-        let state = self.state.lock().await.clone();
+        let state = self.state.read().await.clone();
         let screen = state.active_screen();
 
         if let Some(screen) = self.screens.get(&screen) {
@@ -207,7 +207,7 @@ impl Tui {
 
         let event_receiver = self.rx.clone();
         let mut event_stream = event_receiver.stream();
-        let mut quitter = self.state.lock().await.quitter();
+        let mut quitter = self.state.read().await.quitter();
 
         loop {
             select! {
@@ -232,7 +232,7 @@ impl Tui {
             }
             Event::Key(key) => match key {
                 Key::Char('\t') => {
-                    let mut state = self.state.lock().await;
+                    let mut state = self.state.write().await;
                     let active_screen = state.active_screen();
 
                     match active_screen {
@@ -252,10 +252,10 @@ impl Tui {
                 }
                 Key::Ctrl('c') | Key::Ctrl('q') => {
                     debug!("quitting ui handle event loop");
-                    self.state.lock().await.quit();
+                    self.state.read().await.quit();
                 }
                 _ => {
-                    if let Some(screen) = self.screens.get(&self.state.lock().await.active_screen())
+                    if let Some(screen) = self.screens.get(&self.state.read().await.active_screen())
                     {
                         if screen.lock().await.key_events(key).await.is_some() {
                             self.tick().await;
