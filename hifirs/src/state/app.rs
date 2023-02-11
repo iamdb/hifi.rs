@@ -15,7 +15,7 @@ use qobuz_client::client::{
 use std::{fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
-    Mutex,
+    RwLock,
 };
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ pub struct PlayerState {
     quit_sender: BroadcastSender<bool>,
 }
 
-pub type SafePlayerState = Arc<Mutex<PlayerState>>;
+pub type SafePlayerState = Arc<RwLock<PlayerState>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct SavedState {

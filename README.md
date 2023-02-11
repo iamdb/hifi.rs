@@ -10,13 +10,13 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 ## Player Features
 
-- Very low resource usage
-- [GStreamer](https://gstreamer.freedesktop.org/)-backed player, SQLite database
+- Low resource usage
+- [GStreamer](https://gstreamer.freedesktop.org/)-backed player, [SQLite](https://www.sqlite.org/index.html) database
 - High resolution audio: Supports up to 24bit/192Khz (max quality Qobuz offers)
 - MPRIS support (control via [playerctl](https://github.com/altdesktop/playerctl) or other D-Bus client)
 - Gapless playback
-- Resume previous session
-- TUI can be disabled to use as a headless player controlled via MPRIS
+- Resume last session
+- TUI can be disabled to use as a headless player, controlled via MPRIS
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
