@@ -1,4 +1,14 @@
-use crate::{Credentials, Error, Result};
+use crate::{
+    client::{
+        album::{Album, AlbumSearchResults},
+        artist::{Artist, ArtistSearchResults},
+        playlist::{Playlist, UserPlaylistsResult},
+        search_results::SearchAllResults,
+        track::Track,
+        AudioQuality, TrackURL,
+    },
+    Credentials, Error, Result,
+};
 use base64::{engine::general_purpose, Engine as _};
 use clap::ValueEnum;
 use reqwest::{
@@ -10,8 +20,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 const BUNDLE_REGEX: &str =
-    r#"<script src="(/resources/\d+\.\d+\.\d+-[a-z]\d{3}/bundle\.js)"></script>"#;
-const APP_REGEX: &str = r#"cluster:"eu"}\):\(n.qobuzapi=\{app_id:"(?P<app_id>\d{9})",app_secret:"\w{32}",base_port:"80",base_url:"https://www\.qobuz\.com",base_method:"/api\.json/0\.2/"},n"#;
+    r#"<script src="(/resources/\d+\.\d+\.\d+-[a-z0-9]\d{3}/bundle\.js)"></script>"#;
+const APP_REGEX: &str = r#"cluster:"eu"}\):\(n.qobuzapi=\{app_id:"(?P<app_id>\d{9})",app_secret:"(?P<app_secret>\w{32})",base_port:"80",base_url:"https://www\.qobuz\.com",base_method:"/api\.json/0\.2/"},n"#;
 const SEED_REGEX: &str =
     r#"[a-z]\.initialSeed\("(?P<seed>[\w=]+)",window\.utimezone\.(?P<timezone>[a-z]+)\)"#;
 
@@ -111,7 +121,7 @@ enum Endpoint {
 }
 
 impl Endpoint {
-    fn as_str(&self) -> &'static str {
+    fn as_str(&self) -> &str {
         match self {
             Endpoint::Album => "album/get",
             Endpoint::Artist => "artist/get",
@@ -655,6 +665,7 @@ impl Client {
     // ported from https://github.com/vitiko98/qobuz-dl/blob/master/qobuz_dl/bundle.py
     // Retrieve the app_id and generate the secrets needed to authenticate
     pub async fn refresh(&mut self) -> Result<()> {
+        debug!("fetching login page");
         let play_url = "https://play.qobuz.com";
         let login_page = self.client.get(format!("{play_url}/login")).send().await?;
 
@@ -676,12 +687,12 @@ impl Client {
 
                         seed_data.for_each(|s| {
                             let seed = s.name("seed").map_or("", |m| m.as_str()).to_string();
-                            let timezone =
+                            let mut timezone =
                                 s.name("timezone").map_or("", |m| m.as_str()).to_string();
+                            crate::client::capitalize(timezone.as_mut_str());
 
-                            let info_regex = format!(info_regex!(), util::capitalize(&timezone));
-                            let info_regex_str = info_regex.as_str();
-                            regex::Regex::new(info_regex_str)
+                            let info_regex = format!(info_regex!(), &timezone);
+                            regex::Regex::new(info_regex.as_str())
                                 .unwrap()
                                 .captures_iter(bundle_contents.as_str())
                                 .for_each(|c| {
@@ -693,6 +704,7 @@ impl Client {
                                         c.name("extras").map_or("", |m| m.as_str()).to_string();
 
                                     let chars = format!("{seed}{info}{extras}");
+
                                     let encoded_secret = chars[..chars.len() - 44].to_string();
                                     let decoded_secret = general_purpose::URL_SAFE
                                         .decode(encoded_secret)
@@ -761,18 +773,6 @@ pub enum OutputFormat {
     Tsv,
 }
 
-use crate::client::playlist::{Playlist, UserPlaylistsResult};
-use crate::client::track::Track;
-use crate::client::TrackURL;
-use crate::client::{
-    album::{Album, AlbumSearchResults},
-    AudioQuality,
-};
-use crate::client::{
-    artist::{Artist, ArtistSearchResults},
-    search_results::SearchAllResults,
-};
-
 #[tokio::test]
 async fn can_use_methods() {
     pretty_env_logger::init();
@@ -801,7 +801,9 @@ async fn can_use_methods() {
             ".user.login" => "[login]",
             ".playlists.items[].users_count" => "0",
             ".playlists.items[].updated_at" => "0",
-            ".playlists.total" => "0"
+            ".playlists.total" => "0",
+            ".playlists.items[].duration" => "0",
+            ".playlists.items[].tracks_count" => "0",
     });
     assert_yaml_snapshot!(client
     .search_albums("a love supreme".to_string(), Some(10))
@@ -810,6 +812,7 @@ async fn can_use_methods() {
     {
         ".albums.total" => "0",
         ".albums.items[].artist.albums_count" => "0",
+        ".albums.items[].label.albums_count" => "0",
         ".albums.items[].purchasable_at" => "0"
     });
     assert_yaml_snapshot!(client
@@ -829,7 +832,7 @@ async fn can_use_methods() {
         .expect("failed to get artist"));
     assert_yaml_snapshot!(client.track(155999429).await.expect("failed to get track"));
     assert_yaml_snapshot!(client
-        .track_url(64868955, Some(AudioQuality::Mp3), None)
+        .track_url(64868955, Some(AudioQuality::HIFI96), None)
         .await
         .expect("failed to get track url"), { ".url" => "[url]" });
 

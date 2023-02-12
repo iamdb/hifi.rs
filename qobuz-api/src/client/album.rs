@@ -142,26 +142,6 @@ impl Albums {
                 )
         });
     }
-    // pub fn item_list(&self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
-    //     self.items
-    //         .iter()
-    //         .map(|t| {
-    //             let title = textwrap::wrap(
-    //                 format!("{} - {}", t.title.as_str(), t.artist.name).as_str(),
-    //                 max_width,
-    //             )
-    //             .join("\n  ");
-    //
-    //             let mut style = Style::default().fg(Color::White);
-    //
-    //             if dim {
-    //                 style = style.add_modifier(Modifier::DIM);
-    //             }
-    //
-    //             ListItem::new(Text::raw(title)).style(style).into()
-    //         })
-    //         .collect::<Vec<Item>>()
-    // }
 }
 
 impl From<Albums> for Vec<Vec<String>> {

@@ -15,7 +15,7 @@ use gst::{
     StateChangeError,
 };
 use gstreamer::{self as gst, prelude::*};
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     self,
     album::Album,
     api::Client,
@@ -70,8 +70,8 @@ impl From<StateChangeError> for Error {
     }
 }
 
-impl From<qobuz_client::Error> for Error {
-    fn from(value: qobuz_client::Error) -> Self {
+impl From<hifirs_qobuz_api::Error> for Error {
+    fn from(value: hifirs_qobuz_api::Error) -> Self {
         Error::Client {
             message: value.to_string(),
         }
@@ -132,23 +132,14 @@ pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Result<P
     let playbin = gst::ElementFactory::make("playbin3").build()?;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (next_track_tx, next_track_rx) = flume::bounded::<String>(1);
 
     // Connects to the `about-to-finish` signal so the player
     // can setup the next track to play. Enables gapless playback.
-    playbin.connect("about-to-finish", false, move |values| {
+    playbin.connect("about-to-finish", false, move |_| {
         debug!("about to finish");
         about_to_finish_tx
             .send(true)
             .expect("failed to send about to finish message");
-
-        if let Ok(next_track_url) = next_track_rx.recv_timeout(Duration::from_secs(5)) {
-            let playbin = values[0]
-                .get::<glib::Object>()
-                .expect("playbin \"about-to-finish\" signal values[0]");
-
-            playbin.set_property("uri", Some(next_track_url));
-        }
 
         None
     });
@@ -173,7 +164,7 @@ pub async fn new(client: Client, db: Database, quit_when_done: bool) -> Result<P
 
     let mut p = player.clone();
     tokio::spawn(async move {
-        p.player_loop(about_to_finish_rx, next_track_tx)
+        p.player_loop(about_to_finish_rx)
             .await
             .expect("failed to start player loop");
     });
@@ -209,7 +200,10 @@ impl Player {
         if wait {
             let mut interval = tokio::time::interval(Duration::from_millis(500));
             while self.current_state() != state.into() {
-                debug!("waiting for player to stop");
+                debug!(
+                    "waiting for player to change to {}",
+                    self.current_state().as_str()
+                );
                 interval.tick().await;
             }
         }
@@ -222,7 +216,7 @@ impl Player {
         if self.is_playing() {
             state.set_target_status(GstState::Paused);
             self.pause(true).await?;
-        } else if self.is_paused() {
+        } else if self.is_paused() || self.is_ready() {
             state.set_target_status(GstState::Playing);
             self.play(true).await?;
         }
@@ -240,6 +234,10 @@ impl Player {
     /// Is the player playing?
     pub fn is_playing(&self) -> bool {
         self.playbin.current_state() == gst::State::Playing
+    }
+    /// Is the player ready?
+    pub fn is_ready(&self) -> bool {
+        self.playbin.current_state() == gst::State::Ready
     }
     /// Current player state
     pub fn current_state(&self) -> StatusValue {
@@ -311,6 +309,18 @@ impl Player {
             return Ok(());
         }
 
+        // TODO: Logic for faster skipping -- debounce keypresses
+        // TODO: Also applies to skipping
+        // When the user jumps forward, the player should
+        // - pause the player, if playing
+        // - record the jump, update the state position with the new value
+        // - spawn a task that starts playing again in 150ms
+        // - if the user presses the button again within 150ms, the player should add
+        //   another jump, cancel the previous task and reset the time to now
+        // - if another button press does not come, the player should seek the playhead
+        //   and return to the original status
+        // - where to store handle?
+
         if let (Some(current_position), Some(duration)) = (
             self.playbin.query_position::<ClockTime>(),
             self.playbin.query_duration::<ClockTime>(),
@@ -360,32 +370,28 @@ impl Player {
                     debug!("current track position >1s, seeking to start of track");
                     self.seek(ClockTime::default().into(), None).await?;
 
-                    self.dbus_seeked_signal(ClockValue::default()).await;
-                    self.dbus_metadata_changed().await;
-
                     return Ok(());
                 }
             }
         }
 
-        self.ready(true).await?;
+        if !self.is_ready() {
+            self.ready(true).await?;
+        }
 
         let mut state = self.state.write().await;
 
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
+            // Need to drop state before any dbus calls.
             drop(state);
+
             if let Some(track_url) = next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
                 self.playbin.set_property("uri", Some(track_url.url));
-                self.playbin.set_property("instant-uri", true);
 
-                if self.state.read().await.target_status() == GstState::Playing.into() {
-                    self.play(true).await?;
-                }
-
-                // Need to drop state before any dbus calls.
-
+                self.set_player_state(self.state.read().await.target_status().into(), true)
+                    .await?;
                 self.dbus_metadata_changed().await;
             }
         }
@@ -397,6 +403,7 @@ impl Player {
         let state = self.state.read().await;
 
         if let Some(current_index) = state.current_track_index() {
+            drop(state);
             if index > current_index {
                 debug!(
                     "skipping forward from track {} to track {}",
@@ -428,7 +435,8 @@ impl Player {
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() {
-            self.stop(true).await?;
+            self.ready(true).await?;
+            self.playbin.set_property("instant-uri", true);
         }
 
         let quality = if let Some(quality) = quality {
@@ -457,7 +465,8 @@ impl Player {
     /// Plays a full album.
     pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() || self.is_paused() {
-            self.stop(true).await?;
+            self.ready(true).await?;
+            self.playbin.set_property("instant-uri", true);
         }
 
         if album.tracks.is_none() {
@@ -489,26 +498,28 @@ impl Player {
         // Need to drop state before any dbus calls.
         drop(state);
 
-        self.playbin
-            .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
-        self.play(true).await?;
+        if let Some(t) = first_track.track_url {
+            self.playbin.set_property("uri", Some(t.url.as_str()));
+            self.play(true).await?;
 
-        if let Some(tracks) = album.tracks {
-            let tracks = tracks
-                .items
-                .iter()
-                .map(|t| t.id.to_string())
-                .collect::<Vec<String>>();
+            if let Some(tracks) = album.tracks {
+                let tracks = tracks
+                    .items
+                    .iter()
+                    .map(|t| t.id.to_string())
+                    .collect::<Vec<String>>();
 
-            let current = tracks.first().cloned().unwrap();
+                let current = tracks.first().cloned().unwrap();
 
-            self.dbus_track_list_replaced_signal(tracks, current)
-                .await?;
+                self.dbus_track_list_replaced_signal(tracks, current)
+                    .await?;
+            }
+
+            self.dbus_metadata_changed().await;
+            Ok(())
+        } else {
+            Err(Error::TrackURL)
         }
-
-        self.dbus_metadata_changed().await;
-
-        Ok(())
     }
     /// Play an item from Qobuz web uri
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
@@ -542,7 +553,8 @@ impl Player {
         quality: Option<AudioQuality>,
     ) -> Result<()> {
         if self.is_playing() || self.is_paused() {
-            self.stop(true).await?;
+            self.ready(true).await?;
+            self.playbin.set_property("instant-uri", true);
         }
 
         let quality = if let Some(quality) = quality {
@@ -592,11 +604,7 @@ impl Player {
         Ok(())
     }
     /// Handles messages from the player and takes necessary action.
-    async fn player_loop(
-        &mut self,
-        about_to_finish_rx: Receiver<bool>,
-        next_track_tx: Sender<String>,
-    ) -> Result<()> {
+    async fn player_loop(&mut self, about_to_finish_rx: Receiver<bool>) -> Result<()> {
         let action_rx = self.controls.action_receiver();
         let mut messages = self.message_stream().await;
         let mut quitter = self.state.read().await.quitter();
@@ -609,14 +617,20 @@ impl Player {
                     match quit {
                         Ok(quit) => {
                             if quit {
-                                debug!("quitting player loop");
-                                let status = self.current_state();
-                                if status == GstState::Playing.into() {
+                                debug!("quitting player loop, exiting application");
+
+                                if self.is_playing() {
                                     debug!("pausing player");
                                     self.pause(true).await?;
                                 }
 
-                                if status != GstState::Null.into() {
+                                if self.is_paused() {
+                                    debug!("readying player");
+                                    self.ready(true).await?;
+                                }
+
+
+                                if self.is_ready() {
                                     debug!("stopping player");
                                     self.stop(true).await?;
                                 }
@@ -632,9 +646,7 @@ impl Player {
                 }
                 Some(almost_done) = about_to_finish.next() => {
                     if almost_done {
-                        if let Some(url) = self.prep_next_track().await {
-                            next_track_tx.send(url).expect("failed to send next track url");
-                        }
+                        self.prep_next_track().await
                     }
                 }
                 Some(action) = actions.next() => {
@@ -672,37 +684,48 @@ impl Player {
                         MessageView::Eos(_) => {
                             debug!("END OF STREAM");
 
-                            self.ready(true).await?;
-
                             if self.quit_when_done {
                                 self.state.read().await.quit();
+                            } else {
+                                self.pause(true).await?;
+                                self.state().write().await.reset_player();
+                                self.skip_to(0).await?;
                             }
                         },
+                        MessageView::AsyncDone(msg) => {
+                            let position = if let Some(p)= msg.running_time() {
+                                p.into()
+                            } else if let Some(p) = self.position() {
+                                p
+                            } else {
+                                ClockTime::default().into()
+                            };
+
+                            debug!("async done");
+                            let mut state = self.state.write().await;
+
+                            debug!("setting updated position");
+                            state.set_position(position.clone());
+                            state.set_resume(false);
+
+                            // Drop state before dbus call;
+                            drop(state);
+
+                            self.dbus_seeked_signal(Some(position)).await;
+                        }
                         MessageView::StreamStart(_) => {
-                            debug!("stream started");
-                            self.dbus_metadata_changed().await;
-                        }
-                        MessageView::AsyncDone(_) => {
-                            if let Some(position)= self.position() {
-                                debug!("async done");
-                                let mut state = self.state.write().await;
-
-                                debug!("setting updated position");
-                                state.set_position(position.clone());
-
-                                // Drop state before dbus call;
-                                drop(state);
-
-                                self.dbus_seeked_signal(position).await;
-                            }
-                        }
-                        MessageView::DurationChanged(_) => {
+                            debug!("stream start");
                             if let Some(duration) = self.duration() {
-                                debug!("duration changed");
+                                debug!("setting track duration");
                                 let mut state = self.state.write().await;
                                 state.set_duration(duration);
+
+                                drop(state);
+
+                                self.dbus_metadata_changed().await;
                             }
 
+                            self.set_player_state(self.state.read().await.target_status().into(), true).await?;
                         }
                         MessageView::Buffering(buffering) => {
                             let percent = buffering.percent();
@@ -710,105 +733,123 @@ impl Player {
                             debug!("buffering {}%", percent);
 
                             if !self.state.read().await.buffering() && percent < 100 {
-                                if self.is_playing() {
-                                    self.pause(false).await?;
+                                if !self.is_paused() {
+                                    self.pause(true).await?;
                                 }
 
                                 let mut state = self.state.write().await;
                                 state.set_buffering(true);
+                                drop(state);
                             } else if self.state.read().await.buffering() && percent > 99 {
-                                self.set_player_state(self.state.read().await.target_status().into(), true).await?;
                                 let mut state = self.state.write().await;
                                 state.set_buffering(false);
+
+                                self.set_player_state(state.target_status().into(), true).await?;
+
+                                drop(state);
                             }
                         }
                         MessageView::StateChanged(state_changed) => {
-                            if state_changed
-                                .src()
-                                .map(|s| s == self.playbin)
-                                .unwrap_or(false)
-                            {
-                                let current_state = state_changed
-                                    .current()
-                                    .to_value()
-                                    .get::<GstState>()
-                                    .unwrap();
+                            let current_state = state_changed
+                                .current()
+                                .to_value()
+                                .get::<GstState>()
+                                .unwrap();
 
-                                let iface_ref = self.player_iface().await;
-                                let iface = iface_ref.get_mut().await;
+                            let iface_ref = self.player_iface().await;
+                            let iface = iface_ref.get_mut().await;
 
-                                match current_state {
-                                    GstState::Playing => {
+                            match current_state {
+                                GstState::Playing => {
+                                    if self.state.read().await.status() != GstState::Playing.into() {
                                         debug!("player state changed to Playing");
 
-                                        let mut state = self.state.write().await;
-                                        state.set_status(gstreamer::State::Playing.into());
+                                        if self.state.read().await.target_status() == GstState::Playing.into() {
+                                            let mut state = self.state.write().await;
+                                            state.set_status(gstreamer::State::Playing.into());
 
-                                        // Need to drop state before any dbus calls.
-                                        drop(state);
+                                            // Need to drop state before any dbus calls.
+                                            drop(state);
 
-                                        iface
-                                            .playback_status_changed(iface_ref.signal_context())
-                                            .await
-                                            .expect("failed");
+                                            iface
+                                                .playback_status_changed(iface_ref.signal_context())
+                                                .await
+                                                .expect("failed");
+                                        }
                                     }
-                                    GstState::Paused => {
-                                        debug!("player state changed to Paused");
-                                        let mut state = self.state.write().await;
-                                        state.set_status(gstreamer::State::Paused.into());
-
-                                        // Need to drop state before any dbus calls.
-                                        drop(state);
-
-                                        iface
-                                            .playback_status_changed(iface_ref.signal_context())
-                                            .await
-                                            .expect("failed");
-                                    }
-                                    GstState::Ready => {
-                                        debug!("player state changed to Ready");
-                                        let mut state = self.state.write().await;
-                                        state.set_status(gstreamer::State::Ready.into());
-
-                                        // Need to drop state before any dbus calls.
-                                        drop(state);
-
-                                        iface
-                                            .playback_status_changed(iface_ref.signal_context())
-                                            .await
-                                            .expect("failed");
-
-                                    }
-                                    GstState::VoidPending => {
-                                        debug!("player state changed to VoidPending");
-                                        let mut state = self.state.write().await;
-                                        state.set_status(gstreamer::State::VoidPending.into());
-
-                                        // Need to drop state before any dbus calls.
-                                        drop(state);
-
-                                        iface
-                                            .playback_status_changed(iface_ref.signal_context())
-                                            .await
-                                            .expect("failed");
-
-                                    },
-                                    GstState::Null => {
-                                        debug!("player state changed to Null");
-                                        let mut state = self.state.write().await;
-                                        state.set_status(gstreamer::State::Null.into());
-
-                                        // Need to drop state before any dbus calls.
-                                        drop(state);
-
-                                        iface
-                                            .playback_status_changed(iface_ref.signal_context())
-                                            .await
-                                            .expect("failed");
-                                    },
-                                    _ => (),
-
                                 }
+                                GstState::Paused => {
+                                    if self.state.read().await.status() != GstState::Paused.into() {
+                                        debug!("player state changed to Paused");
+
+                                        if self.state.read().await.target_status() == GstState::Paused.into() {
+                                            let mut state = self.state.write().await;
+                                            state.set_status(gstreamer::State::Paused.into());
+
+                                            // Need to drop state before any dbus calls.
+                                            drop(state);
+
+                                            iface
+                                                .playback_status_changed(iface_ref.signal_context())
+                                                .await
+                                                .expect("failed");
+                                        }
+                                    }
+                                }
+                                GstState::Ready => {
+                                    if self.state.read().await.status() != GstState::Ready.into() {
+                                        debug!("player state changed to Ready");
+
+                                        if self.state.read().await.target_status() == GstState::Ready.into() {
+                                            let mut state = self.state.write().await;
+                                            state.set_status(gstreamer::State::Ready.into());
+
+                                            // Need to drop state before any dbus calls.
+                                            drop(state);
+
+                                            iface
+                                                .playback_status_changed(iface_ref.signal_context())
+                                                .await
+                                                .expect("failed");
+                                        }
+                                    }
+                                }
+                                GstState::VoidPending => {
+                                    if self.state.read().await.status() != GstState::VoidPending.into() {
+                                        debug!("player state changed to VoidPending");
+
+                                        if self.state.read().await.target_status() == GstState::VoidPending.into() {
+                                            let mut state = self.state.write().await;
+                                            state.set_status(gstreamer::State::VoidPending.into());
+
+                                            // Need to drop state before any dbus calls.
+                                            drop(state);
+
+                                            iface
+                                                .playback_status_changed(iface_ref.signal_context())
+                                                .await
+                                                .expect("failed");
+                                        }
+                                    }
+                                },
+                                GstState::Null => {
+                                    if self.state.read().await.status() != GstState::Null.into() {
+                                        debug!("player state changed to Null");
+
+                                        if self.state.read().await.target_status() == GstState::Null.into() {
+                                            let mut state = self.state.write().await;
+                                            state.set_status(gstreamer::State::Null.into());
+
+                                            // Need to drop state before any dbus calls.
+                                            drop(state);
+
+                                            iface
+                                                .playback_status_changed(iface_ref.signal_context())
+                                                .await
+                                                .expect("failed");
+                                        }
+                                    }
+                                },
                             }
                         }
                         MessageView::Error(err) => {
@@ -847,32 +888,13 @@ impl Player {
             if self.current_state() != GstState::VoidPending.into()
                 || self.current_state() != GstState::Null.into()
             {
-                if let (Some(position), Some(duration)) = (self.position(), self.duration()) {
-                    let duration = duration.inner_clocktime();
+                if let Some(position) = self.position() {
                     let position = position.inner_clocktime();
-
-                    let remaining = if duration > position {
-                        duration - position
-                    } else {
-                        ClockTime::default()
-                    };
-                    let progress = if duration > position {
-                        position.seconds() as f64 / duration.seconds() as f64
-                    } else {
-                        0.0
-                    };
 
                     let mut state = self.state.write().await;
                     state.set_position(position.into());
-                    state.set_current_progress(progress.into());
-                    state.set_duration_remaining(remaining.into());
-                    state.set_duration(duration.into());
 
                     drop(state);
-
-                    if self.current_state() == GstState::Playing.into() {
-                        self.dbus_seeked_signal(position.into()).await;
-                    }
                 }
             }
         }
@@ -904,7 +926,15 @@ impl Player {
             .await
             .expect("failed to get object server")
     }
-    async fn dbus_seeked_signal(&self, position: ClockValue) {
+    async fn dbus_seeked_signal(&self, position: Option<ClockValue>) {
+        let position = if let Some(p) = position {
+            p
+        } else if let Some(p) = self.position() {
+            p
+        } else {
+            ClockTime::default().into()
+        };
+
         let iface_ref = self.player_iface().await;
 
         mpris::MprisPlayer::seeked(
@@ -926,20 +956,19 @@ impl Player {
             .expect("failed to signal metadata change");
     }
     /// Sets up basic functionality for the player.
-    async fn prep_next_track(&self) -> Option<String> {
+    async fn prep_next_track(&self) {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
-            //self.dbus_metadata_changed().await;
+            drop(state);
+
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = next_track.track_url {
-                Some(next_playlist_track_url.url)
-            } else {
-                None
+                self.playbin
+                    .set_property("uri", Some(next_playlist_track_url.url));
             }
         } else {
             debug!("no more tracks left");
-            None
         }
     }
 

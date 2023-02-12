@@ -10,7 +10,7 @@ use crate::{
     ui::components::{Table, TableHeaders, TableRows, TableWidths},
 };
 use async_trait::async_trait;
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     api::Client,
     playlist::{Playlist, UserPlaylistsResult},
     track::Track,

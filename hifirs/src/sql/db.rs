@@ -1,4 +1,4 @@
-use qobuz_client::client::{ApiConfig, AudioQuality};
+use hifirs_qobuz_api::client::{ApiConfig, AudioQuality};
 use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 use std::path::PathBuf;
 

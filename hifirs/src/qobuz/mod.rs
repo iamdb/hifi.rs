@@ -3,7 +3,7 @@ use crate::{
     ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
 };
 use enum_as_inner::EnumAsInner;
-use qobuz_client::{
+use hifirs_qobuz_api::{
     client::{
         album::{Album, AlbumSearchResults},
         api::Client,
@@ -16,7 +16,7 @@ use qobuz_client::{
 };
 use serde::{Deserialize, Serialize};
 
-pub type Result<T, E = qobuz_client::Error> = std::result::Result<T, E>;
+pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;

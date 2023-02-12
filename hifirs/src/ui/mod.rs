@@ -16,7 +16,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
-use qobuz_client::client::api::Client;
+use hifirs_qobuz_api::client::api::Client;
 use snafu::prelude::*;
 use std::{collections::HashMap, io::Stdout, sync::Arc, time::Duration};
 use termion::{

@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     album::{Album, AlbumSearchResults},
     api::Client,
 };

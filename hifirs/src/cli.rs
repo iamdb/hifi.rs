@@ -7,7 +7,7 @@ use crate::{
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
-use qobuz_client::{
+use hifirs_qobuz_api::{
     client::{
         api::{self, OutputFormat},
         AudioQuality,
@@ -137,7 +137,7 @@ pub enum ConfigCommands {
 pub enum Error {
     #[snafu(display("Client Error: {error}"))]
     ClientError {
-        error: qobuz_client::Error,
+        error: hifirs_qobuz_api::Error,
     },
     PlayerError {
         error: player::Error,
@@ -147,8 +147,8 @@ pub enum Error {
     },
 }
 
-impl From<qobuz_client::Error> for Error {
-    fn from(error: qobuz_client::Error) -> Self {
+impl From<hifirs_qobuz_api::Error> for Error {
+    fn from(error: hifirs_qobuz_api::Error) -> Self {
         Error::ClientError { error }
     }
 }

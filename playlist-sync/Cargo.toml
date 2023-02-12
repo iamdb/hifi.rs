@@ -1,7 +1,9 @@
 [package]
-name = "playlist-sync"
+name = "hifirs-playlist-sync"
 version = "0.1.0"
 edition = "2021"
+license-file = "../LICENSE"
+repository = "https://github.com/iamdb/hifi.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
@@ -10,7 +12,7 @@ futures = "0.3"
 indicatif = "0.17"
 log = "0.4"
 pretty_env_logger = "0.4"
-qobuz-client = { version = "0.1.0", path = "../qobuz-client" }
+hifirs-qobuz-api = { version = "0.1.0", path = "../qobuz-api" }
 rspotify = { version = "0.11" } 
 snafu = "0.7"
 tokio = { version = "1.0", features = ["full"] }

@@ -32,7 +32,7 @@ struct Cli {
 #[derive(Debug, Snafu)]
 pub enum Error {
     #[snafu(display("Client Error: {error}"))]
-    QobuzError { error: qobuz_client::Error },
+    QobuzError { error: hifirs_qobuz_api::Error },
     #[snafu(display("Client Error: {error}"))]
     SpotifyError { error: spotify::Error },
 }
@@ -43,8 +43,8 @@ impl From<spotify::Error> for Error {
     }
 }
 
-impl From<qobuz_client::Error> for Error {
-    fn from(error: qobuz_client::Error) -> Self {
+impl From<hifirs_qobuz_api::Error> for Error {
+    fn from(error: hifirs_qobuz_api::Error) -> Self {
         Error::QobuzError { error }
     }
 }

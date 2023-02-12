@@ -1,5 +1,5 @@
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
-use qobuz_client::client::album::{Album, Albums};
+use hifirs_qobuz_api::client::album::{Album, Albums};
 
 impl TableRows for Albums {
     fn rows(&self) -> Vec<Row> {

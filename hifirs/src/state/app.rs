@@ -5,14 +5,18 @@ use crate::{
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     album::Album,
     api::Client,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
     AudioQuality,
 };
-use std::{fmt::Display, sync::Arc};
+use std::{
+    fmt::Display,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     RwLock,
@@ -25,7 +29,6 @@ pub struct PlayerState {
     current_track: Option<TrackListTrack>,
     tracklist: TrackListValue,
     current_progress: FloatValue,
-    duration_remaining: ClockValue,
     duration: ClockValue,
     position: ClockValue,
     status: StatusValue,
@@ -34,6 +37,8 @@ pub struct PlayerState {
     target_status: StatusValue,
     active_screen: ActiveScreen,
     quit_sender: BroadcastSender<bool>,
+    jumps: usize,
+    last_jump: SystemTime,
 }
 
 pub type SafePlayerState = Arc<RwLock<PlayerState>>;
@@ -127,16 +132,15 @@ impl PlayerState {
         self.resume
     }
 
-    pub fn set_current_progress(&mut self, progress: FloatValue) {
-        self.current_progress = progress;
-    }
-
     pub fn progress(&self) -> FloatValue {
-        self.current_progress.clone()
-    }
+        let duration = self.duration.inner_clocktime().mseconds() as f64;
+        let position = self.position.inner_clocktime().mseconds() as f64;
 
-    pub fn set_duration_remaining(&mut self, remaining: ClockValue) {
-        self.duration_remaining = remaining;
+        if duration >= position {
+            FloatValue(position / duration)
+        } else {
+            FloatValue(1.0)
+        }
     }
 
     pub fn set_duration(&mut self, duration: ClockValue) {
@@ -204,9 +208,30 @@ impl PlayerState {
         self.tracklist.rows()
     }
 
+    pub fn jumps(&self) -> usize {
+        self.jumps
+    }
+
+    pub fn add_jump(&mut self) {
+        self.jumps += 1;
+    }
+
+    pub fn sub_jump(&mut self) {
+        self.jumps -= 1;
+    }
+
+    pub fn check_last_jump(&self) -> bool {
+        self.last_jump
+            .elapsed()
+            .expect("failed to get elapsed time, should not occur")
+            < Duration::from_millis(500)
+    }
+
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut TrackListTrack) {
+        debug!("fetching track url");
         if let Ok(track_url) = self.client.track_url(track.track.id, None, None).await {
+            debug!("attaching url information to track");
             track.set_track_url(track_url);
         }
     }
@@ -281,7 +306,7 @@ impl PlayerState {
     }
 
     pub fn reset_player(&mut self) {
-        self.duration = ClockValue::default();
+        self.target_status = GstState::Ready.into();
         self.position = ClockValue::default();
         self.current_progress = FloatValue(0.0);
     }
@@ -302,7 +327,6 @@ impl PlayerState {
         self.tracklist.clear();
         self.current_track = None;
         self.current_progress = FloatValue(0.0);
-        self.duration_remaining = ClockValue::default();
         self.duration = ClockValue::default();
         self.position = ClockValue::default();
         self.status = gstreamer::State::Null.into();
@@ -318,7 +342,6 @@ impl PlayerState {
             current_track: None,
             client,
             tracklist,
-            duration_remaining: ClockValue::default(),
             duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
@@ -328,6 +351,8 @@ impl PlayerState {
             resume: false,
             active_screen: ActiveScreen::NowPlaying,
             quit_sender,
+            jumps: 0,
+            last_jump: SystemTime::now(),
         }
     }
 
@@ -359,21 +384,8 @@ impl PlayerState {
                             let position =
                                 ClockTime::from_mseconds(last_state.playback_position as u64);
 
-                            let remaining = if duration > position {
-                                duration - position
-                            } else {
-                                ClockTime::default()
-                            };
-                            let progress = if duration > position {
-                                position.seconds() as f64 / duration.seconds() as f64
-                            } else {
-                                0.0
-                            };
-
                             self.set_position(position.into());
                             self.set_duration(duration.into());
-                            self.set_duration_remaining(remaining.into());
-                            self.set_current_progress(progress.into());
                         }
 
                         self.skip_track(
