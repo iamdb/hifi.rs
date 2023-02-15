@@ -3,7 +3,7 @@ pub mod app;
 use crate::ui::components::{Item, Row, TableRow, TableRows};
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     album::Album,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
@@ -29,7 +29,7 @@ pub enum ActiveScreen {
 }
 
 impl ActiveScreen {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             ActiveScreen::NowPlaying => "now_playing",
             ActiveScreen::Search => "search",
@@ -77,14 +77,13 @@ impl From<StatusValue> for GstState {
 }
 
 impl StatusValue {
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self.0 {
             GstState::Playing => "Playing",
             GstState::Paused => "Paused",
             GstState::Null => "Stopped",
             GstState::VoidPending => "Stopped",
             GstState::Ready => "Stopped",
-            _ => "",
         }
     }
 }
@@ -290,7 +289,7 @@ impl TrackListValue {
         index
     }
 
-    pub fn item_list(self, max_width: usize, dim: bool) -> Vec<Item<'static>> {
+    pub fn item_list<'a>(self, max_width: usize, dim: bool) -> Vec<Item<'a>> {
         self.queue
             .into_iter()
             .map(|t| {

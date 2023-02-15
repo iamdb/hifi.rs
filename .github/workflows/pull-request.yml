@@ -42,16 +42,11 @@ jobs:
         profile: minimal
         toolchain: stable
         components: rustfmt, clippy
-    - name: Install cargo-make
-      uses: baptiste0928/cargo-install@v1
+    - name: Run CI Flow
+      uses: actions-rs/cargo@v1
       with:
-        crate: cargo-make
-        version: 0.36.4
-    - name: Install cargo-insta
-      uses: baptiste0928/cargo-install@v1
-      with:
-        crate: cargo-insta
-        version: 1.26.0
+        command: install
+        args: cargo-make cargo-insta
     - name: Run CI Flow
       uses: actions-rs/cargo@v1
       env:

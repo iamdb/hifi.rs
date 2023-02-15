@@ -2,6 +2,8 @@
 edition = "2021"
 name = "hifi-rs"
 version = "0.1.0"
+license-file = "../LICENSE"
+repository = "https://github.com/iamdb/hifi.rs"
 
 [dependencies]
 async-trait = "0.1"
@@ -16,16 +18,16 @@ dirs = "4.0"
 enum-as-inner = "0.5"
 flume = "0.10"
 futures = "0.3"
-gstreamer = { version = "0.19", features = ["serde"] }
+gstreamer = { version = "0.20", features = ["serde"] }
 log = "0.4"
 md5 = "0.7.0"
 pretty_env_logger = "0.4"
-qobuz-client = { path = "../qobuz-client" }
+hifirs-qobuz-api = { version = "0.1.0", path = "../qobuz-api" }
 regex = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.7"
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "sqlite", "all-types", "offline" ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls", "sqlite", "all-types", "offline" ] }
 termion = "2"
 textwrap = "0.16"
 tokio = { version = "1.0", features = ["full"]}

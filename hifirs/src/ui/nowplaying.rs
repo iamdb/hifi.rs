@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use async_trait::async_trait;
-use qobuz_client::client::track::Track;
+use hifirs_qobuz_api::client::track::Track;
 use termion::event::Key;
 use tui::layout::{Constraint, Direction, Layout};
 

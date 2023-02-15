@@ -1,5 +1,5 @@
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
-use qobuz_client::client::{
+use hifirs_qobuz_api::client::{
     playlist::TrackListTracks,
     track::{Track, TrackListTrack, TrackStatus, Tracks},
 };

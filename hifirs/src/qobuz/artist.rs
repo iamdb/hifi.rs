@@ -1,5 +1,5 @@
 use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
-use qobuz_client::client::artist::{Artist, Artists};
+use hifirs_qobuz_api::client::artist::{Artist, Artists};
 
 impl TableRows for Artists {
     fn rows(&self) -> Vec<Row> {

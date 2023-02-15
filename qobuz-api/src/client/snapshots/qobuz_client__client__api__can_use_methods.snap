@@ -33,10 +33,10 @@ playlists:
         - "https://static.qobuz.com/images/covers/34/25/0088807202534_300.jpg"
         - "https://static.qobuz.com/images/covers/pc/8a/cvv2e35988apc_300.jpg"
         - "https://static.qobuz.com/images/covers/ca/68/tnmluv61b68ca_300.jpg"
-      duration: 328456
+      duration: "0"
       updated_at: "0"
       published_to: ~
-      tracks_count: 973
+      tracks_count: "0"
       name: Assignments
       is_public: true
       published_from: ~
@@ -72,10 +72,10 @@ playlists:
         - "https://static.qobuz.com/images/covers/89/21/0060255732189_300.jpg"
         - "https://static.qobuz.com/images/covers/95/15/0060253771595_300.jpg"
         - "https://static.qobuz.com/images/covers/mb/zg/q64kzhpj3zgmb_300.jpg"
-      duration: 14912
+      duration: "0"
       updated_at: "0"
       published_to: 2145913200
-      tracks_count: 53
+      tracks_count: "0"
       name: Welcome to Qobuz
       is_public: true
       published_from: 1293836400

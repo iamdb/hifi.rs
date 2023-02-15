@@ -48,7 +48,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 487
+        albums_count: "0"
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 24
@@ -126,7 +126,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 487
+        albums_count: "0"
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 24
@@ -204,7 +204,7 @@ albums:
       label:
         name: Impulse!
         id: 1156
-        albums_count: 487
+        albums_count: "0"
         supplier_id: 1
         slug: impulse
       maximum_bit_depth: 16
@@ -282,7 +282,7 @@ albums:
       label:
         name: Okeh
         id: 9339
-        albums_count: 183
+        albums_count: "0"
         supplier_id: 23
         slug: okeh
       maximum_bit_depth: 16
@@ -364,7 +364,7 @@ albums:
       label:
         name: Neuklang
         id: 27782
-        albums_count: 398
+        albums_count: "0"
         supplier_id: 32
         slug: neuklang
       maximum_bit_depth: 24
@@ -442,7 +442,7 @@ albums:
       label:
         name: FLi Records
         id: 1230442
-        albums_count: 3
+        albums_count: "0"
         supplier_id: 17
         slug: fli-records-1
       maximum_bit_depth: 16
@@ -520,7 +520,7 @@ albums:
       label:
         name: jazz&people
         id: 107343
-        albums_count: 15
+        albums_count: "0"
         supplier_id: 22
         slug: jazz-people
       maximum_bit_depth: 24
@@ -602,7 +602,7 @@ albums:
       label:
         name: Jazz at Lincoln Center
         id: 6688
-        albums_count: 6
+        albums_count: "0"
         supplier_id: 17
         slug: jazz-at-lincoln-center
       maximum_bit_depth: 16
@@ -681,7 +681,7 @@ albums:
       label:
         name: UMC (Universal Music Catalogue)
         id: 92555
-        albums_count: 3510
+        albums_count: "0"
         supplier_id: 1
         slug: umc-universal-music-catalogue
       maximum_bit_depth: 16
@@ -760,7 +760,7 @@ albums:
       label:
         name: BBE Music
         id: 276273
-        albums_count: 663
+        albums_count: "0"
         supplier_id: 17
         slug: bbe-music
       maximum_bit_depth: 24

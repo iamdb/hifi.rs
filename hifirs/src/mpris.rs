@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{player::Controls, state::app::SafePlayerState};
 use gstreamer::ClockTime;
-use qobuz_client::client::track::TrackListTrack;
+use hifirs_qobuz_api::client::track::TrackListTrack;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
@@ -110,8 +110,8 @@ impl MprisPlayer {
         self.controls.previous().await;
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
-    async fn playback_status(&self) -> &'static str {
-        self.state.read().await.status().as_str()
+    async fn playback_status(&self) -> String {
+        self.state.read().await.status().as_str().to_string()
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -152,12 +152,6 @@ impl MprisPlayer {
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         message: i64,
     ) -> zbus::Result<()>;
-    // #[dbus_interface(property)]
-    // async fn set_position(&self, current: String, position: i64) {
-    //     if let Some(next_up) = self.controls.currently_playing_track().await {
-    //         self.player.seek();
-    //     }
-    // }
     #[dbus_interface(property, name = "MinimumRate")]
     fn minimum_rate(&self) -> f64 {
         1.0

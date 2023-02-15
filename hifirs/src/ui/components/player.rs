@@ -1,6 +1,6 @@
 use crate::state::{ClockValue, FloatValue, StatusValue};
 use gstreamer::{ClockTime, State as GstState};
-use qobuz_client::client::track::TrackListTrack;
+use hifirs_qobuz_api::client::track::TrackListTrack;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
