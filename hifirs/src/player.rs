@@ -436,7 +436,6 @@ impl Player {
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() {
             self.ready(true).await?;
-            self.playbin.set_property("instant-uri", true);
         }
 
         let quality = if let Some(quality) = quality {
@@ -466,7 +465,6 @@ impl Player {
     pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) -> Result<()> {
         if self.is_playing() || self.is_paused() {
             self.ready(true).await?;
-            self.playbin.set_property("instant-uri", true);
         }
 
         if album.tracks.is_none() {
@@ -554,7 +552,6 @@ impl Player {
     ) -> Result<()> {
         if self.is_playing() || self.is_paused() {
             self.ready(true).await?;
-            self.playbin.set_property("instant-uri", true);
         }
 
         let quality = if let Some(quality) = quality {
