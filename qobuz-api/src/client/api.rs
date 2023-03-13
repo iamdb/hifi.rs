@@ -138,12 +138,9 @@ macro_rules! get {
                     message: error.to_string(),
                 }),
             },
-            Err(error) => {
-                error!("get error: {error}");
-                Err(Error::Api {
-                    message: error.to_string(),
-                })
-            }
+            Err(error) => Err(Error::Api {
+                message: error.to_string(),
+            }),
         }
     };
 }
