@@ -34,8 +34,8 @@ macro_rules! info_regex {
 #[derive(Debug, Clone)]
 pub struct Client {
     secrets: HashMap<String, String>,
-    active_secret: String,
-    app_id: String,
+    active_secret: Option<String>,
+    app_id: Option<String>,
     credentials: Option<Credentials>,
     base_url: String,
     client: reqwest::Client,
@@ -47,7 +47,6 @@ pub struct Client {
 }
 
 pub async fn new(
-    credentials: Option<Credentials>,
     active_secret: Option<String>,
     app_id: Option<String>,
     audio_quality: Option<AudioQuality>,
@@ -57,7 +56,7 @@ pub async fn new(
     headers.insert(
             "User-Agent",
             HeaderValue::from_str(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36",
             )
             .unwrap(),
         );
@@ -74,24 +73,12 @@ pub async fn new(
         AudioQuality::Mp3
     };
 
-    let app_id = if let Some(id) = app_id {
-        id
-    } else {
-        "".to_string()
-    };
-
-    let active_secret = if let Some(id) = active_secret {
-        id
-    } else {
-        "".to_string()
-    };
-
     Ok(Client {
         client,
         secrets: HashMap::new(),
         active_secret,
         user_token,
-        credentials,
+        credentials: None,
         app_id,
         default_quality,
         base_url: "https://www.qobuz.com/api.json/0.2/".to_string(),
@@ -151,9 +138,12 @@ macro_rules! get {
                     message: error.to_string(),
                 }),
             },
-            Err(error) => Err(Error::Api {
-                message: error.to_string(),
-            }),
+            Err(error) => {
+                error!("get error: {error}");
+                Err(Error::Api {
+                    message: error.to_string(),
+                })
+            }
         }
     };
 }
@@ -179,25 +169,8 @@ impl Client {
         self.default_quality.clone()
     }
 
-    /// Setup app_id, secret and user credentials for authentication
-    pub async fn setup(&mut self) -> Result<&Self> {
-        info!("setting up the api client");
-
-        let mut refresh_config = false;
-
-        if self.app_id.is_empty() || self.active_secret.is_empty() {
-            refresh_config = true;
-        }
-
-        if refresh_config {
-            self.refresh().await?;
-        }
-
-        if self.credentials.is_none() {
-            error!("credentials missing");
-        }
-
-        Ok(self)
+    pub fn signed_in(&self) -> bool {
+        self.user_token.is_some()
     }
 
     /// Login a user
@@ -205,16 +178,18 @@ impl Client {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
 
         if let Some(creds) = &self.credentials {
-            if let (Some(username), Some(password)) = (&creds.username, &creds.password) {
+            if let (Some(username), Some(password), Some(app_id)) =
+                (&creds.username, &creds.password, &self.app_id)
+            {
                 info!(
                     "logging in with email ({}) and password **HIDDEN** for app_id {}",
-                    username, self.app_id
+                    username, app_id
                 );
 
                 let params = vec![
                     ("email", username.as_str()),
                     ("password", password.as_str()),
-                    ("app_id", self.app_id.as_str()),
+                    ("app_id", app_id.as_str()),
                 ];
 
                 match self.make_get_call(endpoint, Some(params)).await {
@@ -228,13 +203,16 @@ impl Client {
                         self.user_token = Some(token);
                         Ok(())
                     }
-                    Err(_) => Err(Error::Login),
+                    Err(err) => {
+                        error!("error logging into qobuz: {}", err);
+                        Err(Error::Login)
+                    }
                 }
             } else {
                 Err(Error::Login)
             }
         } else {
-            Err(Error::Login)
+            Err(Error::NoCredentials)
         }
     }
 
@@ -444,8 +422,8 @@ impl Client {
         let now = format!("{}", chrono::Utc::now().timestamp());
         let secret = if let Some(secret) = sec {
             secret
-        } else if !self.active_secret.is_empty() {
-            self.active_secret.clone()
+        } else if let Some(s) = &self.active_secret {
+            s.clone()
         } else {
             return Err(Error::ActiveSecret);
         };
@@ -513,24 +491,28 @@ impl Client {
 
     // Retrieve information about an artist
     pub async fn artist(&self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
-        let limit = if let Some(limit) = limit {
-            limit.to_string()
+        if let Some(app_id) = &self.app_id {
+            let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
+            let limit = if let Some(limit) = limit {
+                limit.to_string()
+            } else {
+                100.to_string()
+            };
+
+            let artistid_string = artist_id.to_string();
+
+            let params = vec![
+                ("artist_id", artistid_string.as_str()),
+                ("app_id", app_id),
+                ("limit", limit.as_str()),
+                ("offset", "0"),
+                ("extra", "albums"),
+            ];
+
+            get!(self, endpoint, Some(params))
         } else {
-            100.to_string()
-        };
-
-        let artistid_string = artist_id.to_string();
-
-        let params = vec![
-            ("artist_id", artistid_string.as_str()),
-            ("app_id", &self.app_id),
-            ("limit", limit.as_str()),
-            ("offset", "0"),
-            ("extra", "albums"),
-        ];
-
-        get!(self, endpoint, Some(params))
+            Err(Error::AppID)
+        }
     }
 
     // Search the database for artists
@@ -562,12 +544,12 @@ impl Client {
 
     // Set an app_id for authentication
     pub fn set_app_id(&mut self, app_id: String) {
-        self.app_id = app_id;
+        self.app_id = Some(app_id);
     }
 
     // Set an app secret for authentication
     pub fn set_active_secret(&mut self, active_secret: String) {
-        self.active_secret = active_secret;
+        self.active_secret = Some(active_secret);
     }
 
     pub fn set_default_quality(&mut self, quality: AudioQuality) {
@@ -578,23 +560,20 @@ impl Client {
         self.user_token.clone()
     }
 
-    pub fn get_active_secret(&self) -> String {
+    pub fn get_active_secret(&self) -> Option<String> {
         self.active_secret.clone()
     }
 
-    pub fn get_app_id(&self) -> String {
+    pub fn get_app_id(&self) -> Option<String> {
         self.app_id.clone()
     }
 
     fn client_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
 
-        if !self.app_id.is_empty() {
-            info!("adding app_id to request headers: {}", self.app_id);
-            headers.insert(
-                "X-App-Id",
-                HeaderValue::from_str(self.app_id.as_str()).unwrap(),
-            );
+        if let Some(app_id) = &self.app_id {
+            info!("adding app_id to request headers: {}", app_id);
+            headers.insert("X-App-Id", HeaderValue::from_str(app_id).unwrap());
         } else {
             error!("no app_id");
         }
@@ -618,7 +597,7 @@ impl Client {
     ) -> Result<String> {
         let headers = self.client_headers();
 
-        debug!("calling {} endpoint", endpoint);
+        debug!("calling {} endpoint, with params {params:?}", endpoint);
         let request = self.client.request(Method::GET, endpoint).headers(headers);
 
         if let Some(p) = params {
@@ -681,7 +660,7 @@ impl Client {
                             .name("app_id")
                             .map_or("".to_string(), |m| m.as_str().to_string());
 
-                        self.app_id = app_id.clone();
+                        self.app_id = Some(app_id.clone());
 
                         let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 
@@ -784,10 +763,11 @@ async fn can_use_methods() {
         password: Some(env!("QOBUZ_PASSWORD").to_string()),
     };
 
-    let mut client = new(Some(creds.clone()), None, None, None, None)
+    let mut client = new(None, None, None, None)
         .await
         .expect("failed to create client");
 
+    client.set_credentials(creds);
     client.refresh().await.expect("failed to refresh config");
     client.login().await.expect("failed to login");
     client.test_secrets().await.expect("failed to test secrets");

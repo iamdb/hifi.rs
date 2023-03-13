@@ -248,6 +248,21 @@ impl PlayerState {
         }
     }
 
+    pub async fn next_track_url(&self) -> Option<String> {
+        if let Some(current_index) = self.current_track_index() {
+            if let Some(next_track) = self.tracklist.find_track_by_index(current_index + 1) {
+                if let Ok(track_url) = self.client.track_url(next_track.track.id, None, None).await
+                {
+                    return Some(track_url.url);
+                } else {
+                    return None;
+                }
+            }
+        }
+
+        None
+    }
+
     pub async fn skip_track(
         &mut self,
         index: Option<usize>,
@@ -363,7 +378,7 @@ impl PlayerState {
         }
     }
 
-    pub async fn load_last_state(&mut self) {
+    pub async fn load_last_state(&mut self) -> bool {
         if let Some(last_state) = self.db.get_last_state().await {
             let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
 
@@ -393,6 +408,8 @@ impl PlayerState {
                             SkipDirection::Forward,
                         )
                         .await;
+
+                        return true;
                     }
                 }
                 TrackListType::Playlist => {
@@ -411,15 +428,20 @@ impl PlayerState {
                             self.tracklist.set_list_type(TrackListType::Playlist);
                             self.tracklist.set_playlist(playlist);
                             self.tracklist.queue = tracklist_tracks;
+
+                            return true;
                         }
                     }
                 }
                 TrackListType::Track => {
                     self.tracklist.set_list_type(TrackListType::Track);
+                    return true;
                 }
                 TrackListType::Unknown => unreachable!(),
             }
         }
+
+        false
     }
 }
 
