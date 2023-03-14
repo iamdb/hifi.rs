@@ -1,0 +1,49 @@
+{
+  "query": "SELECT * FROM player_state ORDER BY rowid DESC LIMIT 1;",
+  "describe": {
+    "columns": [
+      {
+        "name": "rowid",
+        "ordinal": 0,
+        "type_info": "Int64"
+      },
+      {
+        "name": "playback_track_id",
+        "ordinal": 1,
+        "type_info": "Int64"
+      },
+      {
+        "name": "playback_position",
+        "ordinal": 2,
+        "type_info": "Int64"
+      },
+      {
+        "name": "playback_track_index",
+        "ordinal": 3,
+        "type_info": "Int64"
+      },
+      {
+        "name": "playback_entity_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "playback_entity_type",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4f528d52c78b3d778e064369fc36af49ddc8c06bdde609f9579eaf2ea709b6e1"
+}

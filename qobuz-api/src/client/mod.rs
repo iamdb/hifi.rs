@@ -57,14 +57,13 @@ pub struct User {
 pub enum UrlType {
     Album { id: String },
     Playlist { id: i64 },
+    Track { id: i32 },
 }
 
 #[derive(Snafu, Debug)]
 pub enum UrlTypeError {
     #[snafu(display("please use URIs from the play.qobuz.domain"))]
     WrongDomain,
-    #[snafu(display("playing a track via URI is not currently supported"))]
-    NoTrack,
     #[snafu(display("the url contains an invalid path"))]
     InvalidPath,
     #[snafu(display("the url is invalid."))]
@@ -127,7 +126,16 @@ pub fn parse_url(string_url: &str) -> ParseUrlResult<UrlType> {
 
                         Ok(UrlType::Playlist { id })
                     }
-                    Some("track") => Err(UrlTypeError::NoTrack),
+                    Some("track") => {
+                        debug!("this is a track");
+                        let id = path
+                            .next()
+                            .unwrap()
+                            .parse::<i32>()
+                            .expect("failed to convert id");
+
+                        Ok(UrlType::Track { id })
+                    }
                     None => {
                         debug!("no path, cannot use path");
                         Err(UrlTypeError::InvalidPath)

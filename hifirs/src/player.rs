@@ -24,7 +24,7 @@ use hifirs_qobuz_api::client::{
     AudioQuality,
 };
 use snafu::prelude::*;
-use std::{process, sync::Arc, time::Duration};
+use std::{collections::VecDeque, process, sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 use zbus::Connection;
 
@@ -447,15 +447,23 @@ impl Player {
             self.client.quality()
         };
 
-        let mut playlist_track =
-            TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
+        let mut track = TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
+        track.status = TrackStatus::Playing;
+
+        let mut queue = VecDeque::new();
+        queue.push_front(track.clone());
+
+        let mut tracklist = TrackListValue::new(Some(queue));
+        tracklist.set_list_type(TrackListType::Track);
 
         let mut state = self.state.write().await;
-        state.attach_track_url(&mut playlist_track).await;
-        state.set_current_track(playlist_track.clone());
+        state.replace_list(tracklist);
+
+        state.attach_track_url(&mut track).await;
+        state.set_current_track(track.clone());
         state.set_target_status(GstState::Playing);
 
-        if let Some(track_url) = playlist_track.track_url {
+        if let Some(track_url) = track.track_url {
             self.playbin
                 .set_property("uri", Some(track_url.url.to_string()));
 
@@ -547,6 +555,15 @@ impl Player {
                     }
                     Err(err) => {
                         println!("Failed to play playlsit {id}, {err}. Is the ID correct?");
+                        process::exit(1);
+                    }
+                },
+                client::UrlType::Track { id } => match self.client.track(id).await {
+                    Ok(track) => {
+                        self.play_track(track, Some(quality)).await?;
+                    }
+                    Err(err) => {
+                        println!("Failed to play track {id}, {err}. Is the ID correct?");
                         process::exit(1);
                     }
                 },

@@ -13,6 +13,7 @@ use hifirs_qobuz_api::client::{
     AudioQuality,
 };
 use std::{
+    collections::VecDeque,
     fmt::Display,
     sync::Arc,
     time::{Duration, SystemTime},
@@ -36,6 +37,7 @@ pub struct PlayerState {
     resume: bool,
     target_status: StatusValue,
     active_screen: ActiveScreen,
+    audio_quality: AudioQuality,
     quit_sender: BroadcastSender<bool>,
     jumps: usize,
     last_jump: SystemTime,
@@ -69,7 +71,12 @@ impl From<PlayerState> for SavedState {
                     .expect("failed to get playlist id")
                     .id
                     .to_string(),
-                TrackListType::Track => "".to_string(),
+                TrackListType::Track => state
+                    .current_track
+                    .expect("failed to get current_track id")
+                    .track
+                    .id
+                    .to_string(),
                 TrackListType::Unknown => "".to_string(),
             };
 
@@ -355,6 +362,7 @@ impl PlayerState {
         Self {
             db,
             current_track: None,
+            audio_quality: client.quality(),
             client,
             tracklist,
             duration: ClockValue::default(),
@@ -386,7 +394,7 @@ impl PlayerState {
                 TrackListType::Album => {
                     if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
                         self.replace_list(TrackListValue::new(
-                            album.to_tracklist(AudioQuality::HIFI192),
+                            album.to_tracklist(self.audio_quality.clone()),
                         ));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
@@ -423,19 +431,74 @@ impl PlayerState {
                         )
                         .await
                     {
-                        if let Some(tracklist_tracks) = playlist.to_tracklist(AudioQuality::HIFI192)
+                        if let Some(tracklist_tracks) =
+                            playlist.to_tracklist(self.audio_quality.clone())
                         {
+                            self.replace_list(TrackListValue::new(Some(tracklist_tracks)));
                             self.tracklist.set_list_type(TrackListType::Playlist);
                             self.tracklist.set_playlist(playlist);
-                            self.tracklist.queue = tracklist_tracks;
+
+                            if let Some(track) = self
+                                .tracklist
+                                .find_track_by_index(last_state.playback_track_index as usize)
+                            {
+                                let duration = ClockTime::from_seconds(track.track.duration as u64);
+                                let position =
+                                    ClockTime::from_mseconds(last_state.playback_position as u64);
+
+                                self.set_position(position.into());
+                                self.set_duration(duration.into());
+                            }
+
+                            self.skip_track(
+                                Some(last_state.playback_track_index as usize),
+                                SkipDirection::Forward,
+                            )
+                            .await;
 
                             return true;
                         }
                     }
                 }
                 TrackListType::Track => {
-                    self.tracklist.set_list_type(TrackListType::Track);
-                    return true;
+                    let track_id: i32 = last_state
+                        .playback_entity_id
+                        .parse()
+                        .expect("failed to parse track id");
+                    if let Ok(track) = self.client.track(track_id).await {
+                        let mut track = TrackListTrack::new(
+                            track,
+                            Some(0),
+                            Some(1),
+                            Some(self.audio_quality.clone()),
+                            None,
+                        );
+                        track.status = TrackStatus::Playing;
+
+                        let mut queue = VecDeque::new();
+                        queue.push_front(track.clone());
+
+                        let mut tracklist = TrackListValue::new(Some(queue));
+                        tracklist.set_list_type(TrackListType::Track);
+
+                        self.replace_list(tracklist);
+                        self.tracklist.set_list_type(TrackListType::Track);
+
+                        let duration = ClockTime::from_seconds(track.track.duration as u64);
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+
+                        self.set_position(position.into());
+                        self.set_duration(duration.into());
+
+                        self.skip_track(
+                            Some(last_state.playback_track_index as usize),
+                            SkipDirection::Forward,
+                        )
+                        .await;
+
+                        return true;
+                    }
                 }
                 TrackListType::Unknown => unreachable!(),
             }
