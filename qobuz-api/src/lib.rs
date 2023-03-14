@@ -17,6 +17,8 @@ pub enum Error {
     NoPassword,
     #[snafu(display("No password provided."))]
     NoUsername,
+    #[snafu(display("No username or password provided."))]
+    NoCredentials,
     #[snafu(display("No audio quality provided."))]
     NoQuality,
     #[snafu(display("Failed to get a usable secret from Qobuz."))]

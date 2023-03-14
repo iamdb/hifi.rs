@@ -270,34 +270,37 @@ impl Player {
     /// Load the previous player state and seek to the last known position.
     pub async fn resume(&mut self, autoplay: bool) -> Result<()> {
         let mut state = self.state.write().await;
-        state.load_last_state().await;
-        state.set_resume(true);
+        if state.load_last_state().await {
+            state.set_resume(true);
 
-        if autoplay {
-            state.set_target_status(GstState::Playing);
-        } else {
-            state.set_target_status(GstState::Paused);
-        }
-
-        if let Some(track) = state.current_track() {
-            if let Some(url) = track.track_url {
-                self.playbin.set_property("uri", url.url);
-
-                self.ready(true).await?;
-                self.pause(true).await?;
-
-                let position = state.position();
-
-                self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
-                    .await?;
-
-                Ok(())
+            if autoplay {
+                state.set_target_status(GstState::Playing);
             } else {
-                Err(Error::Resume)
+                state.set_target_status(GstState::Paused);
             }
-        } else {
-            Err(Error::Resume)
+
+            if let Some(track) = state.current_track() {
+                if let Some(url) = track.track_url {
+                    self.playbin.set_property("uri", url.url);
+
+                    self.ready(true).await?;
+                    self.pause(true).await?;
+
+                    let position = state.position();
+
+                    self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
+                        .await?;
+
+                    return Ok(());
+                } else {
+                    return Err(Error::Resume);
+                }
+            } else {
+                return Err(Error::Resume);
+            }
         }
+
+        Ok(())
     }
     /// Retreive controls for the player.
     pub fn controls(&self) -> Controls {
@@ -643,7 +646,7 @@ impl Player {
                 }
                 Some(almost_done) = about_to_finish.next() => {
                     if almost_done {
-                        self.prep_next_track().await
+                        self.prep_next_track().await?
                     }
                 }
                 Some(action) = actions.next() => {
@@ -697,16 +700,6 @@ impl Player {
                             } else {
                                 ClockTime::default().into()
                             };
-
-                            debug!("async done");
-                            let mut state = self.state.write().await;
-
-                            debug!("setting updated position");
-                            state.set_position(position.clone());
-                            state.set_resume(false);
-
-                            // Drop state before dbus call;
-                            drop(state);
 
                             self.dbus_seeked_signal(Some(position)).await;
                         }
@@ -952,13 +945,12 @@ impl Player {
             .await
             .expect("failed to signal metadata change");
     }
+
     /// Sets up basic functionality for the player.
-    async fn prep_next_track(&self) {
+    async fn prep_next_track(&self) -> Result<()> {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
-            drop(state);
-
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = next_track.track_url {
                 self.playbin
@@ -967,6 +959,8 @@ impl Player {
         } else {
             debug!("no more tracks left");
         }
+
+        Ok(())
     }
 
     /// Get Gstreamer message stream

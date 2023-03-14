@@ -7,13 +7,7 @@ use crate::{
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
-use hifirs_qobuz_api::{
-    client::{
-        api::{self, OutputFormat},
-        AudioQuality,
-    },
-    Credentials,
-};
+use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
 
 #[derive(Parser)]
@@ -177,18 +171,6 @@ pub async fn run() -> Result<(), Error> {
     // SETUP DATABASE
     let data = db::new().await;
 
-    let creds = Credentials {
-        username: cli.username.clone(),
-        password: cli.password.clone(),
-    };
-
-    let mut client = api::new(Some(creds.clone()), None, None, None, None).await?;
-
-    if cli.username.is_none() && cli.password.is_none() {
-        debug!("setting up qobuz client");
-        client = qobuz::setup_client(client.clone(), data.clone()).await?;
-    }
-
     let mut quit_when_done = false;
 
     if let Some(should_quit) = cli.quit_when_done {
@@ -198,6 +180,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Resume { no_tui } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
             let mut player = player::new(client.clone(), data, quit_when_done).await?;
 
             player.resume(true).await?;
@@ -213,6 +196,7 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Play { uri, no_tui } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
             let player = player::new(client.clone(), data, quit_when_done).await?;
 
             player.play_uri(uri, Some(client.quality())).await?;
@@ -232,6 +216,8 @@ pub async fn run() -> Result<(), Error> {
             limit,
             output_format,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             match client.search_all(query).await {
                 Ok(results) => {
                     //let json = serde_json::to_string(&results);
@@ -247,6 +233,8 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
@@ -278,6 +266,8 @@ pub async fn run() -> Result<(), Error> {
             output_format,
             no_tui,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             let results =
                 SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
 
@@ -308,6 +298,8 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
             output_format,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             if output_format.is_some() {
                 if let Ok(playlists) = client.user_playlists().await {
                     let results = SearchResults::UserPlaylists(playlists);
@@ -336,6 +328,8 @@ pub async fn run() -> Result<(), Error> {
             playlist_id,
             output_format,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
             output!(results, output_format);
             Ok(())
@@ -345,6 +339,8 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             let player = player::new(client.clone(), data, quit_when_done).await?;
 
             let track = client.track(track_id).await?;
@@ -366,6 +362,8 @@ pub async fn run() -> Result<(), Error> {
             quality,
             no_tui,
         } => {
+            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
             let album = client.album(album_id).await?;
 
             let quality = if let Some(q) = quality {

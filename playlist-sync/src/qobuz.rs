@@ -17,13 +17,14 @@ pub async fn new<'q>(progress: &'_ ProgressBar) -> Qobuz<'_> {
         password: Some(env!("QOBUZ_PASSWORD").to_string()),
     };
 
-    let client = hifirs_qobuz_api::client::api::new(Some(creds.clone()), None, None, None, None)
+    let mut client = hifirs_qobuz_api::client::api::new(None, None, None, None)
         .await
         .unwrap_or_else(|err| {
             println!("There was a problem creating the api client.");
             println!("Message {err}");
             std::process::exit(1);
         });
+    client.set_credentials(creds);
 
     Qobuz { client, progress }
 }

@@ -161,14 +161,18 @@ impl Database {
 
     pub async fn get_config(&self) -> Option<ApiConfig> {
         if let Ok(mut conn) = acquire!(self) {
-            Some(get_one!(
+            if let Ok(conf) = get_one!(
                 r#"
             SELECT * FROM config
             WHERE ROWID = 1;
             "#,
                 ApiConfig,
                 conn
-            ))
+            ) {
+                Some(conf)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -195,11 +199,15 @@ impl Database {
 
     pub async fn get_last_state(&self) -> Option<SavedState> {
         if let Ok(mut conn) = acquire!(self) {
-            Some(get_one!(
+            if let Ok(state) = get_one!(
                 r#"SELECT * FROM player_state ORDER BY rowid DESC LIMIT 1;"#,
                 SavedState,
                 conn
-            ))
+            ) {
+                Some(state)
+            } else {
+                None
+            }
         } else {
             None
         }

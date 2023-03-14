@@ -6,7 +6,7 @@ use enum_as_inner::EnumAsInner;
 use hifirs_qobuz_api::{
     client::{
         album::{Album, AlbumSearchResults},
-        api::Client,
+        api::{self, Client},
         artist::{Artist, ArtistSearchResults},
         playlist::{Playlist, Playlists, UserPlaylistsResult},
         track::Track,
@@ -23,8 +23,21 @@ pub mod artist;
 pub mod playlist;
 pub mod track;
 
+pub async fn make_client(
+    username: Option<String>,
+    password: Option<String>,
+    db: &Database,
+) -> Result<Client> {
+    let mut client = api::new(None, None, None, None).await?;
+    if username.is_some() || password.is_some() {
+        client.set_credentials(Credentials { username, password });
+    }
+
+    setup_client(&mut client, db).await
+}
+
 /// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(mut client: Client, db: Database) -> Result<Client> {
+pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> {
     info!("setting up the api client");
 
     if let Some(config) = db.get_config().await {
@@ -52,27 +65,15 @@ pub async fn setup_client(mut client: Client, db: Database) -> Result<Client> {
             refresh_config = true;
         }
 
-        if refresh_config {
-            debug!("refreshing app secret and id");
-            if client.refresh().await.is_ok() {
-                debug!("config refreshed, storing for future use");
-                let app_id = client.get_app_id();
-
-                if !app_id.is_empty() {
-                    db.set_app_id(app_id).await;
-                }
-
-                let secret = client.get_active_secret();
-
-                if !secret.is_empty() {
-                    db.set_active_secret(secret).await;
-                }
-            };
-        }
-
         if let Some(token) = config.user_token {
             info!("using token from cache");
             client.set_token(token);
+
+            if refresh_config {
+                client.refresh().await?;
+            }
+
+            client.test_secrets().await?;
         } else if let (Some(username), Some(password)) = (config.username, config.password) {
             info!("using username and password from cache");
             client.set_credentials(Credentials {
@@ -80,17 +81,22 @@ pub async fn setup_client(mut client: Client, db: Database) -> Result<Client> {
                 password: Some(password),
             });
 
-            info!("signing in");
-            client.login().await?;
+            if refresh_config {
+                client.refresh().await?;
+            }
 
-            info!("signed in successfully, storing user token for future use");
+            client.login().await?;
+            client.test_secrets().await?;
+
             if let Some(token) = client.get_token() {
                 db.set_user_token(token).await;
             }
+        } else {
+            return Err(hifirs_qobuz_api::Error::NoCredentials);
         }
     }
 
-    Ok(client)
+    Ok(client.clone())
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

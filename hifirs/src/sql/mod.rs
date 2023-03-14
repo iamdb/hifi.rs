@@ -34,6 +34,5 @@ macro_rules! get_one {
         sqlx::query_as!($return_type, $query)
             .fetch_one(&mut $conn)
             .await
-            .expect("database failure")
     };
 }
