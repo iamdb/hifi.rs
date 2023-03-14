@@ -62,7 +62,7 @@ pub enum UrlType {
 
 #[derive(Snafu, Debug)]
 pub enum UrlTypeError {
-    #[snafu(display("please use URIs from the play.qobuz.domain"))]
+    #[snafu(display("This uri contains an unfamiliar domain."))]
     WrongDomain,
     #[snafu(display("the url contains an invalid path"))]
     InvalidPath,
@@ -106,7 +106,7 @@ impl Display for AudioQuality {
 pub fn parse_url(string_url: &str) -> ParseUrlResult<UrlType> {
     if let Ok(url) = url::Url::parse(string_url) {
         if let (Some(host), Some(mut path)) = (url.host_str(), url.path_segments()) {
-            if host == "play.qobuz.com" {
+            if host == "play.qobuz.com" || host == "open.qobuz.com" {
                 debug!("got a qobuz url");
 
                 match path.next() {
