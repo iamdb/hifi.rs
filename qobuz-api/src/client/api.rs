@@ -462,9 +462,9 @@ impl Client {
     }
 
     // Retrieve information about an album
-    pub async fn album(&self, album_id: String) -> Result<Album> {
+    pub async fn album(&self, album_id: &str) -> Result<Album> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
-        let params = vec![("album_id", album_id.as_str())];
+        let params = vec![("album_id", album_id)];
 
         get!(self, endpoint, Some(params))
     }
@@ -793,7 +793,7 @@ async fn can_use_methods() {
         ".albums.items[].purchasable_at" => "0"
     });
     assert_yaml_snapshot!(client
-        .album("lhrak0dpdxcbc".to_string())
+        .album("lhrak0dpdxcbc")
         .await
         .expect("failed to get album"));
     assert_yaml_snapshot!(client

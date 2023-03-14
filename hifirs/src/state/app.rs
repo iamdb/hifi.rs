@@ -384,7 +384,7 @@ impl PlayerState {
 
             match entity_type {
                 TrackListType::Album => {
-                    if let Ok(album) = self.client.album(last_state.playback_entity_id).await {
+                    if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
                         self.replace_list(TrackListValue::new(
                             album.to_tracklist(AudioQuality::HIFI192),
                         ));

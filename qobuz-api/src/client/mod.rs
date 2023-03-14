@@ -1,5 +1,6 @@
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use snafu::prelude::*;
 use std::fmt::Display;
 
 pub mod album;
@@ -58,6 +59,22 @@ pub enum UrlType {
     Playlist { id: i64 },
 }
 
+#[derive(Snafu, Debug)]
+pub enum UrlTypeError {
+    #[snafu(display("please use URIs from the play.qobuz.domain"))]
+    WrongDomain,
+    #[snafu(display("playing a track via URI is not currently supported"))]
+    NoTrack,
+    #[snafu(display("the url contains an invalid path"))]
+    InvalidPath,
+    #[snafu(display("the url is invalid."))]
+    InvalidUrl,
+    #[snafu(display("an unknown error has occurred"))]
+    Unknown,
+}
+
+pub type ParseUrlResult<T, E = UrlTypeError> = std::result::Result<T, E>;
+
 /// The audio quality as defined by the Qobuz API.
 #[derive(Default, Clone, Debug, Serialize, Deserialize, ValueEnum)]
 pub enum AudioQuality {
@@ -87,7 +104,7 @@ impl Display for AudioQuality {
     }
 }
 
-pub fn parse_url(string_url: &str) -> Option<UrlType> {
+pub fn parse_url(string_url: &str) -> ParseUrlResult<UrlType> {
     if let Ok(url) = url::Url::parse(string_url) {
         if let (Some(host), Some(mut path)) = (url.host_str(), url.path_segments()) {
             if host == "play.qobuz.com" {
@@ -98,7 +115,7 @@ pub fn parse_url(string_url: &str) -> Option<UrlType> {
                         debug!("this is an album");
                         let id = path.next().unwrap().to_string();
 
-                        Some(UrlType::Album { id })
+                        Ok(UrlType::Album { id })
                     }
                     Some("playlist") => {
                         debug!("this is a playlist");
@@ -108,22 +125,23 @@ pub fn parse_url(string_url: &str) -> Option<UrlType> {
                             .parse::<i64>()
                             .expect("failed to convert id");
 
-                        Some(UrlType::Playlist { id })
+                        Ok(UrlType::Playlist { id })
                     }
+                    Some("track") => Err(UrlTypeError::NoTrack),
                     None => {
                         debug!("no path, cannot use path");
-                        None
+                        Err(UrlTypeError::InvalidPath)
                     }
-                    _ => None,
+                    _ => Err(UrlTypeError::Unknown),
                 }
             } else {
-                None
+                Err(UrlTypeError::WrongDomain)
             }
         } else {
-            None
+            Err(UrlTypeError::InvalidUrl)
         }
     } else {
-        None
+        Err(UrlTypeError::InvalidUrl)
     }
 }
 

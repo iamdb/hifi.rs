@@ -364,7 +364,7 @@ pub async fn run() -> Result<(), Error> {
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
 
-            let album = client.album(album_id).await?;
+            let album = client.album(&album_id).await?;
 
             let quality = if let Some(q) = quality {
                 q

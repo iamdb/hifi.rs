@@ -24,7 +24,7 @@ use hifirs_qobuz_api::client::{
     AudioQuality,
 };
 use snafu::prelude::*;
-use std::{sync::Arc, time::Duration};
+use std::{process, sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 use zbus::Connection;
 
@@ -530,18 +530,30 @@ impl Player {
             self.client.quality()
         };
 
-        if let Some(url) = client::parse_url(uri.as_str()) {
-            match url {
-                client::UrlType::Album { id } => {
-                    if let Ok(album) = self.client.album(id).await {
+        match client::parse_url(uri.as_str()) {
+            Ok(url) => match url {
+                client::UrlType::Album { id } => match self.client.album(&id).await {
+                    Ok(album) => {
                         self.play_album(album, Some(quality)).await?;
                     }
-                }
-                client::UrlType::Playlist { id } => {
-                    if let Ok(playlist) = self.client.playlist(id).await {
+                    Err(err) => {
+                        println!("Failed to play album {id}, {err}. Is the ID correct?");
+                        process::exit(1);
+                    }
+                },
+                client::UrlType::Playlist { id } => match self.client.playlist(id).await {
+                    Ok(playlist) => {
                         self.play_playlist(playlist, Some(quality)).await?;
                     }
-                }
+                    Err(err) => {
+                        println!("Failed to play playlsit {id}, {err}. Is the ID correct?");
+                        process::exit(1);
+                    }
+                },
+            },
+            Err(err) => {
+                println!("Failed to play item, {err}.");
+                process::exit(1);
             }
         }
 
@@ -660,7 +672,7 @@ impl Player {
                         Action::Previous => self.skip(SkipDirection::Backward,None).await?,
                         Action::Stop => self.stop(true).await?,
                         Action::PlayAlbum { album_id } => {
-                            if let Ok(album) = self.client.album(album_id).await {
+                            if let Ok(album) = self.client.album(&album_id).await {
                                 self.play_album(album, None).await?;
                             }
                         },

@@ -71,9 +71,16 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
 
             if refresh_config {
                 client.refresh().await?;
-            }
+                client.test_secrets().await?;
 
-            client.test_secrets().await?;
+                if let Some(id) = client.get_app_id() {
+                    db.set_app_id(id).await;
+                }
+
+                if let Some(secret) = client.get_active_secret() {
+                    db.set_active_secret(secret).await;
+                }
+            }
         } else if let (Some(username), Some(password)) = (config.username, config.password) {
             info!("using username and password from cache");
             client.set_credentials(Credentials {
@@ -83,6 +90,10 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
 
             if refresh_config {
                 client.refresh().await?;
+
+                if let Some(id) = client.get_app_id() {
+                    db.set_app_id(id).await;
+                }
             }
 
             client.login().await?;
@@ -90,6 +101,10 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
 
             if let Some(token) = client.get_token() {
                 db.set_user_token(token).await;
+            }
+
+            if let Some(secret) = client.get_active_secret() {
+                db.set_active_secret(secret).await;
             }
         } else {
             return Err(hifirs_qobuz_api::Error::NoCredentials);
