@@ -24,22 +24,27 @@ use hifirs_qobuz_api::client::{
     AudioQuality,
 };
 use snafu::prelude::*;
-use std::{collections::VecDeque, process, sync::Arc, time::Duration};
+use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 use zbus::Connection;
 
 #[derive(Snafu, Debug)]
 pub enum Error {
-    #[snafu(display("Failed to retrieve a track url."))]
+    #[snafu(display("{message}"))]
+    FailedToPlay {
+        message: String,
+    },
+    #[snafu(display("failed to retrieve a track url"))]
     TrackURL,
-    #[snafu(display("Failed to seek."))]
+    #[snafu(display("failed to seek"))]
     Seek,
-    #[snafu(display("Sorry, could not resume previous session."))]
+    #[snafu(display("sorry, could not resume previous session"))]
     Resume,
-    #[snafu(display("Gstreamer failed."))]
+    #[snafu(display("{message}"))]
     GStreamer {
         message: String,
     },
+    #[snafu(display("{message}"))]
     Client {
         message: String,
     },
@@ -545,8 +550,11 @@ impl Player {
                         self.play_album(album, Some(quality)).await?;
                     }
                     Err(err) => {
-                        println!("Failed to play album {id}, {err}. Is the ID correct?");
-                        process::exit(1);
+                        return Err(Error::FailedToPlay {
+                            message: format!(
+                                "Failed to play album {id}, {err}. Is the ID correct?"
+                            ),
+                        });
                     }
                 },
                 client::UrlType::Playlist { id } => match self.client.playlist(id).await {
@@ -554,8 +562,11 @@ impl Player {
                         self.play_playlist(playlist, Some(quality)).await?;
                     }
                     Err(err) => {
-                        println!("Failed to play playlsit {id}, {err}. Is the ID correct?");
-                        process::exit(1);
+                        return Err(Error::FailedToPlay {
+                            message: format!(
+                                "Failed to play playlsit {id}, {err}. Is the ID correct?"
+                            ),
+                        })
                     }
                 },
                 client::UrlType::Track { id } => match self.client.track(id).await {
@@ -563,14 +574,18 @@ impl Player {
                         self.play_track(track, Some(quality)).await?;
                     }
                     Err(err) => {
-                        println!("Failed to play track {id}, {err}. Is the ID correct?");
-                        process::exit(1);
+                        return Err(Error::FailedToPlay {
+                            message: format!(
+                                "Failed to play track {id}, {err}. Is the ID correct?"
+                            ),
+                        })
                     }
                 },
             },
             Err(err) => {
-                println!("Failed to play item, {err}.");
-                process::exit(1);
+                return Err(Error::FailedToPlay {
+                    message: format!("Failed to play item. {err}"),
+                })
             }
         }
 

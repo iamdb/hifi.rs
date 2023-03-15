@@ -129,33 +129,35 @@ pub enum ConfigCommands {
 
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("Client Error: {error}"))]
-    ClientError {
-        error: hifirs_qobuz_api::Error,
-    },
-    PlayerError {
-        error: player::Error,
-    },
-    TerminalError {
-        error: ui::Error,
-    },
+    #[snafu(display("{error}"))]
+    ClientError { error: String },
+    #[snafu(display("{error}"))]
+    PlayerError { error: String },
+    #[snafu(display("{error}"))]
+    TerminalError { error: String },
 }
 
 impl From<hifirs_qobuz_api::Error> for Error {
     fn from(error: hifirs_qobuz_api::Error) -> Self {
-        Error::ClientError { error }
+        Error::ClientError {
+            error: error.to_string(),
+        }
     }
 }
 
 impl From<player::Error> for Error {
     fn from(error: player::Error) -> Self {
-        Error::PlayerError { error }
+        Error::PlayerError {
+            error: error.to_string(),
+        }
     }
 }
 
 impl From<ui::Error> for Error {
     fn from(error: ui::Error) -> Self {
-        Error::TerminalError { error }
+        Error::TerminalError {
+            error: error.to_string(),
+        }
     }
 }
 
@@ -224,7 +226,9 @@ pub async fn run() -> Result<(), Error> {
                     //print!("{}", results);
                     Ok(())
                 }
-                Err(error) => Err(Error::ClientError { error }),
+                Err(error) => Err(Error::ClientError {
+                    error: error.to_string(),
+                }),
             }
         }
         Commands::SearchAlbums {
