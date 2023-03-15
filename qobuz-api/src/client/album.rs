@@ -85,7 +85,7 @@ impl Album {
     }
     pub async fn attach_tracks(&mut self, client: Client) {
         debug!("attaching tracks to album");
-        if let Ok(album) = client.album(self.id.clone()).await {
+        if let Ok(album) = client.album(&self.id).await {
             self.tracks = album.tracks;
         }
     }

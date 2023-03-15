@@ -1,0 +1,11 @@
+{
+  "query": "INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "823e42cefeae8136283f6045d5dfed38d076c0cd725928bf7e022c3b27af52fc"
+}

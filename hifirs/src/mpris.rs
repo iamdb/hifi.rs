@@ -267,6 +267,10 @@ fn track_to_meta(
         ),
     );
 
+    if let Some(artist) = playlist_track.track.performer {
+        meta.insert("xesam:artist", zvariant::Value::new(artist.name));
+    }
+
     if let Some(album) = playlist_track.album {
         meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
         meta.insert("xesam:album", zvariant::Value::new(album.title));
