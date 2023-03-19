@@ -12,8 +12,8 @@ use hifirs_qobuz_api::client::{
     album::{Album, AlbumSearchResults},
     api::Client,
 };
+use ratatui::layout::{Constraint, Direction, Layout};
 use termion::event::Key;
-use tui::layout::{Constraint, Direction, Layout};
 
 pub struct SearchScreen {
     client: Client,

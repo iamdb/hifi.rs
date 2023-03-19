@@ -1,8 +1,7 @@
 mod player;
 
 use crate::state::app::PlayerState;
-use textwrap::fill;
-use tui::{
+use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -14,6 +13,7 @@ use tui::{
     },
     Frame,
 };
+use textwrap::fill;
 
 pub fn player<B>(f: &mut Frame<B>, rect: Rect, state: PlayerState)
 where

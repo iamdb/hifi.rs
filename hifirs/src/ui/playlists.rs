@@ -15,13 +15,13 @@ use hifirs_qobuz_api::client::{
     playlist::{Playlist, UserPlaylistsResult},
     track::Track,
 };
-use termion::event::Key;
-use tui::{
+use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Spans, Text},
     widgets::{Block, BorderType, Borders, ListItem, Tabs},
 };
+use termion::event::Key;
 
 pub struct MyPlaylistsScreen<'m> {
     controls: Controls,
