@@ -20,6 +20,19 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
+## Installation
+
+Download tar from releases page, extract the tar and just execute it or copy it to the your PATH.
+
+## Get started
+
+Run: 
+```shell
+hifi-rs config username your_username
+hifi-rs config password your_password
+hifi-rs play
+```
+
 ## Keyboard Shortcuts
 
 | Command | Key(s) |
