@@ -26,14 +26,14 @@ Download tar from releases page, extract the tar and execute it or copy it to th
 
 ## Get started
 
-Run `hifi-rs` or `hifi-rs <subcommand>` to see all available options.
+Run `hifi-rs --help` or `hifi-rs <subcommand> --help` to see all available options.
 
 To get started:
 
 ```shell
 hifi-rs config username # enter username at prompt
 hifi-rs config password # enter password at prompt
-hifi-rs config default-quality # enter quality at prompt
+hifi-rs config default-quality # enter quality at prompt (mp3, cd, hifi96 or hifi192)
 hifi-rs play --uri <Qobuz Album, Playlist or Track URL>
 ```
 
