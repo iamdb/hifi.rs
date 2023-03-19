@@ -82,7 +82,6 @@ pub enum AudioQuality {
     CD = 6,
     HIFI96 = 7,
     HIFI192 = 27,
-    Unknown,
 }
 
 impl From<i64> for AudioQuality {
@@ -92,7 +91,7 @@ impl From<i64> for AudioQuality {
             6 => Self::CD,
             7 => Self::HIFI96,
             27 => Self::HIFI192,
-            _ => Self::Unknown,
+            _ => Self::Mp3,
         }
     }
 }
