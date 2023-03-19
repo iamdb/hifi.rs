@@ -1,7 +1,7 @@
 use crate::state::{ClockValue, FloatValue, StatusValue};
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::track::TrackListTrack;
-use tui::{
+use ratatui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -129,7 +129,7 @@ pub(crate) fn current_track<B>(
                     .fg(Color::Indexed(31)),
             ),
         )
-        .alignment(tui::layout::Alignment::Center);
+        .alignment(ratatui::layout::Alignment::Center);
 
     let mut resolution_text = vec![Spans::from("")];
 

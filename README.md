@@ -22,33 +22,37 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 ## Installation
 
-Download tar from releases page, extract the tar and just execute it or copy it to the your PATH.
+Download tar from releases page, extract the tar and execute it or copy it to the your $PATH.
 
 ## Get started
 
-Run: 
+Run `hifi-rs` or `hifi-rs <subcommand>` to see all available options.
+
+To get started:
+
 ```shell
-hifi-rs config username your_username
-hifi-rs config password your_password
-hifi-rs play
+hifi-rs config username # enter username at prompt
+hifi-rs config password # enter password at prompt
+hifi-rs config default-quality # enter quality at prompt
+hifi-rs play --uri <Qobuz Album, Playlist or Track URL>
 ```
 
 ## Keyboard Shortcuts
 
-| Command | Key(s) |
-|--------------- | --------------- |
-| Switch screen   | <kbd>tab</kbd>   |
-| Play/Pause | <kbd>space</kbd> |
-| Next track | <kbd>N</kbd> |
-| Previous track | <kbd>P</kbd> |
-| Jump forward | <kbd>l</kbd> or <kbd>right arrow</kbd> |
-| Jump backward | <kbd>h</kbd> or <kbd>left arrow</kbd> |
-| Quit | <kbd>ctrl</kbd> + <kbd>c</kbd> |
-| Move up in list | <kbd>k</kbd> |
-| Move down in list | <kbd>j</kbd> |
-| Select item in list | <kbd>enter</kbd> |
-| Dismiss popup | <kbd>esc</kbd> |
-| Enter search query | <kbd>/</kbd> |
+| Command             | Key(s)                                 |
+| ------------------- | -------------------------------------- |
+| Switch screen       | <kbd>tab</kbd>                         |
+| Play/Pause          | <kbd>space</kbd>                       |
+| Next track          | <kbd>N</kbd>                           |
+| Previous track      | <kbd>P</kbd>                           |
+| Jump forward        | <kbd>l</kbd> or <kbd>right arrow</kbd> |
+| Jump backward       | <kbd>h</kbd> or <kbd>left arrow</kbd>  |
+| Quit                | <kbd>ctrl</kbd> + <kbd>c</kbd>         |
+| Move up in list     | <kbd>k</kbd>                           |
+| Move down in list   | <kbd>j</kbd>                           |
+| Select item in list | <kbd>enter</kbd>                       |
+| Dismiss popup       | <kbd>esc</kbd>                         |
+| Enter search query  | <kbd>/</kbd>                           |
 
 ## Known Issues
 

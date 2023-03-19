@@ -8,8 +8,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use hifirs_qobuz_api::client::track::Track;
+use ratatui::layout::{Constraint, Direction, Layout};
 use termion::event::Key;
-use tui::layout::{Constraint, Direction, Layout};
 
 pub struct NowPlayingScreen {
     track_list: Table,

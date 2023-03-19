@@ -8,16 +8,16 @@ use hifirs_qobuz_api::client::{
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
 };
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::Text,
+    widgets::ListItem,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{vec_deque::Drain, VecDeque},
     fmt::Display,
     ops::RangeBounds,
-};
-use tui::{
-    style::{Color, Modifier, Style},
-    text::Text,
-    widgets::ListItem,
 };
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]

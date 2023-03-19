@@ -17,6 +17,7 @@ use crate::{
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use hifirs_qobuz_api::client::api::Client;
+use ratatui::{backend::TermionBackend, Terminal};
 use snafu::prelude::*;
 use std::{collections::HashMap, io::Stdout, sync::Arc, time::Duration};
 use termion::{
@@ -27,7 +28,6 @@ use termion::{
 };
 use tokio::{select, sync::Mutex, time};
 use tokio_stream::StreamExt;
-use tui::{backend::TermionBackend, Terminal};
 
 #[macro_export]
 macro_rules! switch_screen {
