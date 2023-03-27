@@ -32,8 +32,8 @@ impl TableWidths for Track {
         vec![
             ColumnWidth::new(6),
             ColumnWidth::new(44),
-            ColumnWidth::new(36),
-            ColumnWidth::new(14),
+            ColumnWidth::new(35),
+            ColumnWidth::new(15),
         ]
     }
 }
