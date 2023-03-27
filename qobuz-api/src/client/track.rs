@@ -47,7 +47,7 @@ impl Track {
     pub fn columns(&self) -> Vec<String> {
         let duration = ClockTime::from_seconds(self.duration as u64)
             .to_string()
-            .as_str()[3..7]
+            .as_str()[2..7]
             .to_string();
 
         let performer = if let Some(performer) = &self.performer {
@@ -109,7 +109,7 @@ impl TrackListTrack {
     pub fn columns(&self) -> Vec<String> {
         let duration = ClockTime::from_seconds(self.track.duration as u64)
             .to_string()
-            .as_str()[3..7]
+            .as_str()[2..7]
             .to_string();
 
         let performer = if let Some(performer) = &self.track.performer {
