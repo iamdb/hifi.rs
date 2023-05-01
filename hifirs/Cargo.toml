@@ -30,7 +30,7 @@ snafu = "0.7"
 sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls", "sqlite", "all-types", "offline" ] }
 termion = "2"
 textwrap = "0.16"
-tokio = { version = "1.0", features = ["full"]}
+tokio = { version = "1.28", features = ["full"]}
 tokio-stream = "0.1"
 ratatui = { version = "0.20", default-features = false, features = ["termion"] }
 url = "2.2"
