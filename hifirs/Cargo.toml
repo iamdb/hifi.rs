@@ -6,6 +6,7 @@ license-file = "../LICENSE"
 repository = "https://github.com/iamdb/hifi.rs"
 
 [dependencies]
+async-broadcast = "0.5"
 async-trait = "0.1"
 bincode = "1.3"
 byteorder = "1.4"
@@ -13,6 +14,7 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 comfy-table = "6.0"
 ctrlc = { version = "3.0", features = ["termination"] }
+cursive = { version = "0.20", features = ["termion"] } 
 dialoguer = { version = "0.10.1", features = ["fuzzy-select"] }
 dirs = "4.0"
 enum-as-inner = "0.5"

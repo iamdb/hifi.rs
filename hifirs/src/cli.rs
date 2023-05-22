@@ -1,7 +1,9 @@
 use crate::{
+    cursive::{self, CursiveUI},
     player,
     qobuz::{self, SearchResults},
     sql::db,
+    state::app::PlayerState,
     switch_screen, ui, wait,
 };
 use clap::{Parser, Subcommand};
@@ -9,6 +11,8 @@ use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -183,15 +187,26 @@ pub async fn run() -> Result<(), Error> {
     match cli.command {
         Commands::Resume { no_tui } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let mut player = player::new(client.clone(), data, quit_when_done).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
+            let safe_player = player::new(client.clone(), state, quit_when_done)
+                .await?
+                .safe();
 
-            player.resume(true).await?;
+            let mut new_player = safe_player.write().await;
+
+            new_player.resume(true).await?;
 
             if no_tui {
-                wait!(player.state());
+                wait!(new_player.state());
             } else {
-                let mut tui =
-                    ui::new(player.state(), player.controls(), client, None, None).await?;
+                let mut tui = ui::new(
+                    new_player.state(),
+                    new_player.controls().clone(),
+                    client,
+                    None,
+                    None,
+                )
+                .await?;
                 tui.event_loop().await?;
             }
 
@@ -199,15 +214,26 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::Play { uri, no_tui } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let player = player::new(client.clone(), data, quit_when_done).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
+            let safe_player = player::new(client.clone(), state, quit_when_done)
+                .await?
+                .safe();
 
-            player.play_uri(uri, Some(client.quality())).await?;
+            let new_player = safe_player.write().await;
+
+            new_player.play_uri(uri, Some(client.quality())).await?;
 
             if no_tui {
-                wait!(player.state());
+                wait!(new_player.state());
             } else {
-                let mut tui =
-                    ui::new(player.state(), player.controls(), client, None, None).await?;
+                let mut tui = ui::new(
+                    new_player.state(),
+                    new_player.controls().clone(),
+                    client,
+                    None,
+                    None,
+                )
+                .await?;
                 tui.event_loop().await?;
             }
             Ok(())
@@ -238,21 +264,26 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
             let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
 
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await?;
-                player.resume(false).await?;
+                let safe_player = player::new(client.clone(), state, quit_when_done)
+                    .await?
+                    .safe();
+                //let mut player = safe_player.write().await;
+
+                //player.resume(false).await?;
 
                 if no_tui {
-                    wait!(player.state());
+                    wait!(safe_player.read().await.state());
                 } else {
                     let mut tui = ui::new(
-                        player.state(),
-                        player.controls(),
+                        safe_player.read().await.state(),
+                        safe_player.read().await.controls().clone(),
                         client,
                         Some(results),
                         Some(query),
@@ -271,6 +302,7 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
             let results =
                 SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
@@ -278,15 +310,19 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 output!(results, output_format);
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await?;
-                player.resume(false).await?;
+                let safe_player = player::new(client.clone(), state, quit_when_done)
+                    .await?
+                    .safe();
+                let mut new_player = safe_player.write().await;
+
+                new_player.resume(false).await?;
 
                 if no_tui {
-                    wait!(player.state());
+                    wait!(new_player.state());
                 } else {
                     let mut tui = ui::new(
-                        player.state(),
-                        player.controls(),
+                        new_player.state(),
+                        new_player.controls().clone(),
                         client,
                         Some(results),
                         Some(query),
@@ -303,6 +339,7 @@ pub async fn run() -> Result<(), Error> {
             output_format,
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
             if output_format.is_some() {
                 if let Ok(playlists) = client.user_playlists().await {
@@ -310,19 +347,36 @@ pub async fn run() -> Result<(), Error> {
                     output!(results, output_format)
                 }
             } else {
-                let mut player = player::new(client.clone(), data, quit_when_done).await?;
-                player.resume(false).await?;
+                let mut new_player =
+                    player::new(client.clone(), state.clone(), quit_when_done).await?;
+
+                new_player.resume(false).await?;
 
                 if no_tui {
-                    wait!(player.state());
+                    wait!(state);
                 } else {
-                    let mut tui =
-                        ui::new(player.state(), player.controls(), client, None, None).await?;
+                    let controls = new_player.controls().clone();
+                    let mut tui = CursiveUI::new(&controls);
 
-                    let state = player.state();
+                    let notify_receiver = new_player.notify_receiver();
+                    let safe_player = new_player.safe();
 
-                    switch_screen!(state.write().await, ActiveScreen::Playlists);
-                    tui.event_loop().await?;
+                    let sink = tui.sink().await.clone();
+
+                    tokio::spawn(async {
+                        cursive::receive_notifications(sink, notify_receiver).await
+                    });
+
+                    tokio::spawn(async { player::player_loop(safe_player, client, state).await });
+
+                    tui.run().await;
+                    // let mut tui =
+                    //     ui::new(player.state(), player.controls(), client, None, None).await?;
+
+                    // let state = player.state();
+
+                    // switch_screen!(state.write().await, ActiveScreen::Playlists);
+                    // tui.event_loop().await?;
                 }
             }
 
@@ -344,8 +398,13 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
-            let player = player::new(client.clone(), data, quit_when_done).await?;
+            let safe_player = player::new(client.clone(), state, quit_when_done)
+                .await?
+                .safe();
+
+            let player = safe_player.write().await;
 
             let track = client.track(track_id).await?;
 
@@ -354,8 +413,14 @@ pub async fn run() -> Result<(), Error> {
             if no_tui {
                 wait!(player.state());
             } else {
-                let mut tui =
-                    ui::new(player.state(), player.controls(), client, None, None).await?;
+                let mut tui = ui::new(
+                    player.state(),
+                    player.controls().clone(),
+                    client,
+                    None,
+                    None,
+                )
+                .await?;
                 tui.event_loop().await?;
             }
 
@@ -367,6 +432,7 @@ pub async fn run() -> Result<(), Error> {
             no_tui,
         } => {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
             let album = client.album(&album_id).await?;
 
@@ -376,14 +442,24 @@ pub async fn run() -> Result<(), Error> {
                 client.quality()
             };
 
-            let player = player::new(client.clone(), data, quit_when_done).await?;
+            let safe_player = player::new(client.clone(), state, quit_when_done)
+                .await?
+                .safe();
+            let player = safe_player.read().await;
+
             player.play_album(album, Some(quality)).await?;
 
             if no_tui {
                 wait!(player.state());
             } else {
-                let mut tui =
-                    ui::new(player.state(), player.controls(), client, None, None).await?;
+                let mut tui = ui::new(
+                    player.state(),
+                    player.controls().clone(),
+                    client,
+                    None,
+                    None,
+                )
+                .await?;
 
                 let state = player.state();
                 switch_screen!(state.write().await, ActiveScreen::NowPlaying);

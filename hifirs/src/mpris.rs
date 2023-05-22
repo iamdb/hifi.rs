@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-
 use crate::{player::Controls, state::app::SafePlayerState};
 use gstreamer::ClockTime;
 use hifirs_qobuz_api::client::track::TrackListTrack;
+use std::collections::HashMap;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
@@ -10,7 +9,7 @@ pub struct Mpris {
     controls: Controls,
 }
 
-pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
+pub async fn init(state: SafePlayerState, controls: &Controls) -> Connection {
     let mpris = Mpris {
         controls: controls.clone(),
     };
@@ -18,7 +17,10 @@ pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
         controls: controls.clone(),
         state: state.clone(),
     };
-    let mpris_tracklist = MprisTrackList { controls, state };
+    let mpris_tracklist = MprisTrackList {
+        controls: controls.clone(),
+        state,
+    };
 
     let conn = ConnectionBuilder::session()
         .unwrap()
@@ -30,6 +32,7 @@ pub async fn init(state: SafePlayerState, controls: Controls) -> Connection {
         .unwrap()
         .name("org.mpris.MediaPlayer2.hifirs")
         .unwrap()
+        .internal_executor(false)
         .build()
         .await;
 
