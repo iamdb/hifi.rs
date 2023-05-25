@@ -8,9 +8,8 @@ use crate::{
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    bus::BusStream,
-    glib::{self, translate::IntoGlib},
-    ClockTime, Element, MessageView, SeekFlags, State as GstState, StateChangeError,
+    bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState,
+    StateChangeError,
 };
 use gstreamer::{self as gst, prelude::*};
 use hifirs_qobuz_api::client::{
@@ -132,9 +131,12 @@ pub enum Action {
 
 #[derive(Debug, Clone)]
 pub enum Notification {
-    Buffering,
+    Buffering { is_buffering: bool },
     Status { status: StatusValue },
     Position { position: ClockValue },
+    Duration { duration: ClockValue },
+    CurrentTrackList { list: TrackListValue },
+    CurrentTrack { track: TrackListTrack },
 }
 
 /// A player handles playing media to a device.
@@ -302,18 +304,35 @@ impl Player {
                 state.set_target_status(GstState::Paused);
             }
 
-            drop(state);
+            self.notify_sender
+                .broadcast(Notification::CurrentTrackList {
+                    list: state.track_list(),
+                })
+                .await?;
 
-            if let Some(track) = self.state.read().await.current_track() {
+            if let Some(track) = state.current_track() {
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack {
+                        track: track.clone(),
+                    })
+                    .await?;
+
                 if let Some(url) = track.track_url {
                     self.playbin.set_property("uri", url.url);
 
                     self.ready(true).await?;
                     self.pause(true).await?;
 
-                    let position = self.state.read().await.position();
+                    let position = state.position();
 
-                    self.seek(position, Some(SeekFlags::ACCURATE | SeekFlags::FLUSH))
+                    self.seek(
+                        position.clone(),
+                        Some(SeekFlags::ACCURATE | SeekFlags::FLUSH),
+                    )
+                    .await?;
+
+                    self.notify_sender
+                        .broadcast(Notification::Position { position })
                         .await?;
 
                     return Ok(());
@@ -483,11 +502,21 @@ impl Player {
         tracklist.set_list_type(TrackListType::Track);
 
         let mut state = self.state.write().await;
-        state.replace_list(tracklist);
+        state.replace_list(tracklist.clone());
 
         state.attach_track_url(&mut track).await;
         state.set_current_track(track.clone());
         state.set_target_status(GstState::Playing);
+
+        self.notify_sender
+            .broadcast(Notification::CurrentTrackList { list: tracklist })
+            .await?;
+
+        self.notify_sender
+            .broadcast(Notification::CurrentTrack {
+                track: track.clone(),
+            })
+            .await?;
 
         if let Some(track_url) = track.track_url {
             self.playbin
@@ -524,7 +553,7 @@ impl Player {
         tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
 
         let mut state = self.state.write().await;
-        state.replace_list(tracklist);
+        state.replace_list(tracklist.clone());
 
         state.attach_track_url(&mut first_track).await;
         state.set_current_track(first_track.clone());
@@ -532,6 +561,18 @@ impl Player {
 
         // Need to drop state before any dbus calls.
         drop(state);
+
+        self.notify_sender
+            .broadcast(Notification::CurrentTrackList {
+                list: tracklist.clone(),
+            })
+            .await?;
+
+        self.notify_sender
+            .broadcast(Notification::CurrentTrack {
+                track: first_track.clone(),
+            })
+            .await?;
 
         if let Some(t) = first_track.track_url {
             self.playbin.set_property("uri", Some(t.url.as_str()));
@@ -624,7 +665,7 @@ impl Player {
         tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
 
         let mut state = self.state.write().await;
-        state.replace_list(tracklist);
+        state.replace_list(tracklist.clone());
 
         state.attach_track_url(&mut first_track).await;
         state.set_current_track(first_track.clone());
@@ -633,78 +674,37 @@ impl Player {
         // Need to drop state before any dbus calls.
         drop(state);
 
+        self.notify_sender
+            .broadcast(Notification::CurrentTrackList {
+                list: tracklist.clone(),
+            })
+            .await?;
+
+        self.notify_sender
+            .broadcast(Notification::CurrentTrack {
+                track: first_track.clone(),
+            })
+            .await?;
+
         self.playbin
             .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
         self.play(true).await?;
 
         Ok(())
     }
-    // async fn dbus_track_list_replaced_signal(
-    //     &self,
-    //     tracks: Vec<String>,
-    //     current: String,
-    // ) -> Result<()> {
-    //     debug!("replacing dbus tracklist");
-    //     let object_server = self.connection.object_server();
 
-    //     let iface_ref = object_server
-    //         .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
-    //         .await
-    //         .expect("failed to get object server");
-
-    //     MprisTrackList::track_list_replaced(iface_ref.signal_context(), tracks, current)
-    //         .await
-    //         .expect("failed to send track list replaced signal");
-
-    //     Ok(())
-    // }
-    // async fn player_iface(&self) -> zbus::InterfaceRef<MprisPlayer> {
-    //     let object_server = self.connection.object_server();
-
-    //     object_server
-    //         .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-    //         .await
-    //         .expect("failed to get object server")
-    // }
-    // async fn dbus_seeked_signal(&self, position: Option<ClockValue>) {
-    //     let position = if let Some(p) = position {
-    //         p
-    //     } else if let Some(p) = self.position() {
-    //         p
-    //     } else {
-    //         ClockTime::default().into()
-    //     };
-
-    //     let iface_ref = self.player_iface().await;
-
-    //     mpris::MprisPlayer::seeked(
-    //         iface_ref.signal_context(),
-    //         position.inner_clocktime().useconds() as i64,
-    //     )
-    //     .await
-    //     .expect("failed to send seeked signal");
-    // }
-
-    // async fn dbus_metadata_changed(&self) {
-    //     debug!("dbus metadata changed");
-    //     let iface_ref = self.player_iface().await;
-    //     let iface = iface_ref.get_mut().await;
-
-    //     iface
-    //         .metadata_changed(iface_ref.signal_context())
-    //         .await
-    //         .expect("failed to signal metadata change");
-    // }
-
-    /// Sets up basic functionality for the player.
     async fn prep_next_track(&self) -> Result<()> {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
             debug!("received new track, adding to player");
-            if let Some(next_playlist_track_url) = next_track.track_url {
+            if let Some(next_playlist_track_url) = &next_track.track_url {
                 self.playbin
-                    .set_property("uri", Some(next_playlist_track_url.url));
+                    .set_property("uri", Some(next_playlist_track_url.url.clone()));
+
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack { track: next_track })
+                    .await?;
             }
         } else {
             debug!("no more tracks left");
@@ -839,6 +839,8 @@ pub async fn player_loop(
                         } else {
                             ClockTime::default().into()
                         };
+
+                        player.notify_sender.broadcast(Notification::Position { position }).await?;
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
@@ -862,19 +864,18 @@ pub async fn player_loop(
                         if !safe_state.read().await.buffering() && percent < 100 {
                             if !player.is_paused() {
                                 player.pause(true).await?;
+                                player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
+
+                                let mut state = safe_state.write().await;
+                                state.set_buffering(true);
                             }
-
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(true);
-
-                        } else if safe_state.read().await.buffering() && percent > 99 {
+                        } else if safe_state.read().await.buffering() && percent > 99 && player.is_paused() {
                             let mut state = safe_state.write().await;
                             state.set_buffering(false);
 
                             player.set_player_state(state.target_status().into(), true).await?;
-
+                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: false }).await?;
                         }
-
                     }
                     MessageView::StateChanged(state_changed) => {
                         let current_state = state_changed
@@ -999,6 +1000,9 @@ impl Controls {
     }
     pub async fn quit(&self) {
         action!(self, Action::Quit)
+    }
+    pub fn quit_blocking(&self) {
+        action_blocking!(self, Action::Quit)
     }
     pub async fn next(&self) {
         action!(self, Action::Next);

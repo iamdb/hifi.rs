@@ -1,6 +1,6 @@
 use crate::{
     cursive::{self, CursiveUI},
-    player,
+    mpris, player,
     qobuz::{self, SearchResults},
     sql::db,
     state::app::PlayerState,
@@ -356,12 +356,20 @@ pub async fn run() -> Result<(), Error> {
                     wait!(state);
                 } else {
                     let controls = new_player.controls().clone();
-                    let mut tui = CursiveUI::new(&controls);
+                    let mut tui = CursiveUI::new(&controls, client.clone());
 
                     let notify_receiver = new_player.notify_receiver();
                     let safe_player = new_player.safe();
 
                     let sink = tui.sink().await.clone();
+
+                    let conn = mpris::init(&controls).await;
+
+                    let nr = notify_receiver.clone();
+                    let s = state.clone();
+                    tokio::spawn(async {
+                        mpris::receive_notifications(s, conn, nr).await;
+                    });
 
                     tokio::spawn(async {
                         cursive::receive_notifications(sink, notify_receiver).await

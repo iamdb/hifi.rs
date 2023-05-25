@@ -356,4 +356,11 @@ impl TrackListValue {
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
+
+    pub fn cursive_list(&self) -> Vec<(String, i32)> {
+        self.queue
+            .iter()
+            .map(|i| (i.track.title.clone(), i.track.id))
+            .collect::<Vec<(String, i32)>>()
+    }
 }

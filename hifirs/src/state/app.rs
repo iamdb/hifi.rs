@@ -191,6 +191,10 @@ impl PlayerState {
         self.tracklist = tracklist;
     }
 
+    pub fn track_list(&self) -> TrackListValue {
+        self.tracklist.clone()
+    }
+
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         if let Some(track) = self.tracklist.find_track(track_id) {
             Some(track.index)
@@ -355,6 +359,7 @@ impl PlayerState {
         self.is_buffering = false;
         self.resume = false;
     }
+
     pub fn new(client: Client, db: Database) -> Self {
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);

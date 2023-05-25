@@ -1,7 +1,11 @@
-use crate::{player::Controls, state::app::SafePlayerState};
-use gstreamer::ClockTime;
+use crate::{
+    player::{BroadcastReceiver, Controls, Notification},
+    state::{app::SafePlayerState, ClockValue, StatusValue, TrackListValue},
+};
+use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::track::TrackListTrack;
 use std::collections::HashMap;
+use tokio::select;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
@@ -9,17 +13,19 @@ pub struct Mpris {
     controls: Controls,
 }
 
-pub async fn init(state: SafePlayerState, controls: &Controls) -> Connection {
+pub async fn init(controls: &Controls) -> Connection {
     let mpris = Mpris {
         controls: controls.clone(),
     };
     let mpris_player = MprisPlayer {
         controls: controls.clone(),
-        state: state.clone(),
+        status: GstState::Null.into(),
+        current_track: None,
+        position: ClockValue::default(),
     };
     let mpris_tracklist = MprisTrackList {
         controls: controls.clone(),
-        state,
+        track_list: TrackListValue::new(None),
     };
 
     let conn = ConnectionBuilder::session()
@@ -42,6 +48,92 @@ pub async fn init(state: SafePlayerState, controls: &Controls) -> Connection {
             println!("There was an error with mpris and I must exit.");
             println!("Message: {err}");
             std::process::exit(1);
+        }
+    }
+}
+
+pub async fn receive_notifications(
+    safe_state: SafePlayerState,
+    conn: Connection,
+    mut receiver: BroadcastReceiver,
+) {
+    let object_server = conn.object_server();
+
+    loop {
+        select! {
+            Ok(notification) = receiver.recv() => {
+                match notification {
+                    Notification::Buffering { is_buffering: _ } => {},
+                    Notification::Status { status } => {
+                    let iface_ref = object_server
+                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                        .await
+                        .expect("failed to get object server");
+
+                        let mut iface = iface_ref.get_mut().await;
+                        iface.status = status;
+
+                        iface
+                            .metadata_changed(iface_ref.signal_context())
+                            .await
+                            .expect("failed to signal metadata change");
+                    },
+                    Notification::Position { position } => {
+                        let iface_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                        iface_ref.get_mut().await.position = position.clone();
+
+                        MprisPlayer::seeked(
+                            iface_ref.signal_context(),
+                            position.inner_clocktime().useconds() as i64,
+                        )
+                        .await
+                        .expect("failed to send seeked signal");
+                    },
+                    Notification::Duration { duration: _ } => {
+                        let iface_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                        let iface = iface_ref.get().await;
+                        iface
+                            .metadata_changed(iface_ref.signal_context())
+                            .await
+                            .expect("failed to signal metadata change");
+                    },
+                    Notification::CurrentTrackList { list } => {
+                        if let Some(current) = safe_state.read().await.current_track() {
+                            let iface_ref = object_server
+                                .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
+                                .await
+                                .expect("failed to get object server");
+
+                            let tracks = list.cursive_list().iter().map(|t| t.0.clone()).collect::<Vec<String>>();
+
+                            iface_ref.get_mut().await.track_list = list;
+                            MprisTrackList::track_list_replaced(iface_ref.signal_context(), tracks, current.track.title).await.expect("failed to send track list replaced signal");
+                        }
+                    },
+                    Notification::CurrentTrack { track } => {
+                        let iface_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                        let mut iface = iface_ref.get_mut().await;
+
+                        iface.current_track = Some(track);
+                        iface
+                            .metadata_changed(iface_ref.signal_context())
+                            .await
+                            .expect("failed to signal metadata change");
+                    },
+                }
+            }
         }
     }
 }
@@ -86,7 +178,9 @@ impl Mpris {
 #[derive(Debug)]
 pub struct MprisPlayer {
     controls: Controls,
-    state: SafePlayerState,
+    status: StatusValue,
+    position: ClockValue,
+    current_track: Option<TrackListTrack>,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
@@ -114,7 +208,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> String {
-        self.state.read().await.status().as_str().to_string()
+        self.status.as_str().to_string()
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -131,10 +225,10 @@ impl MprisPlayer {
     #[dbus_interface(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         debug!("dbus metadata");
-        if let Some(next_up) = self.state.read().await.current_track() {
-            track_to_meta(next_up)
+        if let Some(current_track) = &self.current_track {
+            track_to_meta(current_track.clone())
         } else {
-            HashMap::new()
+            HashMap::default()
         }
     }
     #[dbus_interface(property, name = "Volume")]
@@ -143,12 +237,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Position")]
     async fn position(&self) -> i64 {
-        self.state
-            .read()
-            .await
-            .position()
-            .inner_clocktime()
-            .useconds() as i64
+        self.position.inner_clocktime().useconds() as i64
     }
     #[dbus_interface(signal, name = "Seeked")]
     pub async fn seeked(
@@ -192,7 +281,7 @@ impl MprisPlayer {
 #[derive(Debug)]
 pub struct MprisTrackList {
     controls: Controls,
-    state: SafePlayerState,
+    track_list: TrackListValue,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.TrackList")]
@@ -201,9 +290,7 @@ impl MprisTrackList {
         &self,
         tracks: Vec<String>,
     ) -> Vec<HashMap<&'static str, zvariant::Value>> {
-        self.state
-            .read()
-            .await
+        self.track_list
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
@@ -228,9 +315,7 @@ impl MprisTrackList {
     ) -> zbus::Result<()>;
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
-        self.state
-            .read()
-            .await
+        self.track_list
             .unplayed_tracks()
             .iter()
             .map(|i| i.track.id.to_string())
