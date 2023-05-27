@@ -1,16 +1,18 @@
 use crate::{
-    action, action_blocking,
+    player::{
+        controls::{Action, Controls},
+        error::Error,
+        notification::{BroadcastReceiver, BroadcastSender, Notification},
+    },
     state::{
         app::{SafePlayerState, SkipDirection},
         ClockValue, StatusValue, TrackListType, TrackListValue,
     },
+    REFRESH_RESOLUTION,
 };
-use flume::{Receiver, Sender};
+use flume::Receiver;
 use futures::prelude::*;
-use gst::{
-    bus::BusStream, glib, ClockTime, Element, MessageView, SeekFlags, State as GstState,
-    StateChangeError,
-};
+use gst::{bus::BusStream, ClockTime, Element, MessageView, SeekFlags, State as GstState};
 use gstreamer::{self as gst, prelude::*};
 use hifirs_qobuz_api::client::{
     self,
@@ -20,124 +22,15 @@ use hifirs_qobuz_api::client::{
     track::{Track, TrackListTrack, TrackStatus},
     AudioQuality, UrlType,
 };
-use snafu::prelude::*;
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 
-pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
-pub type BroadcastSender = async_broadcast::Sender<Notification>;
-
-#[derive(Snafu, Debug)]
-pub enum Error {
-    #[snafu(display("{message}"))]
-    FailedToPlay {
-        message: String,
-    },
-    #[snafu(display("failed to retrieve a track url"))]
-    TrackURL,
-    #[snafu(display("failed to seek"))]
-    Seek,
-    #[snafu(display("sorry, could not resume previous session"))]
-    Resume,
-    #[snafu(display("{message}"))]
-    GStreamer {
-        message: String,
-    },
-    #[snafu(display("{message}"))]
-    Client {
-        message: String,
-    },
-    NotificationError,
-    App,
-}
-
-impl From<glib::Error> for Error {
-    fn from(value: glib::Error) -> Self {
-        Error::GStreamer {
-            message: value.to_string(),
-        }
-    }
-}
-
-impl From<glib::BoolError> for Error {
-    fn from(value: glib::BoolError) -> Self {
-        Error::GStreamer {
-            message: value.to_string(),
-        }
-    }
-}
-
-impl From<StateChangeError> for Error {
-    fn from(value: StateChangeError) -> Self {
-        Error::GStreamer {
-            message: value.to_string(),
-        }
-    }
-}
-
-impl From<hifirs_qobuz_api::Error> for Error {
-    fn from(value: hifirs_qobuz_api::Error) -> Self {
-        Error::Client {
-            message: value.to_string(),
-        }
-    }
-}
-
-impl From<flume::SendError<Notification>> for Error {
-    fn from(_value: flume::SendError<Notification>) -> Self {
-        Self::NotificationError
-    }
-}
-
-impl From<async_broadcast::SendError<Notification>> for Error {
-    fn from(_value: async_broadcast::SendError<Notification>) -> Self {
-        Self::NotificationError
-    }
-}
+#[macro_use]
+pub mod controls;
+pub mod error;
+pub mod notification;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-#[derive(Debug, Clone)]
-pub enum Action {
-    Play,
-    Pause,
-    PlayPause,
-    Next,
-    Previous,
-    Stop,
-    Quit,
-    SkipTo {
-        num: usize,
-        direction: SkipDirection,
-    },
-    SkipToById {
-        track_id: usize,
-    },
-    JumpForward,
-    JumpBackward,
-    PlayAlbum {
-        album_id: String,
-    },
-    PlayTrack {
-        track_id: i32,
-    },
-    PlayUri {
-        uri: String,
-    },
-    PlayPlaylist {
-        playlist_id: i64,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum Notification {
-    Buffering { is_buffering: bool },
-    Status { status: StatusValue },
-    Position { position: ClockValue },
-    Duration { duration: ClockValue },
-    CurrentTrackList { list: TrackListValue },
-    CurrentTrack { track: TrackListTrack },
-}
 
 /// A player handles playing media to a device.
 #[derive(Debug, Clone)]
@@ -163,7 +56,7 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
     let playbin = gst::ElementFactory::make("playbin3").build()?;
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(10);
+    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(3);
     notify_sender.set_overflow(true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -243,8 +136,6 @@ impl Player {
             self.play(true).await?;
         }
 
-        drop(state);
-
         Ok(())
     }
     /// Retreive the current player state.
@@ -288,6 +179,9 @@ impl Player {
         };
 
         self.playbin.seek_simple(flags, time.inner_clocktime())?;
+        self.notify_sender
+            .broadcast(Notification::Position { position: time })
+            .await?;
 
         Ok(())
     }
@@ -331,10 +225,6 @@ impl Player {
                     )
                     .await?;
 
-                    self.notify_sender
-                        .broadcast(Notification::Position { position })
-                        .await?;
-
                     return Ok(());
                 } else {
                     return Err(Error::Resume);
@@ -343,8 +233,6 @@ impl Player {
                 return Err(Error::Resume);
             }
         }
-
-        drop(state);
 
         Ok(())
     }
@@ -407,6 +295,8 @@ impl Player {
     }
     /// Skip to the next, previous or specific track in the playlist.
     pub async fn skip(&self, direction: SkipDirection, num: Option<usize>) -> Result<()> {
+        let mut state = self.state.write().await;
+
         // Typical previous skip functionality where if,
         // the track is greater than 1 second into playing,
         // then it goes to the beginning. If triggered again
@@ -417,7 +307,11 @@ impl Player {
 
                 if current_position > one_second && num.is_none() {
                     debug!("current track position >1s, seeking to start of track");
-                    self.seek(ClockTime::default().into(), None).await?;
+
+                    let zero_clock: ClockValue = ClockTime::default().into();
+
+                    self.seek(zero_clock.clone(), None).await?;
+                    state.set_position(zero_clock.clone());
 
                     return Ok(());
                 }
@@ -428,21 +322,23 @@ impl Player {
             self.ready(true).await?;
         }
 
-        let mut state = self.state.write().await;
-
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
-            // Need to drop state before any dbus calls.
-            drop(state);
-
-            if let Some(track_url) = next_track_to_play.track_url {
+            if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
-                self.playbin.set_property("uri", Some(track_url.url));
+                self.playbin
+                    .set_property("uri", Some(track_url.url.clone()));
+                self.set_player_state(state.target_status().into(), true)
+                    .await?;
 
-                self.set_player_state(self.state.read().await.target_status().into(), true)
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack {
+                        track: next_track_to_play,
+                    })
                     .await?;
             }
         }
+
         Ok(())
     }
     /// Skip to a specific track in the current playlist
@@ -451,7 +347,6 @@ impl Player {
         let state = self.state.read().await;
 
         if let Some(current_index) = state.current_track_index() {
-            drop(state);
             if index > current_index {
                 debug!(
                     "skipping forward from track {} to track {}",
@@ -482,7 +377,7 @@ impl Player {
     }
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
-        if self.is_playing() {
+        if self.is_playing() || self.is_paused() {
             self.ready(true).await?;
         }
 
@@ -508,21 +403,21 @@ impl Player {
         state.set_current_track(track.clone());
         state.set_target_status(GstState::Playing);
 
-        self.notify_sender
-            .broadcast(Notification::CurrentTrackList { list: tracklist })
-            .await?;
-
-        self.notify_sender
-            .broadcast(Notification::CurrentTrack {
-                track: track.clone(),
-            })
-            .await?;
-
-        if let Some(track_url) = track.track_url {
+        if let Some(track_url) = &track.track_url {
             self.playbin
                 .set_property("uri", Some(track_url.url.to_string()));
 
             self.play(true).await?;
+
+            self.notify_sender
+                .broadcast(Notification::CurrentTrackList { list: tracklist })
+                .await?;
+
+            self.notify_sender
+                .broadcast(Notification::CurrentTrack {
+                    track: track.clone(),
+                })
+                .await?;
         }
 
         Ok(())
@@ -559,24 +454,21 @@ impl Player {
         state.set_current_track(first_track.clone());
         state.set_target_status(GstState::Playing);
 
-        // Need to drop state before any dbus calls.
-        drop(state);
-
-        self.notify_sender
-            .broadcast(Notification::CurrentTrackList {
-                list: tracklist.clone(),
-            })
-            .await?;
-
-        self.notify_sender
-            .broadcast(Notification::CurrentTrack {
-                track: first_track.clone(),
-            })
-            .await?;
-
-        if let Some(t) = first_track.track_url {
+        if let Some(t) = &first_track.track_url {
             self.playbin.set_property("uri", Some(t.url.as_str()));
             self.play(true).await?;
+
+            self.notify_sender
+                .broadcast(Notification::CurrentTrackList {
+                    list: tracklist.clone(),
+                })
+                .await?;
+
+            self.notify_sender
+                .broadcast(Notification::CurrentTrack {
+                    track: first_track.clone(),
+                })
+                .await?;
 
             Ok(())
         } else {
@@ -671,24 +563,22 @@ impl Player {
         state.set_current_track(first_track.clone());
         state.set_target_status(GstState::Playing);
 
-        // Need to drop state before any dbus calls.
-        drop(state);
+        if let Some(t) = &first_track.track_url {
+            self.playbin.set_property("uri", Some(t.url.as_str()));
+            self.play(true).await?;
 
-        self.notify_sender
-            .broadcast(Notification::CurrentTrackList {
-                list: tracklist.clone(),
-            })
-            .await?;
+            self.notify_sender
+                .broadcast(Notification::CurrentTrackList {
+                    list: tracklist.clone(),
+                })
+                .await?;
 
-        self.notify_sender
-            .broadcast(Notification::CurrentTrack {
-                track: first_track.clone(),
-            })
-            .await?;
-
-        self.playbin
-            .set_property("uri", Some(first_track.track_url.unwrap().url.as_str()));
-        self.play(true).await?;
+            self.notify_sender
+                .broadcast(Notification::CurrentTrack {
+                    track: first_track.clone(),
+                })
+                .await?;
+        }
 
         Ok(())
     }
@@ -701,16 +591,42 @@ impl Player {
             if let Some(next_playlist_track_url) = &next_track.track_url {
                 self.playbin
                     .set_property("uri", Some(next_playlist_track_url.url.clone()));
-
-                self.notify_sender
-                    .broadcast(Notification::CurrentTrack { track: next_track })
-                    .await?;
             }
         } else {
             debug!("no more tracks left");
         }
 
         Ok(())
+    }
+
+    /// Inserts the most recent position into the state at a set interval.
+    pub async fn clock_loop(&self) {
+        let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
+        let mut quit_receiver = self.state.read().await.quitter();
+
+        loop {
+            interval.tick().await;
+
+            if let Ok(quit) = quit_receiver.try_recv() {
+                if quit {
+                    debug!("quitting clock loop");
+                    return;
+                }
+            }
+            if self.current_state() != GstState::VoidPending.into()
+                || self.current_state() != GstState::Null.into()
+            {
+                if let Some(position) = self.position() {
+                    let mut state = self.state.write().await;
+                    state.set_position(position.clone());
+
+                    self.notify_sender
+                        .broadcast(Notification::Position { position })
+                        .await
+                        .expect("failed to send notification");
+                }
+            }
+        }
     }
 
     /// Get Gstreamer message stream
@@ -846,11 +762,18 @@ pub async fn player_loop(
                         debug!("stream start");
                         let player = safe_player.read().await;
 
+                        if let Some(current_track) = safe_state.read().await.current_track() {
+                            player.notify_sender
+                                .broadcast(Notification::CurrentTrack { track: current_track })
+                                .await?;
+                        }
+
                         if let Some(duration) = player.duration() {
                             debug!("setting track duration");
                             let mut state = safe_state.write().await;
-                            state.set_duration(duration);
+                            state.set_duration(duration.clone());
 
+                            player.notify_sender.broadcast(Notification::Duration { duration }).await?;
                         }
 
                         player.set_player_state(safe_state.read().await.target_status().into(), true).await?;
@@ -859,17 +782,15 @@ pub async fn player_loop(
                         let player = safe_player.read().await;
                         let percent = buffering.percent();
 
-                        debug!("buffering {}%", percent);
+                        if percent < 100 && !safe_state.read().await.buffering() {
+                            debug!("buffering {}%", percent);
+                            player.pause(true).await?;
+                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
 
-                        if !safe_state.read().await.buffering() && percent < 100 {
-                            if !player.is_paused() {
-                                player.pause(true).await?;
-                                player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
-
-                                let mut state = safe_state.write().await;
-                                state.set_buffering(true);
-                            }
-                        } else if safe_state.read().await.buffering() && percent > 99 && player.is_paused() {
+                            let mut state = safe_state.write().await;
+                            state.set_buffering(true);
+                        } else if percent > 99 {
+                            debug!("buffering {}%", percent);
                             let mut state = safe_state.write().await;
                             state.set_buffering(false);
 
@@ -919,6 +840,7 @@ pub async fn player_loop(
                                         let mut state = safe_state.write().await;
                                         state.set_status(gstreamer::State::Ready.into());
 
+                                        player.notify_sender.broadcast(Notification::Status { status: GstState::Ready.into() }).await?;
                                     }
                                 }
                             }
@@ -929,6 +851,8 @@ pub async fn player_loop(
                                     if safe_state.read().await.target_status() == GstState::VoidPending.into() {
                                         let mut state = safe_state.write().await;
                                         state.set_status(gstreamer::State::VoidPending.into());
+
+                                        player.notify_sender.broadcast(Notification::Status { status: GstState::VoidPending.into() }).await?;
                                     }
                                 }
                             },
@@ -939,19 +863,23 @@ pub async fn player_loop(
                                     if safe_state.read().await.target_status() == GstState::Null.into() {
                                         let mut state = safe_state.write().await;
                                         state.set_status(gstreamer::State::Null.into());
+
+                                        player.notify_sender.broadcast(Notification::Status { status: GstState::Null.into() }).await?;
                                     }
                                 }
                             },
                         }
                     }
                     MessageView::Error(err) => {
-                        println!(
+                        let player = safe_player.read().await;
+                        player.notify_sender.broadcast(Notification::Error { error: err.into() }).await?;
+
+                        debug!(
                             "Error from {:?}: {} ({:?})",
                             err.src().map(|s| s.path_string()),
                             err.error(),
                             err.debug()
                         );
-                        break;
                     }
                     _ => (),
                 }
@@ -961,79 +889,6 @@ pub async fn player_loop(
     }
 
     Ok(())
-}
-
-/// Provides controls for other modules to send commands
-/// to the player
-#[derive(Debug, Clone)]
-pub struct Controls {
-    action_tx: Sender<Action>,
-    action_rx: Receiver<Action>,
-}
-
-impl Controls {
-    fn new() -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(10);
-
-        Controls {
-            action_rx,
-            action_tx,
-        }
-    }
-    pub fn action_receiver(&self) -> Receiver<Action> {
-        self.action_rx.clone()
-    }
-    pub async fn play(&self) {
-        action!(self, Action::Play);
-    }
-    pub async fn pause(&self) {
-        action!(self, Action::Pause);
-    }
-    pub async fn play_pause(&self) {
-        action!(self, Action::PlayPause);
-    }
-    pub fn play_pause_blocking(&self) {
-        action_blocking!(self, Action::PlayPause);
-    }
-    pub async fn stop(&self) {
-        action!(self, Action::Stop);
-    }
-    pub async fn quit(&self) {
-        action!(self, Action::Quit)
-    }
-    pub fn quit_blocking(&self) {
-        action_blocking!(self, Action::Quit)
-    }
-    pub async fn next(&self) {
-        action!(self, Action::Next);
-    }
-    pub async fn previous(&self) {
-        action!(self, Action::Previous);
-    }
-    pub async fn skip_to(&self, num: usize, direction: SkipDirection) {
-        action!(self, Action::SkipTo { num, direction });
-    }
-    pub async fn skip_to_by_id(&self, track_id: usize) {
-        action!(self, Action::SkipToById { track_id })
-    }
-    pub async fn jump_forward(&self) {
-        action!(self, Action::JumpForward);
-    }
-    pub async fn jump_backward(&self) {
-        action!(self, Action::JumpBackward);
-    }
-    pub async fn play_album(&self, album_id: String) {
-        action!(self, Action::PlayAlbum { album_id });
-    }
-    pub async fn play_uri(&self, uri: String) {
-        action!(self, Action::PlayUri { uri });
-    }
-    pub async fn play_track(&self, track_id: i32) {
-        action!(self, Action::PlayTrack { track_id });
-    }
-    pub async fn play_playlist(&self, playlist_id: i64) {
-        action!(self, Action::PlayPlaylist { playlist_id })
-    }
 }
 
 #[macro_export]

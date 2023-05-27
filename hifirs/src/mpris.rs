@@ -1,5 +1,5 @@
 use crate::{
-    player::{BroadcastReceiver, Controls, Notification},
+    player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
     state::{app::SafePlayerState, ClockValue, StatusValue, TrackListValue},
 };
 use gstreamer::{ClockTime, State as GstState};
@@ -74,7 +74,7 @@ pub async fn receive_notifications(
                         iface.status = status;
 
                         iface
-                            .metadata_changed(iface_ref.signal_context())
+                            .playback_status_changed(iface_ref.signal_context())
                             .await
                             .expect("failed to signal metadata change");
                     },
@@ -132,6 +132,9 @@ pub async fn receive_notifications(
                             .await
                             .expect("failed to signal metadata change");
                     },
+                    Notification::Error { error: _ } => {
+
+                    }
                 }
             }
         }
@@ -307,7 +310,7 @@ impl MprisTrackList {
             self.controls.skip_to_by_id(id).await;
         }
     }
-    #[dbus_interface(signal, name = "Seeked")]
+    #[dbus_interface(signal, name = "TrackListReplaced")]
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<String>,

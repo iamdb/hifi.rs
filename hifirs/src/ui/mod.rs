@@ -4,7 +4,7 @@ pub mod playlists;
 pub mod search;
 
 use crate::{
-    player::Controls,
+    player::controls::Controls,
     qobuz::SearchResults,
     state::{
         app::{PlayerState, SafePlayerState},

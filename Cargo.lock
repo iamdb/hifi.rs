@@ -664,6 +664,7 @@ dependencies = [
  "owning_ref",
  "pulldown-cmark",
  "time 0.3.21",
+ "toml 0.5.11",
  "unicode-segmentation",
  "unicode-width",
  "xi-unicode",

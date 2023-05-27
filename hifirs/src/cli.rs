@@ -149,8 +149,8 @@ impl From<hifirs_qobuz_api::Error> for Error {
     }
 }
 
-impl From<player::Error> for Error {
-    fn from(error: player::Error) -> Self {
+impl From<player::error::Error> for Error {
+    fn from(error: player::error::Error) -> Self {
         Error::PlayerError {
             error: error.to_string(),
         }
@@ -375,6 +375,8 @@ pub async fn run() -> Result<(), Error> {
                         cursive::receive_notifications(sink, notify_receiver).await
                     });
 
+                    let p = safe_player.read().await.clone();
+                    tokio::spawn(async move { p.clock_loop().await });
                     tokio::spawn(async { player::player_loop(safe_player, client, state).await });
 
                     tui.run().await;

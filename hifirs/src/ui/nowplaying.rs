@@ -1,5 +1,5 @@
 use crate::{
-    player::Controls,
+    player::controls::Controls,
     state::app::{PlayerState, SkipDirection},
     ui::{
         components::{self, Table, TableHeaders, TableWidths},

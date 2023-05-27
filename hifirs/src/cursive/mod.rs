@@ -1,5 +1,5 @@
 use crate::{
-    player::{BroadcastReceiver, Controls, Notification},
+    player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
     state::TrackListType,
 };
 use cursive::{
@@ -8,12 +8,12 @@ use cursive::{
     event::Event,
     immut1,
     reexports::crossbeam_channel::Sender,
-    theme::{Effect, Theme},
+    theme::Effect,
     utils::Counter,
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{
-        Dialog, LinearLayout, NamedView, Panel, ProgressBar, ResizedView, ScreensView, ScrollView,
-        SelectView, TextView, ThemedView,
+        Dialog, DummyView, LinearLayout, NamedView, Panel, ProgressBar, ResizedView, ScrollView,
+        SelectView, TextView,
     },
     CbSink, Cursive, CursiveRunnable,
 };
@@ -29,10 +29,13 @@ pub struct CursiveUI<'c> {
 }
 
 type ItemList = ResizedView<Panel<ScrollView<NamedView<SelectView<i32>>>>>;
+type PlaylistView = NamedView<Panel<ScrollView<SelectView<(i32, Option<String>)>>>>;
 
 impl<'c> CursiveUI<'c> {
     pub fn new(controls: &'c Controls, client: Client) -> Self {
-        let siv = cursive::default();
+        let mut siv = cursive::default();
+
+        siv.set_autohide_menu(false);
 
         Self {
             root: siv,
@@ -41,11 +44,11 @@ impl<'c> CursiveUI<'c> {
         }
     }
 
-    pub fn player() -> ResizedView<Panel<ResizedView<LinearLayout>>> {
-        let mut track_info = LinearLayout::new(Orientation::Horizontal)
-            .resized(SizeConstraint::Free, SizeConstraint::Free);
+    pub fn player() -> ResizedView<NamedView<Panel<ResizedView<LinearLayout>>>> {
+        let mut container = LinearLayout::new(Orientation::Vertical);
+        let mut track_info = LinearLayout::new(Orientation::Horizontal);
 
-        let mut meta = LinearLayout::new(Orientation::Vertical)
+        let meta = LinearLayout::new(Orientation::Vertical)
             .child(
                 TextView::new("")
                     .style(Effect::Bold)
@@ -56,17 +59,17 @@ impl<'c> CursiveUI<'c> {
 
         let track_num = LinearLayout::new(Orientation::Vertical)
             .child(
-                TextView::new("0")
+                TextView::new("00")
                     .h_align(HAlign::Center)
                     .with_name("current_track_number"),
             )
             .child(TextView::new("of").h_align(HAlign::Center))
             .child(
-                TextView::new("0")
+                TextView::new("00")
                     .h_align(HAlign::Center)
                     .with_name("total_tracks"),
             )
-            .fixed_width(5);
+            .fixed_width(2);
 
         let player_status = LinearLayout::new(Orientation::Vertical)
             .child(
@@ -74,10 +77,17 @@ impl<'c> CursiveUI<'c> {
                     .h_align(HAlign::Center)
                     .with_name("player_status"),
             )
-            .child(TextView::new("44.1k").with_name("sample_rate"))
-            .child(TextView::new("24bit").with_name("bit_depth"))
-            .child(TextView::new("").with_name("buffering"))
-            .fixed_width(5);
+            .child(
+                TextView::new("44.1")
+                    .h_align(HAlign::Center)
+                    .with_name("sample_rate"),
+            )
+            .child(
+                TextView::new("24")
+                    .h_align(HAlign::Center)
+                    .with_name("bit_depth"),
+            )
+            .fixed_width(4);
 
         let counter = Counter::new(0);
         let progress = ProgressBar::new()
@@ -93,15 +103,17 @@ impl<'c> CursiveUI<'c> {
             .with_name("progress")
             .full_width();
 
-        meta.add_child(progress);
+        track_info.add_child(track_num);
+        track_info.add_child(meta.full_width());
+        track_info.add_child(player_status);
 
-        let track_info_inner = track_info.get_inner_mut();
+        container.add_child(track_info.full_width());
+        container.add_child(progress);
 
-        track_info_inner.add_child(track_num);
-        track_info_inner.add_child(meta);
-        track_info_inner.add_child(player_status);
-
-        Panel::new(track_info).resized(SizeConstraint::Full, SizeConstraint::Fixed(8))
+        Panel::new(container.full_width())
+            .title("player")
+            .with_name("player_panel")
+            .resized(SizeConstraint::Full, SizeConstraint::Free)
     }
 
     pub fn global_events(&mut self) {
@@ -128,15 +140,31 @@ impl<'c> CursiveUI<'c> {
 
         let c = self.controls.clone();
         self.root.add_global_callback('p', move |_| {
-            c.play_pause_blocking();
+            block_on(async { c.play_pause().await });
+        });
+
+        let c = self.controls.clone();
+        self.root.add_global_callback('N', move |_| {
+            block_on(async { c.next().await });
+        });
+
+        let c = self.controls.clone();
+        self.root.add_global_callback('P', move |_| {
+            block_on(async { c.previous().await });
+        });
+
+        let c = self.controls.clone();
+        self.root.add_global_callback('l', move |_| {
+            block_on(async { c.jump_forward().await });
         });
     }
 
-    pub async fn my_playlists(&self) -> LinearLayout {
+    pub async fn my_playlists(&self) -> ResizedView<NamedView<LinearLayout>> {
         let mut list_layout = LinearLayout::new(Orientation::Vertical);
 
         let player = CursiveUI::player();
         list_layout.add_child(player);
+        list_layout.add_child(DummyView.resized(SizeConstraint::Full, SizeConstraint::Fixed(1)));
 
         let mut user_playlists: ItemList = Panel::new(
             SelectView::new()
@@ -144,7 +172,8 @@ impl<'c> CursiveUI<'c> {
                 .scrollable()
                 .scroll_y(true),
         )
-        .resized(SizeConstraint::Full, SizeConstraint::Full);
+        .title("my playlists")
+        .max_height(10);
 
         if let Ok(my_playlists) = self.client.user_playlists().await {
             let mut track_list = user_playlists
@@ -170,56 +199,80 @@ impl<'c> CursiveUI<'c> {
                     .button("Open", move |s| {
                         if let Ok(playlist) = block_on(async { client.playlist(id).await }) {
                             if let Some(tracks) = playlist.tracks {
-                                if let Some(mut track_list) =
-                                    s.find_name::<SelectView<i32>>("user_playlists")
-                                {
-                                    track_list.clear();
-                                    tracks.items.iter().enumerate().for_each(|(i, t)| {
-                                        let row = format!("{} {}", i, t.title.clone());
-                                        track_list.add_item(row, t.id);
+                                let mut view: PlaylistView =
+                                    Panel::new(SelectView::new().scrollable().scroll_y(true))
+                                        .title(playlist.name)
+                                        .with_name("playlist_items");
+
+                                tracks.items.iter().enumerate().for_each(|(i, t)| {
+                                    let row = format!("{:02} {}", i, t.title.clone());
+                                    let value = if let Some(album) = &t.album {
+                                        (t.id, Some(album.id.clone()))
+                                    } else {
+                                        (t.id, None)
+                                    };
+                                    view.get_mut()
+                                        .get_inner_mut()
+                                        .get_inner_mut()
+                                        .add_item(row, value);
+                                });
+
+                                let c = c.to_owned();
+                                view.get_mut()
+                                    .get_inner_mut()
+                                    .get_inner_mut()
+                                    .set_on_submit(move |_s, item| {
+                                        let c = c.to_owned();
+                                        block_on(async move { c.play_track(item.0).await });
                                     });
 
-                                    let c = c.to_owned();
-                                    track_list.set_on_submit(move |_, item| {
-                                        let c = c.to_owned();
-                                        let id = *item;
-                                        block_on(async move { c.play_track(id).await });
-                                    });
+                                if let Some(mut layout) =
+                                    s.find_name::<LinearLayout>("user_playlist_layout")
+                                {
+                                    layout.add_child(view);
                                 }
                             }
                         }
 
-                        s.pop_layer();
+                        s.screen_mut().pop_layer();
                     })
                     .button("Play", move |s| {
                         let c = c2.to_owned();
                         block_on(async move { c.play_playlist(id).await });
                         s.pop_layer();
-                    });
+                    })
+                    .dismiss_button("Cancel");
 
-                s.add_layer(dialog);
+                s.screen_mut().add_layer(dialog);
             });
         }
 
         list_layout.add_child(user_playlists);
 
-        list_layout
+        list_layout.with_name("user_playlist_layout").full_height()
+    }
+
+    pub fn menubar(&mut self) {
+        let menu = self.root.menubar();
+
+        menu.add_subtree(
+            "My Playlists",
+            cursive::menu::Tree::new().leaf("Open", |_s| {}),
+        );
     }
 
     pub async fn run(&mut self) {
         self.global_events();
+        self.menubar();
 
-        let theme = Theme {
-            shadow: false,
-            ..Default::default()
-        };
+        // let theme = Theme {
+        //     shadow: false,
+        //     ..Default::default()
+        // };
 
         let my_playlists = self.my_playlists().await;
 
-        let screens = ScreensView::single_screen(my_playlists);
-
-        self.root
-            .add_fullscreen_layer(ThemedView::new(theme, screens));
+        self.root.screen_mut().add_fullscreen_layer(my_playlists);
 
         self.root.run();
     }
@@ -251,7 +304,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                             }
                         })).expect("failed to send update");
                     }
-                    Notification::Position {position} => {
+                    Notification::Position { position } => {
                         cb.send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
                                 progress.set_value(position.inner_clocktime().seconds() as usize);
@@ -268,7 +321,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                     Notification::CurrentTrack {track} => {
                         cb.send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
-                                track_num.set_content((track.index + 1).to_string());
+                                track_num.set_content(format!("{:02}", track.index));
                                 track_title.set_content(track.track.title);
                                 progress.set_max(track.track.duration as usize);
                             }
@@ -294,7 +347,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
                                     if let (Some(album), Some(mut entity_title), Some(mut total_tracks)) = (list.get_album(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
                                         entity_title.set_content(album.title.clone());
-                                        total_tracks.set_content(album.tracks_count.to_string());
+                                        total_tracks.set_content(format!("{:02}", album.tracks_count));
                                     }
                                 })).expect("failed to send update");
                             }
@@ -312,7 +365,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                         entity_title.set_content(album.title.clone());
                                     }
                                     if let Some(mut total_tracks) = s.find_name::<TextView>("total_tracks") {
-                                        total_tracks.set_content("1");
+                                        total_tracks.set_content("00");
                                     }
                                 })).expect("failed to send update");
                             }
@@ -321,16 +374,18 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                     }
                     Notification::Buffering { is_buffering } => {
                         cb.send(Box::new(move |s| {
-                            if let Some(mut view) = s.find_name::<TextView>("buffering") {
+                            if let Some(mut view) = s.find_name::<Panel<ResizedView<LinearLayout>>>("player_planel") {
                                 if is_buffering {
-                                    view.set_content("b");
+                                    view.set_title("player b");
                                 }else {
-                                    view.set_content("x");
+                                    view.set_title("player x");
                                 }
                             }
                         })).expect("failed to send update");
                     },
+                    Notification::Error { error: _ } => {
 
+                    }
                 }
             }
         }

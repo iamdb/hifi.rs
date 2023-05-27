@@ -1,5 +1,5 @@
 use crate::{
-    player::Controls,
+    player::controls::Controls,
     qobuz::SearchResults,
     state::app::PlayerState,
     ui::{

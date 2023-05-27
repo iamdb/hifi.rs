@@ -1,5 +1,5 @@
 use crate::{
-    player::Controls,
+    player::controls::Controls,
     ui::{
         components::{self, Item, List},
         Console, Screen,
