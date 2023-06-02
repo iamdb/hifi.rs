@@ -34,6 +34,7 @@ pub struct PlayerState {
     position: ClockValue,
     status: StatusValue,
     is_buffering: bool,
+    is_live: bool,
     resume: bool,
     target_status: StatusValue,
     active_screen: ActiveScreen,
@@ -215,6 +216,14 @@ impl PlayerState {
         self.target_status = target.into();
     }
 
+    pub fn set_live(&mut self, live: bool) {
+        self.is_live = live;
+    }
+
+    pub fn live(&self) -> bool {
+        self.is_live
+    }
+
     pub fn rows(&self) -> Vec<Row> {
         self.tracklist.rows()
     }
@@ -376,6 +385,7 @@ impl PlayerState {
             target_status: StatusValue(gstreamer::State::Null),
             current_progress: FloatValue(0.0),
             is_buffering: false,
+            is_live: false,
             resume: false,
             active_screen: ActiveScreen::NowPlaying,
             quit_sender,

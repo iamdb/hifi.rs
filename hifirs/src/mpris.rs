@@ -22,6 +22,12 @@ pub async fn init(controls: &Controls) -> Connection {
         status: GstState::Null.into(),
         current_track: None,
         position: ClockValue::default(),
+        total_tracks: 0,
+        can_play: true,
+        can_pause: true,
+        can_stop: true,
+        can_next: true,
+        can_previous: true,
     };
     let mpris_tracklist = MprisTrackList {
         controls: controls.clone(),
@@ -63,20 +69,49 @@ pub async fn receive_notifications(
         select! {
             Ok(notification) = receiver.recv() => {
                 match notification {
-                    Notification::Buffering { is_buffering: _ } => {},
-                    Notification::Status { status } => {
-                    let iface_ref = object_server
-                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                        .await
-                        .expect("failed to get object server");
+                    Notification::Buffering { is_buffering: _ } => {
+                        let iface_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
 
-                        let mut iface = iface_ref.get_mut().await;
-                        iface.status = status;
-
-                        iface
+                        iface_ref.get_mut().await
                             .playback_status_changed(iface_ref.signal_context())
                             .await
                             .expect("failed to signal metadata change");
+                    },
+                    Notification::Status { status } => {
+                        let iface_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                            let mut iface = iface_ref.get_mut().await;
+                            iface.status = status.clone();
+
+                            match status.into() {
+                                GstState::Null => {
+                                    iface.can_play = true;
+                                    iface.can_pause = true;
+                                    iface.can_stop = false;
+
+                                },
+                                GstState::Paused => {
+                                    iface.can_play = true;
+                                    iface.can_pause = false;
+                                    iface.can_stop = true;
+                                },
+                                _ => {
+                                    iface.can_play = true;
+                                    iface.can_pause = true;
+                                    iface.can_stop = true;
+                                }
+                            }
+
+                            iface
+                                .playback_status_changed(iface_ref.signal_context())
+                                .await
+                                .expect("failed to signal metadata change");
                     },
                     Notification::Position { position } => {
                         let iface_ref = object_server
@@ -107,15 +142,17 @@ pub async fn receive_notifications(
                     },
                     Notification::CurrentTrackList { list } => {
                         if let Some(current) = safe_state.read().await.current_track() {
-                            let iface_ref = object_server
+                            let list_ref = object_server
                                 .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
                                 .await
                                 .expect("failed to get object server");
 
                             let tracks = list.cursive_list().iter().map(|t| t.0.clone()).collect::<Vec<String>>();
+                            let mut list_iface = list_ref.get_mut().await;
 
-                            iface_ref.get_mut().await.track_list = list;
-                            MprisTrackList::track_list_replaced(iface_ref.signal_context(), tracks, current.track.title).await.expect("failed to send track list replaced signal");
+                            list_iface.track_list = list;
+
+                            MprisTrackList::track_list_replaced(list_ref.signal_context(), tracks, current.track.title).await.expect("failed to send track list replaced signal");
                         }
                     },
                     Notification::CurrentTrack { track } => {
@@ -126,7 +163,21 @@ pub async fn receive_notifications(
 
                         let mut iface = iface_ref.get_mut().await;
 
+                        if track.index == 0 {
+                            iface.can_previous = false;
+                        } else {
+                            iface.can_previous = true;
+                        }
+
+                        if iface.total_tracks != 0 && track.index == iface.total_tracks - 1 {
+                            iface.can_next = false;
+                        } else {
+                            iface.can_next = true;
+                        }
+
+                        iface.total_tracks = track.total;
                         iface.current_track = Some(track);
+
                         iface
                             .metadata_changed(iface_ref.signal_context())
                             .await
@@ -137,6 +188,7 @@ pub async fn receive_notifications(
                     }
                 }
             }
+            else => {}
         }
     }
 }
@@ -184,6 +236,12 @@ pub struct MprisPlayer {
     status: StatusValue,
     position: ClockValue,
     current_track: Option<TrackListTrack>,
+    total_tracks: usize,
+    can_play: bool,
+    can_pause: bool,
+    can_stop: bool,
+    can_next: bool,
+    can_previous: bool,
 }
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
@@ -257,19 +315,23 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "CanGoNext")]
     fn can_go_next(&self) -> bool {
-        true
+        self.can_next
     }
     #[dbus_interface(property, name = "CanGoPrevious")]
     fn can_go_previous(&self) -> bool {
-        true
+        self.can_previous
     }
     #[dbus_interface(property, name = "CanPlay")]
     fn can_play(&self) -> bool {
-        true
+        self.can_play
     }
     #[dbus_interface(property, name = "CanPause")]
     fn can_pause(&self) -> bool {
-        true
+        self.can_pause
+    }
+    #[dbus_interface(property, name = "CanStop")]
+    fn can_stop(&self) -> bool {
+        self.can_stop
     }
     #[dbus_interface(property, name = "CanSeek")]
     fn can_seek(&self) -> bool {

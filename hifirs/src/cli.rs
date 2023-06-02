@@ -248,8 +248,8 @@ pub async fn run() -> Result<(), Error> {
 
             match client.search_all(query).await {
                 Ok(results) => {
-                    //let json = serde_json::to_string(&results);
-                    //print!("{}", results);
+                    let json = serde_json::to_string(&results).expect("failed to convert json");
+                    print!("{}", json);
                     Ok(())
                 }
                 Err(error) => Err(Error::ClientError {

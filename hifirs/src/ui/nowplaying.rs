@@ -1,6 +1,6 @@
 use crate::{
     player::controls::Controls,
-    state::app::{PlayerState, SkipDirection},
+    state::app::PlayerState,
     ui::{
         components::{self, Table, TableHeaders, TableWidths},
         Console, Screen,
@@ -170,13 +170,7 @@ impl Screen for NowPlayingScreen {
 
                                 debug!("playing selected track index: {index} selection: {selection} current: {current_index}");
 
-                                let direction = if index > current_index {
-                                    SkipDirection::Forward
-                                } else {
-                                    SkipDirection::Backward
-                                };
-
-                                self.controls.skip_to(index, direction).await;
+                                self.controls.skip_to(index).await;
                             }
                         }
                     }

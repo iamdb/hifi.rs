@@ -1,4 +1,4 @@
-use crate::{action, action_blocking, state::app::SkipDirection};
+use crate::{action, action_blocking};
 use flume::{Receiver, Sender};
 
 #[derive(Debug, Clone)]
@@ -10,27 +10,14 @@ pub enum Action {
     Previous,
     Stop,
     Quit,
-    SkipTo {
-        num: usize,
-        direction: SkipDirection,
-    },
-    SkipToById {
-        track_id: usize,
-    },
+    SkipTo { num: usize },
+    SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
-    PlayAlbum {
-        album_id: String,
-    },
-    PlayTrack {
-        track_id: i32,
-    },
-    PlayUri {
-        uri: String,
-    },
-    PlayPlaylist {
-        playlist_id: i64,
-    },
+    PlayAlbum { album_id: String },
+    PlayTrack { track_id: i32 },
+    PlayUri { uri: String },
+    PlayPlaylist { playlist_id: i64 },
 }
 
 /// Provides controls for other modules to send commands
@@ -80,8 +67,8 @@ impl Controls {
     pub async fn previous(&self) {
         action!(self, Action::Previous);
     }
-    pub async fn skip_to(&self, num: usize, direction: SkipDirection) {
-        action!(self, Action::SkipTo { num, direction });
+    pub async fn skip_to(&self, num: usize) {
+        action!(self, Action::SkipTo { num });
     }
     pub async fn skip_to_by_id(&self, track_id: usize) {
         action!(self, Action::SkipToById { track_id })
