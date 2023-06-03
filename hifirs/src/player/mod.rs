@@ -190,7 +190,7 @@ impl Player {
         let flags = if let Some(flags) = flags {
             flags
         } else {
-            SeekFlags::FLUSH | SeekFlags::KEY_UNIT
+            SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS
         };
 
         self.playbin.seek_simple(flags, time.inner_clocktime())?;
@@ -234,11 +234,7 @@ impl Player {
 
                     let position = state.position();
 
-                    self.seek(
-                        position.clone(),
-                        Some(SeekFlags::ACCURATE | SeekFlags::FLUSH),
-                    )
-                    .await?;
+                    self.seek(position.clone(), None).await?;
 
                     return Ok(());
                 } else {
@@ -748,14 +744,15 @@ pub async fn player_loop(
                         } else {
                             player.pause(true).await?;
 
-                            // let mut state = safe_state.write().await;
-                            // state.reset_player();
+                            let mut state = safe_state.write().await;
+                            state.reset_player();
 
                             player.skip_to(0).await?;
                             player.ready(true).await?;
 
-                            let list = safe_state.read().await.track_list();
+                            let list = state.track_list();
                             player.notify_sender.broadcast(Notification::CurrentTrackList{ list }).await?;
+                            player.notify_sender.broadcast(Notification::Status { status: GstState::Ready.into() }).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
