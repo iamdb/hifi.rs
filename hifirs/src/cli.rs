@@ -361,8 +361,6 @@ pub async fn run() -> Result<(), Error> {
                     let notify_receiver = new_player.notify_receiver();
                     let safe_player = new_player.safe();
 
-                    let sink = tui.sink().await.clone();
-
                     let conn = mpris::init(&controls).await;
 
                     let nr = notify_receiver.clone();
@@ -371,22 +369,15 @@ pub async fn run() -> Result<(), Error> {
                         mpris::receive_notifications(s, conn, nr).await;
                     });
 
+                    let sink = tui.sink().await.clone();
                     tokio::spawn(async {
                         cursive::receive_notifications(sink, notify_receiver).await
                     });
 
-                    let p = safe_player.read().await.clone();
-                    tokio::spawn(async move { p.clock_loop().await });
-                    tokio::spawn(async { player::player_loop(safe_player, client, state).await });
+                    let p = safe_player.clone();
+                    tokio::spawn(async { player::player_loop(p, client, state).await });
 
                     tui.run().await;
-                    // let mut tui =
-                    //     ui::new(player.state(), player.controls(), client, None, None).await?;
-
-                    // let state = player.state();
-
-                    // switch_screen!(state.write().await, ActiveScreen::Playlists);
-                    // tui.event_loop().await?;
                 }
             }
 

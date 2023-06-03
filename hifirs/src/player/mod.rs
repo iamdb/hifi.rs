@@ -63,10 +63,10 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
 
     let playbin = gst::ElementFactory::make("playbin3").build()?;
     playbin.set_property_from_str("flags", "audio+buffering");
-    playbin.set_property("connection-speed", 128000_u64);
+    playbin.set_property("connection-speed", 512000_u64);
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(5);
+    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(10);
     notify_sender.set_overflow(true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -127,7 +127,7 @@ impl Player {
         }
 
         if wait {
-            let mut interval = tokio::time::interval(Duration::from_millis(500));
+            let mut interval = tokio::time::interval(Duration::from_millis(100));
             while self.current_state() != state.into() {
                 debug!(
                     "waiting for player to change to {}",
@@ -253,10 +253,6 @@ impl Player {
     }
     /// Jump forward in the currently playing track +10 seconds.
     pub async fn jump_forward(&self) -> Result<()> {
-        if self.state.read().await.buffering() {
-            return Ok(());
-        }
-
         if let (Some(current_position), Some(duration)) = (
             self.playbin.query_position::<ClockTime>(),
             self.playbin.query_duration::<ClockTime>(),
@@ -275,10 +271,6 @@ impl Player {
     }
     /// Jump forward in the currently playing track -10 seconds.
     pub async fn jump_backward(&self) -> Result<()> {
-        if self.state.read().await.buffering() {
-            return Ok(());
-        }
-
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
                 self.seek(ClockTime::default().into(), None).await?;
@@ -327,6 +319,7 @@ impl Player {
 
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
+
                 self.set_player_state(state.target_status().into(), true)
                     .await?;
 
@@ -382,7 +375,7 @@ impl Player {
     }
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
-        if self.is_playing() || self.is_paused() {
+        if !self.is_ready() {
             self.ready(true).await?;
         }
 
@@ -412,7 +405,9 @@ impl Player {
             self.playbin
                 .set_property("uri", Some(track_url.url.to_string()));
 
-            self.play(true).await?;
+            if !self.is_playing() {
+                self.play(true).await?;
+            }
 
             self.notify_sender
                 .broadcast(Notification::CurrentTrackList { list: tracklist })
@@ -429,7 +424,7 @@ impl Player {
     }
     /// Plays a full album.
     pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) -> Result<()> {
-        if self.is_playing() || self.is_paused() {
+        if !self.is_ready() {
             self.ready(true).await?;
         }
 
@@ -461,7 +456,10 @@ impl Player {
 
         if let Some(t) = &first_track.track_url {
             self.playbin.set_property("uri", Some(t.url.as_str()));
-            self.play(true).await?;
+
+            if !self.is_playing() {
+                self.play(true).await?;
+            }
 
             self.notify_sender
                 .broadcast(Notification::CurrentTrackList {
@@ -482,6 +480,10 @@ impl Player {
     }
     /// Play an item from Qobuz web uri
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
+        if !self.is_ready() {
+            self.ready(true).await?;
+        }
+
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -542,10 +544,6 @@ impl Player {
         mut playlist: Playlist,
         quality: Option<AudioQuality>,
     ) -> Result<()> {
-        if self.is_playing() || self.is_paused() {
-            self.ready(true).await?;
-        }
-
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -570,7 +568,10 @@ impl Player {
 
         if let Some(t) = &first_track.track_url {
             self.playbin.set_property("uri", Some(t.url.as_str()));
-            self.play(true).await?;
+
+            if !self.is_playing() {
+                self.play(true).await?;
+            }
 
             self.notify_sender
                 .broadcast(Notification::CurrentTrackList {
@@ -604,35 +605,6 @@ impl Player {
 
         Ok(())
     }
-    /// Inserts the most recent position into the state at a set interval.
-    pub async fn clock_loop(&self) {
-        let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
-        let mut quit_receiver = self.state.read().await.quitter();
-
-        loop {
-            interval.tick().await;
-
-            if let Ok(quit) = quit_receiver.try_recv() {
-                if quit {
-                    debug!("quitting clock loop");
-                    return;
-                }
-            }
-            if self.current_state() != GstState::VoidPending.into()
-                || self.current_state() != GstState::Null.into()
-            {
-                if let Some(position) = self.position() {
-                    let mut state = self.state.write().await;
-                    state.set_position(position.clone());
-
-                    self.notify_sender
-                        .broadcast(Notification::Position { position })
-                        .await
-                        .expect("failed to send notification");
-                }
-            }
-        }
-    }
     /// Get Gstreamer message stream
     pub async fn message_stream(&self) -> BusStream {
         self.playbin.bus().unwrap().stream()
@@ -647,10 +619,35 @@ impl Player {
     }
 }
 
+/// Inserts the most recent position into the state at a set interval.
+pub async fn clock_loop(safe_player: SafePlayer, safe_state: SafePlayerState) {
+    let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
+
+    loop {
+        interval.tick().await;
+
+        if safe_player.read().await.current_state() == GstState::Playing.into() {
+            if let Some(position) = safe_player.read().await.position() {
+                let mut state = safe_state.write().await;
+                state.set_position(position.clone());
+                drop(state);
+
+                safe_player
+                    .read()
+                    .await
+                    .notify_sender
+                    .broadcast(Notification::Position { position })
+                    .await
+                    .expect("failed to send notification");
+            }
+        }
+    }
+}
+
 /// Handles messages from GStreamer, receives player actions from external controls
 /// receives the about-to-finish event and takes necessary action.
 pub async fn player_loop(
-    safe_player: Arc<RwLock<Player>>,
+    safe_player: SafePlayer,
     client: Client,
     safe_state: SafePlayerState,
 ) -> Result<()> {
@@ -661,6 +658,10 @@ pub async fn player_loop(
     let mut quitter = safe_state.read().await.quitter();
     let mut actions = action_rx.stream();
 
+    let s = safe_state.clone();
+    let p = safe_player.clone();
+    let clock_handle = tokio::spawn(async { clock_loop(p, s).await });
+
     loop {
         select! {
             quit = quitter.recv() => {
@@ -668,6 +669,8 @@ pub async fn player_loop(
                     Ok(quit) => {
                         if quit {
                             debug!("quitting player loop, exiting application");
+
+                            clock_handle.abort();
 
                             let player = safe_player.read().await;
 
@@ -742,17 +745,12 @@ pub async fn player_loop(
                         if player.quit_when_done {
                             safe_state.read().await.quit();
                         } else {
-                            player.pause(true).await?;
-
                             let mut state = safe_state.write().await;
-                            state.reset_player();
+                            state.set_target_status(GstState::Paused);
+                            state.skip_track(Some(0), SkipDirection::Backward).await;
+                            drop(state);
 
                             player.skip_to(0).await?;
-                            player.ready(true).await?;
-
-                            let list = state.track_list();
-                            player.notify_sender.broadcast(Notification::CurrentTrackList{ list }).await?;
-                            player.notify_sender.broadcast(Notification::Status { status: GstState::Ready.into() }).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
@@ -798,7 +796,7 @@ pub async fn player_loop(
 
                             debug!("buffering {}%", percent);
                             if percent < 100 && !safe_state.read().await.buffering() {
-                                if !player.is_ready() && !player.is_paused() {
+                                if !player.is_paused() {
                                     player.pause(true).await?;
                                 }
 

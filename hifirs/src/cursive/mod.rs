@@ -11,8 +11,8 @@ use cursive::{
     utils::{markup::StyledString, Counter},
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{
-        Dialog, EditView, LinearLayout, NamedView, PaddedView, Panel, ProgressBar, RadioButton,
-        RadioGroup, ResizedView, ScreensView, ScrollView, SelectView, TextView,
+        Dialog, EditView, LinearLayout, NamedView, PaddedView, Panel, ProgressBar, RadioGroup,
+        ResizedView, ScreensView, ScrollView, SelectView, TextView,
     },
     CbSink, Cursive, CursiveRunnable, With,
 };
@@ -364,8 +364,15 @@ impl<'c> CursiveUI<'c> {
         let c = self.controls.to_owned();
         let client = self.client.to_owned();
 
-        let mut search_type = RadioGroup::new().on_change(move |s, item: &String| {
+        let on_change = move |s: &mut Cursive, item: &String| {
             let item = item.clone();
+
+            s.call_on_name(
+                "results_scroll",
+                |scroll: &mut ScrollView<NamedView<SelectView<String>>>| {
+                    scroll.scroll_to_top();
+                },
+            );
 
             if let Some(mut results) = s.find_name::<SelectView<String>>("search_results") {
                 results.clear();
@@ -425,7 +432,7 @@ impl<'c> CursiveUI<'c> {
                                         artist_albums.albums,
                                     ) {
                                         search_results.clear();
-                                        for a in albums.items {
+                                        for a in &albums.items {
                                             if !a.streamable {
                                                 continue;
                                             }
@@ -437,7 +444,7 @@ impl<'c> CursiveUI<'c> {
 
                                             let mut row = StyledString::plain(year.to_string());
                                             row.append_plain(" ");
-                                            row.append_styled(a.title, Effect::Bold);
+                                            row.append_styled(a.title.clone(), Effect::Bold);
                                             row.append_plain(" ");
 
                                             if a.parental_warning {
@@ -448,8 +455,22 @@ impl<'c> CursiveUI<'c> {
                                                 row.append_styled("*", Effect::Dim);
                                             }
 
-                                            search_results.add_item(row, a.id);
+                                            search_results.add_item(row, a.id.clone());
                                         }
+
+                                        let artist_name =
+                                            albums.items.first().unwrap().artist.name.clone();
+                                        s.call_on_name(
+                                            "results_panel",
+                                            |panel: &mut Panel<
+                                                ScrollView<NamedView<SelectView<String>>>,
+                                            >| {
+                                                let mut title = StyledString::plain("albums by ");
+                                                title.append_styled(artist_name, Effect::Bold);
+
+                                                panel.set_title(title)
+                                            },
+                                        );
 
                                         let c = c.to_owned();
                                         search_results.set_on_submit(
@@ -476,6 +497,7 @@ impl<'c> CursiveUI<'c> {
                                         .to_string()
                                         .as_str()[2..7]
                                         .to_string();
+                                    title.append_plain(" ");
                                     title.append_styled(duration, Effect::Dim);
                                     title.append_plain(" ");
 
@@ -513,10 +535,12 @@ impl<'c> CursiveUI<'c> {
                     }
                 }
             }
-        });
+        };
+
+        let mut search_type = RadioGroup::new().on_change(on_change);
 
         let radios = LinearLayout::horizontal()
-            .child(search_type.button_str("Albums").with_name("album_results"))
+            .child(search_type.button_str("Albums"))
             .child(search_type.button_str("Artists"))
             .child(search_type.button_str("Tracks"))
             .child(search_type.button_str("Playlists"))
@@ -528,10 +552,6 @@ impl<'c> CursiveUI<'c> {
                 if let Ok(results) = block_on(async { c.search_all(item.to_string()).await }) {
                     debug!("saving search results to user data");
                     s.set_user_data(results);
-
-                    s.call_on_name("album_results", |view: &mut RadioButton<String>| {
-                        view.select();
-                    });
                 }
             })
             .wrap_with(Panel::new);
@@ -542,11 +562,14 @@ impl<'c> CursiveUI<'c> {
         layout.add_child(search_form.title("search"));
         layout.add_child(radios);
         layout.add_child(
-            search_results
-                .scrollable()
-                .scroll_y(true)
-                .full_height()
-                .wrap_with(Panel::new),
+            Panel::new(
+                search_results
+                    .scrollable()
+                    .scroll_y(true)
+                    .with_name("results_scroll"),
+            )
+            .with_name("results_panel")
+            .full_height(),
         );
 
         layout

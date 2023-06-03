@@ -341,7 +341,7 @@ impl PlayerState {
     }
 
     pub fn reset_player(&mut self) {
-        self.target_status = GstState::Ready.into();
+        self.target_status = GstState::Paused.into();
         self.position = ClockValue::default();
         self.current_progress = FloatValue(0.0);
     }
