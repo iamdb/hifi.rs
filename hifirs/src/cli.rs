@@ -407,9 +407,7 @@ pub async fn run() -> Result<(), Error> {
 
             let player = safe_player.write().await;
 
-            let track = client.track(track_id).await?;
-
-            player.play_track(track, Some(quality.unwrap())).await?;
+            player.play_track(track_id, Some(quality.unwrap())).await?;
 
             if no_tui {
                 wait!(player.state());
@@ -435,8 +433,6 @@ pub async fn run() -> Result<(), Error> {
             let client = qobuz::make_client(cli.username, cli.password, &data).await?;
             let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
 
-            let album = client.album(&album_id).await?;
-
             let quality = if let Some(q) = quality {
                 q
             } else {
@@ -448,7 +444,7 @@ pub async fn run() -> Result<(), Error> {
                 .safe();
             let player = safe_player.read().await;
 
-            player.play_album(album, Some(quality)).await?;
+            player.play_album(album_id, Some(quality)).await?;
 
             if no_tui {
                 wait!(player.state());

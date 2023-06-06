@@ -6,7 +6,7 @@ use crate::{
     },
     state::{
         app::{SafePlayerState, SkipDirection},
-        ClockValue, StatusValue, TrackListType, TrackListValue,
+        ClockValue, StatusValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -17,15 +17,8 @@ use gst::{
     StateChangeSuccess,
 };
 use gstreamer::{self as gst, prelude::*};
-use hifirs_qobuz_api::client::{
-    self,
-    album::Album,
-    api::Client,
-    playlist::Playlist,
-    track::{Track, TrackListTrack, TrackStatus},
-    AudioQuality, UrlType,
-};
-use std::{collections::VecDeque, sync::Arc, time::Duration};
+use hifirs_qobuz_api::client::{self, api::Client, AudioQuality, UrlType};
+use std::{sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 
 #[macro_use]
@@ -376,88 +369,68 @@ impl Player {
         Ok(())
     }
     /// Plays a single track.
-    pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
+    pub async fn play_track(&self, track_id: i32, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
             self.ready(false).await?;
         }
 
-        let quality = if let Some(quality) = quality {
-            quality
-        } else {
-            self.client.quality()
-        };
+        if let (Some(track_list_track), Some(tracklist)) =
+            self.state.write().await.play_track(track_id, quality).await
+        {
+            if let Some(track_url) = &track_list_track.track_url {
+                self.playbin
+                    .set_property("uri", Some(track_url.url.as_str()));
 
-        let mut track = TrackListTrack::new(track, Some(0), Some(1), Some(quality.clone()), None);
-        track.status = TrackStatus::Playing;
+                if !self.is_playing() {
+                    self.play(false).await?;
+                }
 
-        let mut queue = VecDeque::new();
-        queue.push_front(track.clone());
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrackList { list: tracklist })
+                    .await?;
 
-        let mut tracklist = TrackListValue::new(Some(queue));
-        tracklist.set_list_type(TrackListType::Track);
-
-        let mut state = self.state.write().await;
-        state.replace_list(tracklist.clone());
-
-        state.attach_track_url(&mut track).await;
-        state.set_current_track(track.clone());
-        state.set_target_status(GstState::Playing);
-
-        if let Some(track_url) = &track.track_url {
-            self.playbin
-                .set_property("uri", Some(track_url.url.to_string()));
-
-            if !self.is_playing() {
-                self.play(false).await?;
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack {
+                        track: track_list_track.clone(),
+                    })
+                    .await?;
             }
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrackList { list: tracklist })
-                .await?;
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrack {
-                    track: track.clone(),
-                })
-                .await?;
         }
 
         Ok(())
     }
     /// Plays a full album.
-    pub async fn play_album(&self, album: Album, quality: Option<AudioQuality>) -> Result<()> {
+    pub async fn play_album(&self, album_id: String, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
             self.ready(false).await?;
         }
 
         if let (Some(track), Some(tracklist)) =
-            self.state.write().await.play_album(album.id, quality).await
+            self.state.write().await.play_album(album_id, quality).await
         {
             if let Some(track_url) = &track.track_url {
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
+
+                if !self.is_playing() {
+                    self.play(false).await?;
+                }
+
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrackList {
+                        list: tracklist.clone(),
+                    })
+                    .await?;
+
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack {
+                        track: track.clone(),
+                    })
+                    .await?;
             }
-
-            if !self.is_playing() {
-                self.play(false).await?;
-            }
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrackList {
-                    list: tracklist.clone(),
-                })
-                .await?;
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrack {
-                    track: track.clone(),
-                })
-                .await?;
-
-            Ok(())
-        } else {
-            Err(Error::TrackURL)
         }
+
+        Ok(())
     }
     /// Play an item from Qobuz web uri
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
@@ -469,42 +442,15 @@ impl Player {
 
         match client::parse_url(uri.as_str()) {
             Ok(url) => match url {
-                UrlType::Album { id } => match self.client.album(&id).await {
-                    Ok(album) => {
-                        self.play_album(album, Some(quality)).await?;
-                    }
-                    Err(err) => {
-                        return Err(Error::FailedToPlay {
-                            message: format!(
-                                "Failed to play album {id}, {err}. Is the ID correct?"
-                            ),
-                        });
-                    }
-                },
-                UrlType::Playlist { id } => match self.client.playlist(id).await {
-                    Ok(playlist) => {
-                        self.play_playlist(playlist, Some(quality)).await?;
-                    }
-                    Err(err) => {
-                        return Err(Error::FailedToPlay {
-                            message: format!(
-                                "Failed to play playlsit {id}, {err}. Is the ID correct?"
-                            ),
-                        })
-                    }
-                },
-                UrlType::Track { id } => match self.client.track(id).await {
-                    Ok(track) => {
-                        self.play_track(track, Some(quality)).await?;
-                    }
-                    Err(err) => {
-                        return Err(Error::FailedToPlay {
-                            message: format!(
-                                "Failed to play track {id}, {err}. Is the ID correct?"
-                            ),
-                        })
-                    }
-                },
+                UrlType::Album { id } => {
+                    self.play_album(id, Some(quality)).await?;
+                }
+                UrlType::Playlist { id } => {
+                    self.play_playlist(id, Some(quality)).await?;
+                }
+                UrlType::Track { id } => {
+                    self.play_track(id, Some(quality)).await?;
+                }
             },
             Err(err) => {
                 return Err(Error::FailedToPlay {
@@ -518,7 +464,7 @@ impl Player {
     /// Plays all tracks in a playlist.
     pub async fn play_playlist(
         &self,
-        mut playlist: Playlist,
+        playlist_id: i64,
         quality: Option<AudioQuality>,
     ) -> Result<()> {
         let quality = if let Some(quality) = quality {
@@ -527,40 +473,32 @@ impl Player {
             self.client.quality()
         };
 
-        let mut tracklist = TrackListValue::new(playlist.to_tracklist(quality.clone()));
-        tracklist.set_playlist(playlist.clone());
-        tracklist.set_list_type(TrackListType::Playlist);
+        if let (Some(first_track), Some(tracklist)) = self
+            .state
+            .write()
+            .await
+            .play_playlist(playlist_id, quality)
+            .await
+        {
+            if let Some(t) = &first_track.track_url {
+                self.playbin.set_property("uri", Some(t.url.as_str()));
 
-        let mut first_track = tracklist.front().unwrap().clone();
-        first_track.status = TrackStatus::Playing;
+                if !self.is_playing() {
+                    self.play(true).await?;
+                }
 
-        tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrackList {
+                        list: tracklist.clone(),
+                    })
+                    .await?;
 
-        let mut state = self.state.write().await;
-        state.replace_list(tracklist.clone());
-
-        state.attach_track_url(&mut first_track).await;
-        state.set_current_track(first_track.clone());
-        state.set_target_status(GstState::Playing);
-
-        if let Some(t) = &first_track.track_url {
-            self.playbin.set_property("uri", Some(t.url.as_str()));
-
-            if !self.is_playing() {
-                self.play(true).await?;
+                self.notify_sender
+                    .broadcast(Notification::CurrentTrack {
+                        track: first_track.clone(),
+                    })
+                    .await?;
             }
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrackList {
-                    list: tracklist.clone(),
-                })
-                .await?;
-
-            self.notify_sender
-                .broadcast(Notification::CurrentTrack {
-                    track: first_track.clone(),
-                })
-                .await?;
         }
 
         Ok(())
@@ -694,19 +632,14 @@ pub async fn player_loop(
                     Action::Previous => player.skip(SkipDirection::Backward,None).await?,
                     Action::Stop => player.stop(true).await?,
                     Action::PlayAlbum { album_id } => {
-                        if let Ok(album) = client.album(&album_id).await {
-                            player.play_album(album, None).await?;
-                        }
+                        player.play_album(album_id, None).await?;
                     },
                     Action::PlayTrack { track_id } => {
-                        if let Ok(track) = client.track(track_id).await {
-                            player.play_track(track, None).await?;
-                        }
+                        player.play_track(track_id, None).await?;
                     },
                     Action::PlayUri { uri } => player.play_uri(uri, Some(client.quality())).await?,
                     Action::PlayPlaylist { playlist_id } => {
-                        let playlist = client.playlist(playlist_id).await?;
-                        player.play_playlist(playlist, Some(client.quality())).await?;
+                        player.play_playlist(playlist_id, Some(client.quality())).await?;
                     },
                     Action::Quit => safe_state.read().await.quit(),
                     Action::SkipTo { num } => player.skip_to(num).await?,
@@ -762,6 +695,11 @@ pub async fn player_loop(
                             state.set_duration(duration.clone());
 
                             player.notify_sender.broadcast(Notification::Duration { duration }).await?;
+                        }
+
+                        let target_status = safe_state.read().await.target_status();
+                        if player.current_state() != target_status {
+                            player.set_player_state(target_status.into(), false).await?;
                         }
                     }
                     MessageView::Buffering(buffering) => {

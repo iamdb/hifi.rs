@@ -132,6 +132,58 @@ impl PlayerState {
             (None, None)
         }
     }
+    pub async fn play_track(
+        &mut self,
+        track_id: i32,
+        quality: Option<AudioQuality>,
+    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
+        if let Ok(new_track) = self.client.track(track_id).await {
+            let mut track = TrackListTrack::new(new_track, Some(0), Some(1), quality, None);
+            track.status = TrackStatus::Playing;
+
+            let mut queue = VecDeque::new();
+            queue.push_front(track.clone());
+
+            let mut tracklist = TrackListValue::new(Some(queue));
+            tracklist.set_list_type(TrackListType::Track);
+
+            self.replace_list(tracklist.clone());
+
+            self.attach_track_url(&mut track).await;
+            self.set_current_track(track.clone());
+            self.set_target_status(GstState::Playing);
+
+            (Some(track), Some(tracklist))
+        } else {
+            (None, None)
+        }
+    }
+    pub async fn play_playlist(
+        &mut self,
+        playlist_id: i64,
+        quality: AudioQuality,
+    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
+        if let Ok(mut playlist) = self.client.playlist(playlist_id).await {
+            let mut tracklist = TrackListValue::new(playlist.to_tracklist(quality));
+            tracklist.set_playlist(playlist.clone());
+            tracklist.set_list_type(TrackListType::Playlist);
+
+            let mut first_track = tracklist.front().unwrap().clone();
+            first_track.status = TrackStatus::Playing;
+
+            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
+
+            self.replace_list(tracklist.clone());
+
+            self.attach_track_url(&mut first_track).await;
+            self.set_current_track(first_track.clone());
+            self.set_target_status(GstState::Playing);
+
+            (Some(first_track), Some(tracklist))
+        } else {
+            (None, None)
+        }
+    }
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
         self.active_screen = screen;
     }

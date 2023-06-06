@@ -132,6 +132,7 @@ pub async fn receive_notifications(
                         let position_secs = position.inner_clocktime().seconds();
 
                         if diff.num_seconds() != position_secs as i64 {
+                            debug!("mpris clock drift, sending new position");
                             iface.position_ts = chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
 
                             MprisPlayer::seeked(
