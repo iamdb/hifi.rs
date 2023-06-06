@@ -83,7 +83,7 @@ impl StatusValue {
             GstState::Paused => "Paused",
             GstState::Null => "Stopped",
             GstState::VoidPending => "Stopped",
-            GstState::Ready => "Stopped",
+            GstState::Ready => "Ready",
         }
     }
 }

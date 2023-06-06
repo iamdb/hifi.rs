@@ -96,6 +96,42 @@ impl From<PlayerState> for SavedState {
 }
 
 impl PlayerState {
+    pub async fn play_album(
+        &mut self,
+        album_id: String,
+        quality: Option<AudioQuality>,
+    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
+        if let Ok(mut album) = self.client.album(album_id.as_str()).await {
+            if album.tracks.is_none() {
+                album.attach_tracks(self.client.clone()).await;
+            }
+
+            let quality = if let Some(quality) = quality {
+                quality
+            } else {
+                self.client.quality()
+            };
+
+            let mut tracklist = TrackListValue::new(album.to_tracklist(quality.clone()));
+            tracklist.set_album(album.clone());
+            tracklist.set_list_type(TrackListType::Album);
+
+            let mut first_track = tracklist.front().unwrap().clone();
+            first_track.status = TrackStatus::Playing;
+
+            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
+
+            self.replace_list(tracklist.clone());
+
+            self.attach_track_url(&mut first_track).await;
+            self.set_current_track(first_track.clone());
+            self.set_target_status(GstState::Playing);
+
+            (Some(first_track), Some(tracklist))
+        } else {
+            (None, None)
+        }
+    }
     pub fn set_active_screen(&mut self, screen: ActiveScreen) {
         self.active_screen = screen;
     }

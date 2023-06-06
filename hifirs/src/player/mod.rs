@@ -66,7 +66,7 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
     playbin.set_property("connection-speed", 512000_u64);
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(10);
+    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(5);
     notify_sender.set_overflow(true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -309,23 +309,25 @@ impl Player {
         }
 
         if !self.is_ready() {
-            self.ready(true).await?;
+            self.ready(false).await?;
         }
 
         let mut state = self.state.write().await;
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
+            drop(state);
+
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
 
-                self.set_player_state(state.target_status().into(), true)
+                self.set_player_state(self.state.read().await.target_status().into(), false)
                     .await?;
 
                 self.notify_sender
                     .broadcast(Notification::CurrentTrackList {
-                        list: state.track_list(),
+                        list: self.state.read().await.track_list(),
                     })
                     .await?;
                 self.notify_sender
@@ -376,7 +378,7 @@ impl Player {
     /// Plays a single track.
     pub async fn play_track(&self, track: Track, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
-            self.ready(true).await?;
+            self.ready(false).await?;
         }
 
         let quality = if let Some(quality) = quality {
@@ -406,7 +408,7 @@ impl Player {
                 .set_property("uri", Some(track_url.url.to_string()));
 
             if !self.is_playing() {
-                self.play(true).await?;
+                self.play(false).await?;
             }
 
             self.notify_sender
@@ -423,42 +425,21 @@ impl Player {
         Ok(())
     }
     /// Plays a full album.
-    pub async fn play_album(&self, mut album: Album, quality: Option<AudioQuality>) -> Result<()> {
+    pub async fn play_album(&self, album: Album, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
-            self.ready(true).await?;
+            self.ready(false).await?;
         }
 
-        if album.tracks.is_none() {
-            album.attach_tracks(self.client.clone()).await;
-        }
-
-        let quality = if let Some(quality) = quality {
-            quality
-        } else {
-            self.client.quality()
-        };
-
-        let mut tracklist = TrackListValue::new(album.to_tracklist(quality.clone()));
-        tracklist.set_album(album.clone());
-        tracklist.set_list_type(TrackListType::Album);
-
-        let mut first_track = tracklist.front().unwrap().clone();
-        first_track.status = TrackStatus::Playing;
-
-        tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
-
-        let mut state = self.state.write().await;
-        state.replace_list(tracklist.clone());
-
-        state.attach_track_url(&mut first_track).await;
-        state.set_current_track(first_track.clone());
-        state.set_target_status(GstState::Playing);
-
-        if let Some(t) = &first_track.track_url {
-            self.playbin.set_property("uri", Some(t.url.as_str()));
+        if let (Some(track), Some(tracklist)) =
+            self.state.write().await.play_album(album.id, quality).await
+        {
+            if let Some(track_url) = &track.track_url {
+                self.playbin
+                    .set_property("uri", Some(track_url.url.clone()));
+            }
 
             if !self.is_playing() {
-                self.play(true).await?;
+                self.play(false).await?;
             }
 
             self.notify_sender
@@ -469,7 +450,7 @@ impl Player {
 
             self.notify_sender
                 .broadcast(Notification::CurrentTrack {
-                    track: first_track.clone(),
+                    track: track.clone(),
                 })
                 .await?;
 
@@ -480,10 +461,6 @@ impl Player {
     }
     /// Play an item from Qobuz web uri
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
-        if !self.is_ready() {
-            self.ready(true).await?;
-        }
-
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -786,8 +763,6 @@ pub async fn player_loop(
 
                             player.notify_sender.broadcast(Notification::Duration { duration }).await?;
                         }
-
-                        player.set_player_state(safe_state.read().await.target_status().into(), true).await?;
                     }
                     MessageView::Buffering(buffering) => {
                         if !safe_state.read().await.live() {
@@ -797,7 +772,7 @@ pub async fn player_loop(
                             debug!("buffering {}%", percent);
                             if percent < 100 && !safe_state.read().await.buffering() {
                                 if !player.is_paused() {
-                                    player.pause(true).await?;
+                                    player.pause(false).await?;
                                 }
 
                                 let mut state = safe_state.write().await;
@@ -811,7 +786,7 @@ pub async fn player_loop(
                                 player.notify_sender.broadcast(Notification::Buffering { is_buffering: false }).await?;
 
                                 if player.current_state() != state.target_status()  {
-                                    player.set_player_state(state.target_status().into(), true).await?;
+                                    player.set_player_state(state.target_status().into(), false).await?;
                                 }
                             }
                         }
@@ -834,6 +809,7 @@ pub async fn player_loop(
                         }
                     }
                     MessageView::ClockLost(_) => {
+                        debug!("clock lost, restarting playback");
                         let player = safe_player.read().await;
 
                         player.pause(true).await?;

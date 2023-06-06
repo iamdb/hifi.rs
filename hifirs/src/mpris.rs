@@ -2,6 +2,7 @@ use crate::{
     player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
     state::{app::SafePlayerState, ClockValue, StatusValue, TrackListValue},
 };
+use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::track::TrackListTrack;
 use std::collections::HashMap;
@@ -22,6 +23,7 @@ pub async fn init(controls: &Controls) -> Connection {
         status: GstState::Null.into(),
         current_track: None,
         position: ClockValue::default(),
+        position_ts: chrono::offset::Local::now(),
         total_tracks: 0,
         can_play: true,
         can_pause: true,
@@ -94,13 +96,18 @@ pub async fn receive_notifications(
                                     iface.can_play = true;
                                     iface.can_pause = true;
                                     iface.can_stop = false;
-
                                 },
                                 GstState::Paused => {
                                     iface.can_play = true;
                                     iface.can_pause = false;
                                     iface.can_stop = true;
                                 },
+                                GstState::Playing => {
+                                    iface.position_ts = chrono::offset::Local::now();
+                                    iface.can_play = true;
+                                    iface.can_pause = true;
+                                    iface.can_stop = true;
+                                }
                                 _ => {
                                     iface.can_play = true;
                                     iface.can_pause = true;
@@ -119,14 +126,22 @@ pub async fn receive_notifications(
                             .await
                             .expect("failed to get object server");
 
-                        iface_ref.get_mut().await.position = position.clone();
+                        let mut iface = iface_ref.get_mut().await;
+                        let now = chrono::offset::Local::now();
+                        let diff = now.signed_duration_since(iface.position_ts);
+                        let position_secs = position.inner_clocktime().seconds();
 
-                        MprisPlayer::seeked(
-                            iface_ref.signal_context(),
-                            position.inner_clocktime().useconds() as i64,
-                        )
-                        .await
-                        .expect("failed to send seeked signal");
+                        if diff.num_seconds() != position_secs as i64 {
+                            iface.position_ts = chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
+
+                            MprisPlayer::seeked(
+                                iface_ref.signal_context(),
+                                position.inner_clocktime().useconds() as i64,
+                            )
+                            .await
+                            .expect("failed to send seeked signal");
+                        }
+
                     },
                     Notification::Duration { duration: _ } => {
                         let iface_ref = object_server
@@ -235,6 +250,7 @@ pub struct MprisPlayer {
     controls: Controls,
     status: StatusValue,
     position: ClockValue,
+    position_ts: DateTime<Local>,
     current_track: Option<TrackListTrack>,
     total_tracks: usize,
     can_play: bool,
@@ -285,7 +301,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
-        debug!("dbus metadata");
+        debug!("signal metadata refresh");
         if let Some(current_track) = &self.current_track {
             track_to_meta(current_track.clone())
         } else {

@@ -1,5 +1,15 @@
-use crate::ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths};
+use crate::{
+    cursive::CursiveFormat,
+    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
+};
+use cursive::utils::markup::StyledString;
 use hifirs_qobuz_api::client::artist::{Artist, Artists};
+
+impl CursiveFormat for Artist {
+    fn list_item(&self) -> StyledString {
+        StyledString::plain(self.name.clone())
+    }
+}
 
 impl TableRows for Artists {
     fn rows(&self) -> Vec<Row> {

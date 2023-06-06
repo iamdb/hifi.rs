@@ -16,5 +16,5 @@ pub mod cursive;
 #[macro_use]
 pub mod sql;
 
-const REFRESH_RESOLUTION: u64 = 500;
+const REFRESH_RESOLUTION: u64 = 1000;
 pub const TEST_TEMP_PATH: &str = "/tmp/hifirs_test";
