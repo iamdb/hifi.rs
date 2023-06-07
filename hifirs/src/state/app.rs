@@ -404,24 +404,30 @@ impl PlayerState {
         };
 
         if let Some(index) = next_track_index {
-            self.tracklist
-                .queue
-                .iter_mut()
-                .for_each(|mut t| match t.index.cmp(&index) {
+            let mut current_track = self.current_track.clone();
+
+            for t in self.tracklist.queue.iter_mut() {
+                match t.index.cmp(&index) {
                     std::cmp::Ordering::Less => {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
                         t.status = TrackStatus::Playing;
+
+                        if let Ok(track_url) = self.client.track_url(t.track.id, None, None).await {
+                            t.set_track_url(track_url);
+                        }
+
                         self.current_track = Some(t.clone());
+                        current_track = Some(t.clone());
                     }
                     std::cmp::Ordering::Greater => {
                         t.status = TrackStatus::Unplayed;
                     }
-                });
+                }
+            }
 
-            self.attach_track_url_current().await;
-            self.current_track.clone()
+            current_track
         } else {
             debug!("no more tracks");
             None

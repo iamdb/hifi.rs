@@ -509,6 +509,7 @@ impl Player {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
+            drop(state);
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = &next_track.track_url {
                 self.playbin
