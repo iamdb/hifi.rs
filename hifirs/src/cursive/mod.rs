@@ -14,7 +14,7 @@ use cursive::{
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{
         Button, Dialog, EditView, LinearLayout, NamedView, OnEventView, PaddedView, Panel,
-        ProgressBar, ResizedView, ScreensView, ScrollView, SelectView, TextView,
+        ProgressBar, RadioGroup, ResizedView, ScreensView, ScrollView, SelectView, TextView,
     },
     CbSink, Cursive, CursiveRunnable, With,
 };
@@ -31,9 +31,7 @@ pub struct CursiveUI<'c> {
 
 impl<'c> CursiveUI<'c> {
     pub fn new(controls: &'c Controls, client: Client) -> Self {
-        let mut siv = cursive::default();
-
-        siv.set_autohide_menu(false);
+        let siv = cursive::default();
 
         Self {
             root: siv,
@@ -141,6 +139,25 @@ impl<'c> CursiveUI<'c> {
                     .scroll_y(true)
                     .with_name("current_track_list"),
             ))
+    }
+
+    fn nav(&self) -> ResizedView<LinearLayout> {
+        let mut radio_group: RadioGroup<i32> = RadioGroup::new();
+
+        radio_group.set_on_change(|s, item| {
+            s.call_on_name(
+                "screens",
+                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                    screens.set_active_screen(*item as usize);
+                },
+            );
+        });
+
+        LinearLayout::horizontal()
+            .child(radio_group.button(0, "Now Playing").full_width())
+            .child(radio_group.button(1, "My Playlists").full_width())
+            .child(radio_group.button(2, "Search").full_width())
+            .full_width()
     }
 
     pub fn global_events(&mut self) {
@@ -296,6 +313,7 @@ impl<'c> CursiveUI<'c> {
 
     fn search(&self) -> LinearLayout {
         let mut layout = LinearLayout::new(Orientation::Vertical);
+
         let c = self.controls.to_owned();
         let client = self.client.to_owned();
 
@@ -477,10 +495,14 @@ impl<'c> CursiveUI<'c> {
         screens.add_active_screen(player.full_width());
         screens.add_screen(my_playlists.full_width());
         screens.add_screen(search.full_width());
-        self.root.add_fullscreen_layer(screens.with_name("screens"));
+
+        let full_layout = LinearLayout::vertical()
+            .child(self.nav())
+            .child(screens.with_name("screens"));
+
+        self.root.add_fullscreen_layer(full_layout);
 
         self.global_events();
-        self.menubar();
         self.root.run();
     }
 
@@ -648,7 +670,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 } else {
                                     track_num.set_content(format!("{:02}", track.index));
                                 }
-                                track_title.set_content(track.track.title);
+                                track_title.set_content(track.track.title.trim());
                                 progress.set_max(track.track.duration as usize);
                             }
 
@@ -717,7 +739,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
 
                                     if let (Some(album), Some(mut entity_title)) = (list.get_album(), s.find_name::<TextView>("entity_title")) {
-                                        entity_title.set_content(album.title.clone());
+                                        entity_title.set_content(album.title.trim());
                                     }
                                     if let Some(mut total_tracks) = s.find_name::<TextView>("total_tracks") {
                                         total_tracks.set_content("00");
@@ -727,17 +749,17 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                             _ => {}
                         }
                     }
-                    Notification::Buffering { is_buffering } => {
-                        cb.send(Box::new(move |s| {
-                            s.call_on_name("player_panel", |panel: &mut Panel<LinearLayout>| {
-                                debug!("player_panel **************************");
-                                if is_buffering {
-                                    panel.set_title("player b");
-                                }else {
-                                    panel.set_title("player x");
-                                }
-                            });
-                        })).expect("failed to send update");
+                    Notification::Buffering { is_buffering: _ } => {
+                        // cb.send(Box::new(move |s| {
+                        //     s.call_on_name("player_panel", |panel: &mut Panel<LinearLayout>| {
+                        //         debug!("player_panel **************************");
+                        //         if is_buffering {
+                        //             panel.set_title("player b");
+                        //         }else {
+                        //             panel.set_title("player x");
+                        //         }
+                        //     });
+                        // })).expect("failed to send update");
                     },
                     Notification::Error { error: _ } => {
 

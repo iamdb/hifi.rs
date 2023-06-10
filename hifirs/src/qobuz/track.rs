@@ -14,11 +14,11 @@ use hifirs_qobuz_api::client::{
 
 impl CursiveFormat for Track {
     fn list_item(&self) -> StyledString {
-        let mut title = StyledString::styled(self.title.clone(), Effect::Bold);
+        let mut title = StyledString::styled(self.title.trim(), Effect::Bold);
 
         if let Some(performer) = &self.performer {
             title.append_plain(" by ");
-            title.append_plain(performer.name.clone());
+            title.append_plain(performer.name.trim());
         }
 
         let duration = ClockTime::from_seconds(self.duration as u64)

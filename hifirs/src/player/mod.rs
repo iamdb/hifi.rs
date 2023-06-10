@@ -49,6 +49,8 @@ pub struct Player {
     about_to_finish_rx: Receiver<bool>,
 }
 
+const USER_AGENTS: &[&str] = &["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"];
+
 type SafePlayer = Arc<RwLock<Player>>;
 
 pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -> Result<Player> {
@@ -57,17 +59,6 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
     let playbin = gst::ElementFactory::make("playbin3").build()?;
 
     playbin.set_property_from_str("flags", "audio+buffering");
-
-    playbin.connect("deep-notify::temp-location", false, |args| {
-        let download_buffer = args[1].get::<gst::Object>().unwrap();
-        debug!(
-            "Temporary file: {:?}",
-            download_buffer.property::<Option<String>>("temp-location")
-        );
-        // Uncomment this line to keep the temporary file after the program exists.
-        // download_buffer.set_property("temp-remove", false).ok();
-        None
-    });
 
     playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
@@ -84,16 +75,25 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
 
         if element.name().contains("souphttpsrc") {
             debug!("new source, changing settings");
-            element.set_property("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+            let ua = if rand::random() {
+                USER_AGENTS[0]
+            } else {
+                USER_AGENTS[1]
+            };
+            element.set_property("user-agent", ua);
             element.set_property("compress", true);
-            element.set_property("extra-headers", Structure::from_str("a-structure, DNT=1, Pragma=no-cache, Cache-Control=no-cache").expect("failed to make structure from string"))
+            element.set_property(
+                "extra-headers",
+                Structure::from_str("a-structure, DNT=1, Pragma=no-cache, Cache-Control=no-cache")
+                    .expect("failed to make structure from string"),
+            )
         }
 
         None
     });
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(3);
+    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(10);
     notify_sender.set_overflow(true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -180,10 +180,10 @@ impl Player {
 
         if self.is_playing() {
             state.set_target_status(GstState::Paused);
-            self.pause(true).await?;
+            self.pause(false).await?;
         } else if self.is_paused() || self.is_ready() {
             state.set_target_status(GstState::Playing);
-            self.play(true).await?;
+            self.play(false).await?;
         }
 
         Ok(())
@@ -409,7 +409,7 @@ impl Player {
     /// Plays a single track.
     pub async fn play_track(&self, track_id: i32, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
-            self.ready(false).await?;
+            self.ready(true).await?;
         }
 
         if let (Some(track_list_track), Some(tracklist)) =
@@ -440,7 +440,7 @@ impl Player {
     /// Plays a full album.
     pub async fn play_album(&self, album_id: String, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
-            self.ready(false).await?;
+            self.ready(true).await?;
         }
 
         if let (Some(track), Some(tracklist)) =
@@ -505,6 +505,10 @@ impl Player {
         playlist_id: i64,
         quality: Option<AudioQuality>,
     ) -> Result<()> {
+        if !self.is_ready() {
+            self.ready(true).await?;
+        }
+
         let quality = if let Some(quality) = quality {
             quality
         } else {
@@ -522,7 +526,7 @@ impl Player {
                 self.playbin.set_property("uri", Some(t.url.as_str()));
 
                 if !self.is_playing() {
-                    self.play(true).await?;
+                    self.play(false).await?;
                 }
 
                 self.notify_sender
@@ -669,11 +673,11 @@ pub async fn player_loop(
                     Action::JumpBackward => player.jump_backward().await?,
                     Action::JumpForward => player.jump_forward().await?,
                     Action::Next => player.skip(SkipDirection::Forward,None).await?,
-                    Action::Pause => player.pause(true).await?,
-                    Action::Play => player.play(true).await?,
+                    Action::Pause => player.pause(false).await?,
+                    Action::Play => player.play(false).await?,
                     Action::PlayPause => player.play_pause().await?,
                     Action::Previous => player.skip(SkipDirection::Backward,None).await?,
-                    Action::Stop => player.stop(true).await?,
+                    Action::Stop => player.stop(false).await?,
                     Action::PlayAlbum { album_id } => {
                         player.play_album(album_id, None).await?;
                     },
@@ -697,13 +701,6 @@ pub async fn player_loop(
 
                         if player.quit_when_done {
                             safe_state.read().await.quit();
-                        } else {
-                            // let mut state = safe_state.write().await;
-                            // state.set_target_status(GstState::Paused);
-                            // state.skip_track(Some(0), SkipDirection::Backward).await;
-                            // drop(state);
-
-                            // player.skip_to(0).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
