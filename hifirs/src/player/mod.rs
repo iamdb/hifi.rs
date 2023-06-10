@@ -13,12 +13,12 @@ use crate::{
 use flume::Receiver;
 use futures::prelude::*;
 use gst::{
-    bus::BusStream, ClockTime, Element, MessageView, SeekFlags, State as GstState,
-    StateChangeSuccess,
+    bus::BusStream, prelude::*, ClockTime, Element, MessageView, SeekFlags, State as GstState,
+    StateChangeSuccess, Structure,
 };
-use gstreamer::{self as gst, prelude::*};
+use gstreamer as gst;
 use hifirs_qobuz_api::client::{self, api::Client, AudioQuality, UrlType};
-use std::{sync::Arc, time::Duration};
+use std::{str::FromStr, sync::Arc, time::Duration};
 use tokio::{select, sync::RwLock};
 
 #[macro_use]
@@ -55,11 +55,45 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
     gst::init()?;
 
     let playbin = gst::ElementFactory::make("playbin3").build()?;
+
     playbin.set_property_from_str("flags", "audio+buffering");
-    playbin.set_property("connection-speed", 512000_u64);
+
+    playbin.connect("deep-notify::temp-location", false, |args| {
+        let download_buffer = args[1].get::<gst::Object>().unwrap();
+        debug!(
+            "Temporary file: {:?}",
+            download_buffer.property::<Option<String>>("temp-location")
+        );
+        // Uncomment this line to keep the temporary file after the program exists.
+        // download_buffer.set_property("temp-remove", false).ok();
+        None
+    });
+
+    playbin.connect("element-setup", false, |value| {
+        let element = &value[1].get::<gst::Element>().unwrap();
+
+        if element.name().contains("urisourcebin") {
+            element.set_property("parse-streams", true);
+        }
+
+        None
+    });
+
+    playbin.connect("source-setup", false, |value| {
+        let element = &value[1].get::<gst::Element>().unwrap();
+
+        if element.name().contains("souphttpsrc") {
+            debug!("new source, changing settings");
+            element.set_property("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36");
+            element.set_property("compress", true);
+            element.set_property("extra-headers", Structure::from_str("a-structure, DNT=1, Pragma=no-cache, Cache-Control=no-cache").expect("failed to make structure from string"))
+        }
+
+        None
+    });
 
     let (about_to_finish_tx, about_to_finish_rx) = flume::bounded::<bool>(1);
-    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(5);
+    let (mut notify_sender, notify_receiver) = async_broadcast::broadcast(3);
     notify_sender.set_overflow(true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -112,11 +146,19 @@ impl Player {
     }
     /// Sets the player to a specific state.
     pub async fn set_player_state(&self, state: gst::State, wait: bool) -> Result<()> {
-        let result = self.playbin.set_state(state)?;
+        let ret = self.playbin.set_state(state)?;
 
-        if result == StateChangeSuccess::NoPreroll {
-            debug!("*** LIVE STREAM ***");
-            self.state.write().await.set_live(true);
+        match ret {
+            StateChangeSuccess::Success => {
+                debug!("*** successful state change ***");
+            }
+            StateChangeSuccess::Async => {
+                debug!("*** async state change ***");
+            }
+            StateChangeSuccess::NoPreroll => {
+                debug!("*** stream is live ***");
+                self.state.write().await.set_live(true);
+            }
         }
 
         if wait {
@@ -187,10 +229,6 @@ impl Player {
         };
 
         self.playbin.seek_simple(flags, time.inner_clocktime())?;
-        self.notify_sender
-            .broadcast(Notification::Position { position: time })
-            .await?;
-
         Ok(())
     }
     /// Load the previous player state and seek to the last known position.
@@ -509,7 +547,6 @@ impl Player {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
-            drop(state);
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = &next_track.track_url {
                 self.playbin
@@ -538,23 +575,28 @@ impl Player {
 /// Inserts the most recent position into the state at a set interval.
 pub async fn clock_loop(safe_player: SafePlayer, safe_state: SafePlayerState) {
     let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
+    let mut last_position = ClockValue::default();
 
     loop {
         interval.tick().await;
 
         if safe_player.read().await.current_state() == GstState::Playing.into() {
             if let Some(position) = safe_player.read().await.position() {
-                let mut state = safe_state.write().await;
-                state.set_position(position.clone());
-                drop(state);
+                if position != last_position {
+                    last_position = position.clone();
 
-                safe_player
-                    .read()
-                    .await
-                    .notify_sender
-                    .broadcast(Notification::Position { position })
-                    .await
-                    .expect("failed to send notification");
+                    let mut state = safe_state.write().await;
+                    state.set_position(position.clone());
+                    drop(state);
+
+                    safe_player
+                        .read()
+                        .await
+                        .notify_sender
+                        .broadcast(Notification::Position { position })
+                        .await
+                        .expect("failed to send notification");
+                }
             }
         }
     }
@@ -656,12 +698,12 @@ pub async fn player_loop(
                         if player.quit_when_done {
                             safe_state.read().await.quit();
                         } else {
-                            let mut state = safe_state.write().await;
-                            state.set_target_status(GstState::Paused);
-                            state.skip_track(Some(0), SkipDirection::Backward).await;
-                            drop(state);
+                            // let mut state = safe_state.write().await;
+                            // state.set_target_status(GstState::Paused);
+                            // state.skip_track(Some(0), SkipDirection::Backward).await;
+                            // drop(state);
 
-                            player.skip_to(0).await?;
+                            // player.skip_to(0).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
@@ -697,36 +739,33 @@ pub async fn player_loop(
 
                             player.notify_sender.broadcast(Notification::Duration { duration }).await?;
                         }
-
-                        let target_status = safe_state.read().await.target_status();
-                        if player.current_state() != target_status {
-                            player.set_player_state(target_status.into(), false).await?;
-                        }
                     }
                     MessageView::Buffering(buffering) => {
-                        if !safe_state.read().await.live() {
-                            let player = safe_player.read().await;
-                            let percent = buffering.percent();
+                        if safe_state.read().await.live() {
+                            debug!("*** stream is live, ignore buffering ***");
+                            continue;
+                        }
+                        let player = safe_player.read().await;
+                        let percent = buffering.percent();
 
-                            debug!("buffering {}%", percent);
-                            if percent < 100 && !safe_state.read().await.buffering() {
-                                if !player.is_paused() {
-                                    player.pause(false).await?;
-                                }
+                        debug!("buffering {}%", percent);
+                        if percent < 100 && !safe_state.read().await.buffering() {
+                            if !player.is_paused() {
+                                player.pause(false).await?;
+                            }
 
-                                let mut state = safe_state.write().await;
-                                state.set_buffering(true);
+                            let mut state = safe_state.write().await;
+                            state.set_buffering(true);
 
-                                player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
-                            } else if percent > 99 {
-                                let mut state = safe_state.write().await;
-                                state.set_buffering(false);
+                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
+                        } else if percent > 99 && safe_state.read().await.buffering() {
+                            let mut state = safe_state.write().await;
+                            state.set_buffering(false);
 
-                                player.notify_sender.broadcast(Notification::Buffering { is_buffering: false }).await?;
+                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: false }).await?;
 
-                                if player.current_state() != state.target_status()  {
-                                    player.set_player_state(state.target_status().into(), false).await?;
-                                }
+                            if player.current_state() != state.target_status()  {
+                                player.set_player_state(state.target_status().into(), false).await?;
                             }
                         }
                     }
@@ -757,6 +796,10 @@ pub async fn player_loop(
                     MessageView::Error(err) => {
                         let player = safe_player.read().await;
                         player.notify_sender.broadcast(Notification::Error { error: err.into() }).await?;
+
+                        player.ready(true).await?;
+                        player.pause(true).await?;
+                        player.play(true).await?;
 
                         debug!(
                             "Error from {:?}: {} ({:?})",

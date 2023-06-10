@@ -712,6 +712,10 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                             }
                             TrackListType::Track => {
                                 cb.send(Box::new(move |s| {
+                                    if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
+                                        list_view.get_inner_mut().clear();
+                                    }
+
                                     if let (Some(album), Some(mut entity_title)) = (list.get_album(), s.find_name::<TextView>("entity_title")) {
                                         entity_title.set_content(album.title.clone());
                                     }

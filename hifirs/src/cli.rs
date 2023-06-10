@@ -347,10 +347,7 @@ pub async fn run() -> Result<(), Error> {
                     output!(results, output_format)
                 }
             } else {
-                let mut new_player =
-                    player::new(client.clone(), state.clone(), quit_when_done).await?;
-
-                new_player.resume(false).await?;
+                let new_player = player::new(client.clone(), state.clone(), quit_when_done).await?;
 
                 if no_tui {
                     wait!(state);
@@ -360,6 +357,15 @@ pub async fn run() -> Result<(), Error> {
 
                     let notify_receiver = new_player.notify_receiver();
                     let safe_player = new_player.safe();
+
+                    let s = safe_player.clone();
+                    tokio::spawn(async move {
+                        s.write()
+                            .await
+                            .resume(false)
+                            .await
+                            .expect("failed to resume");
+                    });
 
                     let conn = mpris::init(&controls).await;
 
