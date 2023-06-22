@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 use crate::{
     player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
@@ -13,8 +13,8 @@ use cursive::{
     utils::{markup::StyledString, Counter},
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{
-        Button, Dialog, EditView, LinearLayout, NamedView, OnEventView, PaddedView, Panel,
-        ProgressBar, RadioGroup, ResizedView, ScreensView, ScrollView, SelectView, TextView,
+        Button, Dialog, EditView, HideableView, LinearLayout, MenuPopup, NamedView, OnEventView,
+        PaddedView, Panel, ProgressBar, ResizedView, ScreensView, ScrollView, SelectView, TextView,
     },
     CbSink, Cursive, CursiveRunnable, With,
 };
@@ -127,37 +127,24 @@ impl<'c> CursiveUI<'c> {
             block_on(async { c.skip_to(*item).await });
         });
 
-        LinearLayout::new(Orientation::Vertical)
-            .child(
-                Panel::new(container.resized(SizeConstraint::Full, SizeConstraint::AtMost(10)))
-                    .title("player")
-                    .with_name("player_panel"),
-            )
-            .child(Panel::new(
+        let mut layout = LinearLayout::new(Orientation::Vertical).child(
+            Panel::new(container.resized(SizeConstraint::Full, SizeConstraint::AtMost(10)))
+                .title("player")
+                .with_name("player_panel"),
+        );
+
+        layout.add_child(Panel::new(
+            HideableView::new(
                 track_list
                     .scrollable()
                     .scroll_y(true)
+                    .scroll_x(true)
                     .with_name("current_track_list"),
-            ))
-    }
+            )
+            .visible(true),
+        ));
 
-    fn nav(&self) -> ResizedView<LinearLayout> {
-        let mut radio_group: RadioGroup<i32> = RadioGroup::new();
-
-        radio_group.set_on_change(|s, item| {
-            s.call_on_name(
-                "screens",
-                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                    screens.set_active_screen(*item as usize);
-                },
-            );
-        });
-
-        LinearLayout::horizontal()
-            .child(radio_group.button(0, "Now Playing").full_width())
-            .child(radio_group.button(1, "My Playlists").full_width())
-            .child(radio_group.button(2, "Search").full_width())
-            .full_width()
+        layout
     }
 
     pub fn global_events(&mut self) {
@@ -261,7 +248,7 @@ impl<'c> CursiveUI<'c> {
         user_playlists.set_on_submit(move |s: &mut Cursive, item: &i64| {
             if item == &0 {
                 s.call_on_name(
-                    "playlist_items",
+                    "user_playlist_items",
                     |view: &mut SelectView<(i32, Option<String>)>| {
                         view.clear();
                     },
@@ -277,7 +264,7 @@ impl<'c> CursiveUI<'c> {
             let c = c.clone();
             let client = client.clone();
 
-            submit_playlist(s, *item, client, c);
+            submit_playlist(s, *item, "user_playlist_items", client, c);
 
             s.call_on_name("play_button", |button: &mut Button| {
                 button.enable();
@@ -301,9 +288,10 @@ impl<'c> CursiveUI<'c> {
         list_layout.add_child(
             Panel::new(
                 playlist_items
-                    .with_name("playlist_items")
+                    .with_name("user_playlist_items")
                     .scrollable()
-                    .scroll_y(true),
+                    .scroll_y(true)
+                    .scroll_x(true),
             )
             .full_height(),
         );
@@ -397,8 +385,27 @@ impl<'c> CursiveUI<'c> {
                                 submit_playlist(
                                     s,
                                     item.parse::<i64>().expect("failed to parse string"),
+                                    "search_playlist_items",
                                     client,
                                     c,
+                                );
+
+                                s.call_on_name(
+                                    "results_panel",
+                                    |view: &mut HideableView<
+                                        ResizedView<Panel<NamedView<ScrollView<SelectView>>>>,
+                                    >| {
+                                        view.hide();
+                                    },
+                                );
+
+                                s.call_on_name(
+                                    "playlist_panel",
+                                    |view: &mut HideableView<
+                                        ResizedView<Panel<NamedView<ScrollView<SelectView>>>>,
+                                    >| {
+                                        view.unhide();
+                                    },
                                 );
                             });
                         }
@@ -439,44 +446,65 @@ impl<'c> CursiveUI<'c> {
         let search_results: NamedView<SelectView<String>> =
             SelectView::new().with_name("search_results");
 
+        let playlist_results: NamedView<SelectView<String>> =
+            SelectView::new().with_name("search_playlist_items");
+
         layout.add_child(search_form.title("search"));
         layout.add_child(search_type);
         layout.add_child(
-            Panel::new(
-                search_results
-                    .scrollable()
-                    .scroll_y(true)
-                    .with_name("results_scroll"),
+            HideableView::new(
+                Panel::new(
+                    search_results
+                        .scrollable()
+                        .scroll_y(true)
+                        .with_name("results_scroll"),
+                )
+                .full_height(),
             )
-            .with_name("results_panel")
-            .full_height(),
+            .with_name("results_panel"),
+        );
+
+        layout.add_child(
+            HideableView::new(
+                Panel::new(playlist_results.scrollable().scroll_y(true)).full_height(),
+            )
+            .hidden()
+            .with_name("playlist_panel"),
         );
 
         layout
     }
 
     pub fn menubar(&mut self) {
+        self.root.set_autohide_menu(false);
+
         self.root
             .menubar()
-            .add_leaf("Now Playing", |s| {
-                s.call_on_name(
-                    "screens",
-                    |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                        screens.set_active_screen(0);
-                    },
-                );
-            })
+            .add_leaf(
+                StyledString::styled("Now Playing", Effect::Underline),
+                |s| {
+                    s.call_on_name(
+                        "screens",
+                        |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                            screens.set_active_screen(0);
+                        },
+                    );
+                },
+            )
             .add_delimiter()
-            .add_leaf("My Playlists", |s| {
-                s.call_on_name(
-                    "screens",
-                    |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                        screens.set_active_screen(1);
-                    },
-                );
-            })
+            .add_leaf(
+                StyledString::styled("My Playlists", Effect::Underline),
+                |s| {
+                    s.call_on_name(
+                        "screens",
+                        |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                            screens.set_active_screen(1);
+                        },
+                    );
+                },
+            )
             .add_delimiter()
-            .add_leaf("Search", |s| {
+            .add_leaf(StyledString::styled("Search", Effect::Underline), |s| {
                 s.call_on_name(
                     "screens",
                     |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
@@ -496,12 +524,9 @@ impl<'c> CursiveUI<'c> {
         screens.add_screen(my_playlists.full_width());
         screens.add_screen(search.full_width());
 
-        let full_layout = LinearLayout::vertical()
-            .child(self.nav())
-            .child(screens.with_name("screens"));
+        self.root.add_fullscreen_layer(screens.with_name("screens"));
 
-        self.root.add_fullscreen_layer(full_layout);
-
+        self.menubar();
         self.global_events();
         self.root.run();
     }
@@ -511,11 +536,17 @@ impl<'c> CursiveUI<'c> {
     }
 }
 
-fn submit_playlist(s: &mut Cursive, item: i64, client: Client, controls: Controls) {
+fn submit_playlist(
+    s: &mut Cursive,
+    item: i64,
+    target_list: &str,
+    client: Client,
+    controls: Controls,
+) {
     if let Ok(playlist) = block_on(async { client.playlist(item).await }) {
         if let (Some(tracks), Some(mut playlist_items)) = (
             playlist.tracks,
-            s.find_name::<SelectView<(i32, Option<String>)>>("playlist_items"),
+            s.find_name::<SelectView<(i32, Option<String>)>>(target_list),
         ) {
             playlist_items.clear();
 
@@ -546,37 +577,37 @@ fn submit_playlist(s: &mut Cursive, item: i64, client: Client, controls: Control
 
 fn submit_artist(s: &mut Cursive, item: i32, client: Client, controls: Controls) {
     if let Ok(artist) = block_on(async { client.artist(item, Some(100)).await }) {
-        if let Some(albums) = &artist.albums {
-            let mut album_list: SelectView<String> = SelectView::new();
+        if let Some(mut albums) = artist.albums {
+            albums
+                .items
+                .sort_by_key(|a| a.release_date_original.clone());
 
-            for a in &albums.items {
+            let mut tree = cursive::menu::Tree::new();
+
+            for a in albums.items {
                 if !a.streamable {
                     continue;
                 }
 
-                album_list.add_item(a.list_item(), a.id.clone());
-
                 let c = controls.to_owned();
-                album_list.set_on_submit(move |s: &mut Cursive, item: &String| {
-                    block_on(async { c.play_album(item.clone()).await });
+                tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
+                    block_on(async { c.play_album(a.id.clone()).await });
 
-                    s.screen_mut().pop_layer();
+                    s.call_on_name(
+                        "screens",
+                        |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                            screens.set_active_screen(0);
+                        },
+                    );
                 });
             }
 
-            album_list.sort_by_label();
+            let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
 
-            let mut events = OnEventView::new(
-                album_list
-                    .popup()
-                    .scrollable()
-                    .show_scrollbars(false)
-                    .scroll_y(true),
-            );
-
-            events.set_on_pre_event(Event::Key(Key::Esc), |s| {
-                s.screen_mut().pop_layer();
-            });
+            let events = album_list
+                .scrollable()
+                .show_scrollbars(false)
+                .scroll_y(true);
 
             s.screen_mut().add_layer(events);
         }
@@ -588,6 +619,13 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
 
     if item.1.is_none() {
         block_on(async { c.play_track(item.0).await });
+
+        s.call_on_name(
+            "screens",
+            |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                screens.set_active_screen(0);
+            },
+        );
         return;
     }
 
@@ -596,6 +634,13 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
 
         let c = c.to_owned();
         block_on(async { c.play_track(item.0).await });
+
+        s.call_on_name(
+            "screens",
+            |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                screens.set_active_screen(0);
+            },
+        );
     };
 
     let album = move |s: &mut Cursive| {
@@ -604,6 +649,13 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
         let c = controls.to_owned();
         if let Some(album_id) = &item.1 {
             block_on(async { c.play_album(album_id.clone()).await });
+
+            s.call_on_name(
+                "screens",
+                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                    screens.set_active_screen(0);
+                },
+            );
         }
     };
 

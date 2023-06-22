@@ -423,7 +423,7 @@ fn track_to_meta(
     );
     meta.insert(
         "xesam:title",
-        zvariant::Value::new(playlist_track.track.title),
+        zvariant::Value::new(playlist_track.track.title.trim().to_string()),
     );
     meta.insert(
         "xesam:trackNumber",
@@ -438,17 +438,26 @@ fn track_to_meta(
     );
 
     if let Some(artist) = playlist_track.track.performer {
-        meta.insert("xesam:artist", zvariant::Value::new(artist.name));
+        meta.insert(
+            "xesam:artist",
+            zvariant::Value::new(artist.name.trim().to_string()),
+        );
     }
 
     if let Some(album) = playlist_track.album {
         meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
-        meta.insert("xesam:album", zvariant::Value::new(album.title));
+        meta.insert(
+            "xesam:album",
+            zvariant::Value::new(album.title.trim().to_string()),
+        );
         meta.insert(
             "xesam:albumArtist",
-            zvariant::Value::new(album.artist.name.clone()),
+            zvariant::Value::new(album.artist.name.trim().to_string()),
         );
-        meta.insert("xesam:artist", zvariant::Value::new(album.artist.name));
+        meta.insert(
+            "xesam:artist",
+            zvariant::Value::new(album.artist.name.trim().to_string()),
+        );
     }
 
     meta

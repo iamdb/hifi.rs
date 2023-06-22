@@ -82,6 +82,8 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
             };
             element.set_property("user-agent", ua);
             element.set_property("compress", true);
+            element.set_property("retries", 10);
+            element.set_property("timeout", 30_u32);
             element.set_property(
                 "extra-headers",
                 Structure::from_str("a-structure, DNT=1, Pragma=no-cache, Cache-Control=no-cache")
@@ -701,6 +703,8 @@ pub async fn player_loop(
 
                         if player.quit_when_done {
                             safe_state.read().await.quit();
+                        } else {
+                            player.notify_sender.broadcast(Notification::Status { status: player.current_state() }).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
