@@ -191,8 +191,8 @@ impl TableRows for TrackListValue {
 }
 
 impl TrackListValue {
+    #[instrument]
     pub fn new(queue: Option<VecDeque<TrackListTrack>>) -> TrackListValue {
-        debug!("creating tracklist");
         let queue = if let Some(q) = queue {
             q
         } else {
@@ -207,6 +207,7 @@ impl TrackListValue {
         }
     }
 
+    #[instrument]
     pub fn clear(&mut self) {
         self.list_type = TrackListType::Unknown;
         self.album = None;
@@ -214,6 +215,7 @@ impl TrackListValue {
         self.queue.clear();
     }
 
+    #[instrument]
     pub fn set_album(&mut self, album: Album) {
         debug!("setting tracklist album");
         self.album = Some(album);
@@ -221,27 +223,33 @@ impl TrackListValue {
         self.list_type = TrackListType::Album;
     }
 
+    #[instrument]
     pub fn get_album(&self) -> Option<&Album> {
         self.album.as_ref()
     }
 
+    #[instrument]
     pub fn set_playlist(&mut self, playlist: Playlist) {
         self.playlist = Some(playlist);
         self.list_type = TrackListType::Playlist;
     }
 
+    #[instrument]
     pub fn get_playlist(&self) -> Option<&Playlist> {
         self.playlist.as_ref()
     }
 
+    #[instrument]
     pub fn set_list_type(&mut self, list_type: TrackListType) {
         self.list_type = list_type;
     }
 
+    #[instrument]
     pub fn list_type(&self) -> &TrackListType {
         &self.list_type
     }
 
+    #[instrument]
     pub fn find_track(&self, track_id: usize) -> Option<TrackListTrack> {
         self.queue
             .iter()
@@ -249,10 +257,12 @@ impl TrackListValue {
             .cloned()
     }
 
+    #[instrument]
     pub fn find_track_by_index(&self, index: usize) -> Option<TrackListTrack> {
         self.queue.iter().find(|t| t.index == index).cloned()
     }
 
+    #[instrument]
     pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
         if let Some(track) = self
             .queue
@@ -263,6 +273,7 @@ impl TrackListValue {
         }
     }
 
+    #[instrument]
     pub fn unplayed_tracks(&self) -> Vec<&TrackListTrack> {
         self.queue
             .iter()
@@ -270,6 +281,7 @@ impl TrackListValue {
             .collect::<Vec<&TrackListTrack>>()
     }
 
+    #[instrument]
     pub fn played_tracks(&self) -> Vec<&TrackListTrack> {
         self.queue
             .iter()
@@ -277,6 +289,7 @@ impl TrackListValue {
             .collect::<Vec<&TrackListTrack>>()
     }
 
+    #[instrument]
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         let mut index: Option<usize> = None;
 
@@ -289,6 +302,7 @@ impl TrackListValue {
         index
     }
 
+    #[instrument]
     pub fn item_list<'a>(self, max_width: usize, dim: bool) -> Vec<Item<'a>> {
         self.queue
             .into_iter()

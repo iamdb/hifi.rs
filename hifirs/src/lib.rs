@@ -1,9 +1,10 @@
-extern crate pretty_env_logger;
+//extern crate pretty_env_logger;
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 #[macro_use]
 pub mod cli;
+#[cfg(target_os = "linux")]
 mod mpris;
 #[macro_use]
 mod player;

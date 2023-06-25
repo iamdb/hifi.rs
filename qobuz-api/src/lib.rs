@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
-extern crate pretty_env_logger;
+//extern crate pretty_env_logger;
 #[macro_use]
-extern crate log;
+extern crate tracing;
 
 pub mod client;
 

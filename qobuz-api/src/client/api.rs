@@ -752,8 +752,7 @@ pub enum OutputFormat {
 
 #[tokio::test]
 async fn can_use_methods() {
-    pretty_env_logger::init();
-
+    //pretty_env_logger::init();
     use insta::assert_yaml_snapshot;
 
     let creds = Credentials {

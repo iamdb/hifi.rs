@@ -33,8 +33,11 @@ snafu = "0.7"
 sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls", "sqlite", "all-types", "offline" ] }
 termion = "2"
 textwrap = "0.16"
-tokio = { version = "1.0", features = ["full"]}
+tokio = { version = "1.0", features = ["full"] }
 tokio-stream = "0.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-tracy = { version = "0.10", features = ["broadcast", "only-localhost"] } 
 ratatui = { version = "0.20", default-features = false, features = ["termion"] }
 url = "2.2"
 zbus = { version = "3", default-features = false, features = ["tokio"] }

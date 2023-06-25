@@ -1,6 +1,8 @@
+#[cfg(target_os = "linux")]
+use crate::mpris;
 use crate::{
     cursive::{self, CursiveUI},
-    mpris, player,
+    player,
     qobuz::{self, SearchResults},
     sql::db,
     state::app::PlayerState,
@@ -13,6 +15,8 @@ use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, prelude::*};
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -166,7 +170,11 @@ impl From<ui::Error> for Error {
 }
 
 pub async fn run() -> Result<(), Error> {
-    pretty_env_logger::init();
+    tracing_subscriber::registry()
+        .with(fmt::layer().compact().pretty())
+        .with(EnvFilter::from_env("HIFIRS_LOG"))
+        .init();
+    //pretty_env_logger::init();
     // PARSE CLI ARGS
     let cli = Cli::parse();
 
@@ -367,13 +375,16 @@ pub async fn run() -> Result<(), Error> {
                             .expect("failed to resume");
                     });
 
-                    let conn = mpris::init(&controls).await;
+                    #[cfg(target_os = "linux")]
+                    {
+                        let conn = mpris::init(&controls).await;
 
-                    let nr = notify_receiver.clone();
-                    let s = state.clone();
-                    tokio::spawn(async {
-                        mpris::receive_notifications(s, conn, nr).await;
-                    });
+                        let nr = notify_receiver.clone();
+                        let s = state.clone();
+                        tokio::spawn(async {
+                            mpris::receive_notifications(s, conn, nr).await;
+                        });
+                    }
 
                     let sink = tui.sink().await.clone();
                     tokio::spawn(async {
