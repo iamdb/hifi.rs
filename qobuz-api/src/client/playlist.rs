@@ -85,14 +85,18 @@ impl Playlist {
                 .iter()
                 .cloned()
                 .enumerate()
-                .map(|(i, t)| {
-                    TrackListTrack::new(
-                        t,
-                        Some(i + 1),
-                        Some(tracks.items.len()),
-                        Some(quality.clone()),
-                        None,
-                    )
+                .filter_map(|(i, t)| {
+                    if t.streamable {
+                        Some(TrackListTrack::new(
+                            t,
+                            Some(i + 1),
+                            Some(tracks.items.len()),
+                            Some(quality.clone()),
+                            None,
+                        ))
+                    } else {
+                        None
+                    }
                 })
                 .collect::<VecDeque<TrackListTrack>>()
         })

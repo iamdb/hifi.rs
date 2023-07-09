@@ -27,6 +27,8 @@ struct Cli {
     /// Qobuz client to sync to
     #[clap(short = 'q', long = "qobuz")]
     pub qobuz_playlist_id: i64,
+    #[clap(short = 'c', long = "check")]
+    pub check_existing: bool,
 }
 
 #[derive(Debug, Snafu)]
@@ -96,47 +98,81 @@ pub async fn run() -> Result<(), Error> {
 
     let qobuz_playlist = qobuz.playlist(cli.qobuz_playlist_id).await?;
 
-    let qobuz_isrcs = qobuz_playlist.irsc_list();
-    let missing_tracks = spotify_playlist.missing_tracks(qobuz_isrcs.clone());
-
-    let progress = ProgressBar::new(missing_tracks.len() as u64).with_prefix("syncing");
-    progress.set_style(
-        ProgressStyle::default_bar()
-            .template("{prefix} {wide_bar:.cyan/blue} [{pos}/{len}]")
-            .unwrap(),
-    );
-
-    prog.add(progress.clone());
-
-    spotify_prog.finish_and_clear();
-
-    for missing in missing_tracks {
-        if let Some(isrc) = missing.track.external_ids.get("isrc") {
-            let results = qobuz.search(isrc.to_lowercase()).await;
-            if !results.is_empty() {
-                if let Some(found) = results.get(0) {
+    if cli.check_existing {
+        if let Some(tracks) = qobuz_playlist.tracks() {
+            for existing_track in tracks.items {
+                if !existing_track.streamable {
                     qobuz
-                        .add_track(qobuz_playlist.id(), found.id.to_string())
-                        .await;
+                        .delete_track(qobuz_playlist.id(), vec![existing_track.id.to_string()])
+                        .await?;
 
-                    if missing.index < qobuz_playlist.track_count() {
-                        qobuz
-                            .update_track_position(
-                                qobuz_playlist.id(),
-                                found.id.to_string(),
-                                missing.index - 1,
-                            )
-                            .await?;
+                    if let (Some(isrc), Some(track_position)) =
+                        (existing_track.isrc, existing_track.position)
+                    {
+                        let results = qobuz.search(isrc.to_lowercase()).await;
+                        if !results.is_empty() {
+                            if let Some(found) = results.get(0) {
+                                qobuz
+                                    .add_track(qobuz_playlist.id(), found.id.to_string())
+                                    .await;
+
+                                qobuz
+                                    .update_track_position(
+                                        qobuz_playlist.id(),
+                                        found.id.to_string(),
+                                        track_position,
+                                    )
+                                    .await?;
+                            }
+                        }
                     }
                 }
             }
-            std::thread::sleep(Duration::from_millis(125));
+        }
+    } else {
+        let qobuz_isrcs = qobuz_playlist.irsc_list();
+        let missing_tracks = spotify_playlist.missing_tracks(qobuz_isrcs.clone());
+
+        let progress = ProgressBar::new(missing_tracks.len() as u64).with_prefix("syncing");
+        progress.set_style(
+            ProgressStyle::default_bar()
+                .template("{prefix} {wide_bar:.cyan/blue} [{pos}/{len}]")
+                .unwrap(),
+        );
+
+        prog.add(progress.clone());
+
+        spotify_prog.finish_and_clear();
+
+        for missing in missing_tracks {
+            if let Some(isrc) = missing.track.external_ids.get("isrc") {
+                let results = qobuz.search(isrc.to_lowercase()).await;
+                if !results.is_empty() {
+                    if let Some(found) = results.get(0) {
+                        qobuz
+                            .add_track(qobuz_playlist.id(), found.id.to_string())
+                            .await;
+
+                        if missing.index < qobuz_playlist.track_count() {
+                            qobuz
+                                .update_track_position(
+                                    qobuz_playlist.id(),
+                                    found.id.to_string(),
+                                    missing.index - 1,
+                                )
+                                .await?;
+                        }
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(125));
+            }
+
+            progress.inc(1);
         }
 
-        progress.inc(1);
+        progress.set_style(ProgressStyle::default_bar().template("{msg}").unwrap());
+        progress.finish_with_message("complete!");
     }
 
-    progress.set_style(ProgressStyle::default_bar().template("{msg}").unwrap());
-    progress.finish_with_message("complete!");
     Ok(())
 }

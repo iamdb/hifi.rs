@@ -1,6 +1,10 @@
 use crate::Isrc;
 use hifirs_qobuz_api::{
-    client::{api::Client, playlist::Playlist, track::Track},
+    client::{
+        api::Client,
+        playlist::Playlist,
+        track::{Track, Tracks},
+    },
     Credentials as QobuzCredentials,
 };
 use indicatif::ProgressBar;
@@ -52,7 +56,7 @@ impl<'q> Qobuz<'q> {
 
     pub async fn search(&self, query: String) -> Vec<Track> {
         self.progress.set_message(format!("{query} searching"));
-        let results = self.client.search_all(query.clone()).await.unwrap();
+        let results = self.client.search_all(query.clone(), 100).await.unwrap();
 
         if results.tracks.items.is_empty() {
             self.progress.set_message(format!("{query} not found"));
@@ -90,6 +94,18 @@ impl<'q> Qobuz<'q> {
 
         Ok(())
     }
+
+    pub async fn delete_track(
+        &self,
+        playlist_id: String,
+        playlist_track_ids: Vec<String>,
+    ) -> hifirs_qobuz_api::Result<()> {
+        self.client
+            .playlist_delete_track(playlist_id, playlist_track_ids)
+            .await?;
+
+        Ok(())
+    }
 }
 
 pub struct QobuzPlaylist(Playlist);
@@ -109,6 +125,10 @@ impl QobuzPlaylist {
         } else {
             HashSet::new()
         }
+    }
+
+    pub fn tracks(&self) -> Option<Tracks> {
+        self.0.tracks.clone()
     }
 
     pub fn id(&self) -> String {

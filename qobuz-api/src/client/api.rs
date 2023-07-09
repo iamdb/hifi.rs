@@ -455,9 +455,10 @@ impl Client {
         get!(self, endpoint, Some(params))
     }
 
-    pub async fn search_all(&self, query: String) -> Result<SearchAllResults> {
+    pub async fn search_all(&self, query: String, limit: i32) -> Result<SearchAllResults> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
-        let params = vec![("query", query.as_str()), ("limit", "500")];
+        let limit = limit.to_string();
+        let params = vec![("query", query.as_str()), ("limit", &limit)];
 
         get!(self, endpoint, Some(params))
     }
@@ -752,8 +753,7 @@ pub enum OutputFormat {
 
 #[tokio::test]
 async fn can_use_methods() {
-    pretty_env_logger::init();
-
+    //pretty_env_logger::init();
     use insta::assert_yaml_snapshot;
 
     let creds = Credentials {

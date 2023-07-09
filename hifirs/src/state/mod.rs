@@ -1,17 +1,11 @@
 pub mod app;
 
-use crate::ui::components::{Item, Row, TableRow, TableRows};
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use hifirs_qobuz_api::client::{
     album::Album,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
-};
-use ratatui::{
-    style::{Color, Modifier, Style},
-    text::Text,
-    widgets::ListItem,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -83,7 +77,7 @@ impl StatusValue {
             GstState::Paused => "Paused",
             GstState::Null => "Stopped",
             GstState::VoidPending => "Stopped",
-            GstState::Ready => "Stopped",
+            GstState::Ready => "Ready",
         }
     }
 }
@@ -173,26 +167,9 @@ pub struct TrackListValue {
     list_type: TrackListType,
 }
 
-impl TableRows for TrackListValue {
-    fn rows(&self) -> Vec<Row> {
-        let mut rows = self.unplayed_tracks();
-        rows.append(&mut self.played_tracks());
-
-        rows.iter()
-            .filter_map(|t| {
-                if t.status != TrackStatus::Playing {
-                    Some(t.row())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Row>>()
-    }
-}
-
 impl TrackListValue {
+    #[instrument]
     pub fn new(queue: Option<VecDeque<TrackListTrack>>) -> TrackListValue {
-        debug!("creating tracklist");
         let queue = if let Some(q) = queue {
             q
         } else {
@@ -207,6 +184,7 @@ impl TrackListValue {
         }
     }
 
+    #[instrument]
     pub fn clear(&mut self) {
         self.list_type = TrackListType::Unknown;
         self.album = None;
@@ -214,6 +192,7 @@ impl TrackListValue {
         self.queue.clear();
     }
 
+    #[instrument]
     pub fn set_album(&mut self, album: Album) {
         debug!("setting tracklist album");
         self.album = Some(album);
@@ -221,27 +200,33 @@ impl TrackListValue {
         self.list_type = TrackListType::Album;
     }
 
+    #[instrument]
     pub fn get_album(&self) -> Option<&Album> {
         self.album.as_ref()
     }
 
+    #[instrument]
     pub fn set_playlist(&mut self, playlist: Playlist) {
         self.playlist = Some(playlist);
         self.list_type = TrackListType::Playlist;
     }
 
+    #[instrument]
     pub fn get_playlist(&self) -> Option<&Playlist> {
         self.playlist.as_ref()
     }
 
+    #[instrument]
     pub fn set_list_type(&mut self, list_type: TrackListType) {
         self.list_type = list_type;
     }
 
+    #[instrument]
     pub fn list_type(&self) -> &TrackListType {
         &self.list_type
     }
 
+    #[instrument]
     pub fn find_track(&self, track_id: usize) -> Option<TrackListTrack> {
         self.queue
             .iter()
@@ -249,10 +234,12 @@ impl TrackListValue {
             .cloned()
     }
 
+    #[instrument]
     pub fn find_track_by_index(&self, index: usize) -> Option<TrackListTrack> {
         self.queue.iter().find(|t| t.index == index).cloned()
     }
 
+    #[instrument]
     pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
         if let Some(track) = self
             .queue
@@ -263,6 +250,7 @@ impl TrackListValue {
         }
     }
 
+    #[instrument]
     pub fn unplayed_tracks(&self) -> Vec<&TrackListTrack> {
         self.queue
             .iter()
@@ -270,6 +258,7 @@ impl TrackListValue {
             .collect::<Vec<&TrackListTrack>>()
     }
 
+    #[instrument]
     pub fn played_tracks(&self) -> Vec<&TrackListTrack> {
         self.queue
             .iter()
@@ -277,6 +266,7 @@ impl TrackListValue {
             .collect::<Vec<&TrackListTrack>>()
     }
 
+    #[instrument]
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         let mut index: Option<usize> = None;
 
@@ -289,27 +279,7 @@ impl TrackListValue {
         index
     }
 
-    pub fn item_list<'a>(self, max_width: usize, dim: bool) -> Vec<Item<'a>> {
-        self.queue
-            .into_iter()
-            .map(|t| {
-                let title = textwrap::wrap(
-                    format!("{:02} {}", t.track.track_number, t.track.title).as_str(),
-                    max_width,
-                )
-                .join("\n   ");
-
-                let mut style = Style::default().fg(Color::White);
-
-                if dim {
-                    style = style.add_modifier(Modifier::DIM);
-                }
-
-                ListItem::new(Text::raw(title)).style(style).into()
-            })
-            .collect::<Vec<Item>>()
-    }
-
+    #[instrument]
     pub fn vec(&self) -> VecDeque<TrackListTrack> {
         self.queue.clone()
     }
@@ -355,5 +325,12 @@ impl TrackListValue {
 
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
+    }
+
+    pub fn cursive_list(&self) -> Vec<(String, i32)> {
+        self.queue
+            .iter()
+            .map(|i| (i.track.title.clone(), i.track.id))
+            .collect::<Vec<(String, i32)>>()
     }
 }

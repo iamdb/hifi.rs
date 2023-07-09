@@ -71,14 +71,18 @@ impl Album {
             t.items
                 .iter()
                 .enumerate()
-                .map(|(i, t)| {
-                    TrackListTrack::new(
-                        t.clone(),
-                        Some(i),
-                        Some(self.tracks_count as usize),
-                        Some(quality.clone()),
-                        Some(self.clone()),
-                    )
+                .filter_map(|(i, t)| {
+                    if t.streamable {
+                        Some(TrackListTrack::new(
+                            t.clone(),
+                            Some(i),
+                            Some(self.tracks_count as usize),
+                            Some(quality.clone()),
+                            Some(self.clone()),
+                        ))
+                    } else {
+                        None
+                    }
                 })
                 .collect::<VecDeque<TrackListTrack>>()
         })
