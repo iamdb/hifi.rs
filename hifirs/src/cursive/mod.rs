@@ -9,7 +9,7 @@ use cursive::{
     direction::Orientation,
     event::{Event, Key},
     reexports::crossbeam_channel::Sender,
-    theme::{BorderStyle, Effect, Palette, ColorType, Style},
+    theme::{BorderStyle, Effect, Palette,  Style},
     utils::{markup::StyledString, Counter},
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{

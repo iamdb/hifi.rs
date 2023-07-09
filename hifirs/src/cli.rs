@@ -101,9 +101,29 @@ pub enum ApiCommands {
         #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
     },
+    Album {
+        #[clap(value_parser)]
+        id: String,
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
+    },
+    Artist {
+        #[clap(value_parser)]
+        id: i32,
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
+    },
+    Track {
+        #[clap(value_parser)]
+        id: i32,
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
+    },
     /// Retreive information about a specific playlist.
     Playlist {
-        playlist_id: i64,
+        #[clap(value_parser)]
+        id: i64,
+        #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
     },
 }
@@ -225,7 +245,7 @@ pub async fn run() -> Result<(), Error> {
         Commands::Open {  } => {
             let (_player, mut tui) = setup_player(
                 data.to_owned(),
-                cli.quit_when_done.unwrap_or(false),
+                quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
             )
@@ -238,7 +258,7 @@ pub async fn run() -> Result<(), Error> {
         Commands::Play { url, quality } => {
             let (player, mut tui) = setup_player(
                 data.to_owned(),
-                cli.quit_when_done.unwrap_or(false),
+                quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
             )
@@ -256,7 +276,7 @@ pub async fn run() -> Result<(), Error> {
         } => {
             let (player, mut tui) = setup_player(
                 data.to_owned(),
-                cli.quit_when_done.unwrap_or(false),
+                quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
             )
@@ -278,7 +298,7 @@ pub async fn run() -> Result<(), Error> {
         } => {
             let (player, mut tui) = setup_player(
                 data.to_owned(),
-                cli.quit_when_done.unwrap_or(false),
+                quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
             )
@@ -295,11 +315,11 @@ pub async fn run() -> Result<(), Error> {
             Ok(())
         }
         Commands::Api { command } => { 
-        match command {
-            ApiCommands::Search {
-                    query,
-                    limit,
-                    output_format,
+            match command {
+                ApiCommands::Search {
+                        query,
+                        limit,
+                        output_format,
                 } => {
                     let client = qobuz::make_client(cli.username, cli.password, &data).await?;
                     let results = client.search_all(query, limit.unwrap_or_default()).await?;
@@ -334,17 +354,38 @@ pub async fn run() -> Result<(), Error> {
                     Ok(())
                 },
                 ApiCommands::Playlist {
-                    playlist_id,
+                    id,
                     output_format,
                 } => {
                     let client = qobuz::make_client(cli.username, cli.password, &data).await?;
 
-                    let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
+                    let results = client.playlist(id).await?;
                     output!(results, output_format);
                     Ok(())
                 }
-                    }
-                } 
+                ApiCommands::Album { id, output_format } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                    let results = client.album(&id).await?;
+                    output!(results, output_format);
+                    Ok(())
+                },
+                ApiCommands::Artist { id, output_format } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                    let results = client.artist(id, Some(500)).await?;
+                    output!(results, output_format);
+                    Ok(())
+                },
+                ApiCommands::Track { id, output_format } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                    let results = client.track(id).await?;
+                    output!(results, output_format);
+                    Ok(())
+                },
+            }
+        } 
         Commands::Reset => {
             data.clear_state().await;
             Ok(())
