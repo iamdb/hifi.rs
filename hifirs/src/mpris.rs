@@ -14,7 +14,7 @@ pub struct Mpris {
     controls: Controls,
 }
 
-pub async fn init(controls: &Controls) -> Connection {
+pub async fn init(controls: Controls) -> Connection {
     let mpris = Mpris {
         controls: controls.clone(),
     };
@@ -32,7 +32,7 @@ pub async fn init(controls: &Controls) -> Connection {
         can_previous: true,
     };
     let mpris_tracklist = MprisTrackList {
-        controls: controls.clone(),
+        controls,
         track_list: TrackListValue::new(None),
     };
 

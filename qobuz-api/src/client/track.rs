@@ -29,6 +29,7 @@ pub struct Track {
     pub parental_warning: bool,
     pub performer: Option<Performer>,
     pub performers: Option<String>,
+    pub position: Option<usize>,
     pub previewable: bool,
     pub purchasable: bool,
     pub purchasable_at: Option<i64>,
@@ -71,6 +72,7 @@ pub enum TrackStatus {
     Playing,
     #[default]
     Unplayed,
+    Unplayable,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -94,6 +96,11 @@ impl TrackListTrack {
     ) -> Self {
         let index = if let Some(index) = index { index } else { 0 };
         let total = if let Some(total) = total { total } else { 1 };
+        let status = if track.streamable {
+            TrackStatus::Unplayed
+        } else {
+            TrackStatus::Unplayable
+        };
 
         TrackListTrack {
             index,
@@ -102,7 +109,7 @@ impl TrackListTrack {
             quality,
             track_url: None,
             album,
-            status: TrackStatus::Unplayed,
+            status,
         }
     }
 

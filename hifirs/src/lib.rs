@@ -11,8 +11,6 @@ mod player;
 mod qobuz;
 #[macro_use]
 pub mod state;
-#[macro_use]
-pub mod ui;
 pub mod cursive;
 #[macro_use]
 pub mod sql;

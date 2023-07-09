@@ -17,42 +17,43 @@ jobs:
       - uses: taiki-e/create-gh-release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
   build-upload:
     name: Build, package and publish
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
         rust: [stable]
     env:
       RUST_BACKTRACE: full
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-      with:
-        shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
-    - name: Install gstreamer (ubuntu-latest)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y musl-tools pkg-config libunwind-dev libgstreamer1.0-dev
-    - name: Install gstreamer (macos-latest)
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew update
-        brew install gstreamer
-    - name: Install Rust Toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        components: rustfmt, clippy
-    - uses: taiki-e/upload-rust-binary-action@v1
-      env:
-        QOBUZ_USERNAME: ""
-        QOBUZ_PASSWORD: ""
-      with:
-        bin: hifi-rs
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install gstreamer (ubuntu-latest)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools pkg-config libunwind-dev libgstreamer1.0-dev
+      - name: Install gstreamer (macos-latest)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly
+      - name: Install Rust Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: taiki-e/upload-rust-binary-action@v1
+        env:
+          QOBUZ_USERNAME: ""
+          QOBUZ_PASSWORD: ""
+        with:
+          bin: hifi-rs
+          token: ${{ secrets.GITHUB_TOKEN }}

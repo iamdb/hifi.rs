@@ -1,17 +1,11 @@
 pub mod app;
 
-use crate::ui::components::{Item, Row, TableRow, TableRows};
 use gst::{ClockTime, State as GstState};
 use gstreamer as gst;
 use hifirs_qobuz_api::client::{
     album::Album,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
-};
-use ratatui::{
-    style::{Color, Modifier, Style},
-    text::Text,
-    widgets::ListItem,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -173,23 +167,6 @@ pub struct TrackListValue {
     list_type: TrackListType,
 }
 
-impl TableRows for TrackListValue {
-    fn rows(&self) -> Vec<Row> {
-        let mut rows = self.unplayed_tracks();
-        rows.append(&mut self.played_tracks());
-
-        rows.iter()
-            .filter_map(|t| {
-                if t.status != TrackStatus::Playing {
-                    Some(t.row())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<Row>>()
-    }
-}
-
 impl TrackListValue {
     #[instrument]
     pub fn new(queue: Option<VecDeque<TrackListTrack>>) -> TrackListValue {
@@ -303,27 +280,6 @@ impl TrackListValue {
     }
 
     #[instrument]
-    pub fn item_list<'a>(self, max_width: usize, dim: bool) -> Vec<Item<'a>> {
-        self.queue
-            .into_iter()
-            .map(|t| {
-                let title = textwrap::wrap(
-                    format!("{:02} {}", t.track.track_number, t.track.title).as_str(),
-                    max_width,
-                )
-                .join("\n   ");
-
-                let mut style = Style::default().fg(Color::White);
-
-                if dim {
-                    style = style.add_modifier(Modifier::DIM);
-                }
-
-                ListItem::new(Text::raw(title)).style(style).into()
-            })
-            .collect::<Vec<Item>>()
-    }
-
     pub fn vec(&self) -> VecDeque<TrackListTrack> {
         self.queue.clone()
     }

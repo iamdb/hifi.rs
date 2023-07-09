@@ -2,11 +2,10 @@
 use crate::mpris;
 use crate::{
     cursive::{self, CursiveUI},
-    player,
+    player::{self, Player},
     qobuz::{self, SearchResults},
-    sql::db,
+    sql::db::{self, Database},
     state::app::PlayerState,
-    switch_screen, ui, wait,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -37,17 +36,44 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Resume previous session
-    Resume {
-        #[clap(long, short)]
-        no_tui: bool,
-    },
+    /// Open the player
+    Open {},
+    /// Play an Qobuz entity using the url.
     Play {
         #[clap(long, short)]
-        no_tui: bool,
-        #[clap(long, short)]
-        uri: String,
+        url: String,
+        #[clap(short, long, value_enum)]
+        quality: Option<AudioQuality>,
     },
+    /// Stream an individual track by its ID.
+    StreamTrack {
+        #[clap(value_parser)]
+        track_id: i32,
+        #[clap(short, long, value_enum)]
+        quality: Option<AudioQuality>,
+    },
+    /// Stream a full album by its ID.
+    StreamAlbum {
+        #[clap(value_parser)]
+        album_id: String,
+        #[clap(short, long, value_enum)]
+        quality: Option<AudioQuality>,
+    },
+    Api {
+        #[clap(subcommand)]
+        command: ApiCommands
+    },
+    /// Reset the player state
+    Reset,
+    /// Set configuration options
+    Config {
+        #[clap(subcommand)]
+        command: ConfigCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ApiCommands {
     /// Search for tracks, albums, artists and playlists
     Search {
         #[clap(value_parser)]
@@ -61,60 +87,24 @@ enum Commands {
     SearchAlbums {
         #[clap(value_parser)]
         query: String,
-        #[clap(short, long = "output", value_enum)]
-        output_format: Option<OutputFormat>,
-        #[clap(long, short)]
-        no_tui: bool,
         #[clap(long, short)]
         limit: Option<i32>,
+        #[clap(short, long = "output", value_enum)]
+        output_format: Option<OutputFormat>,
     },
     /// Search for artists in the Qobuz database
     SearchArtists {
         #[clap(value_parser)]
         query: String,
-        #[clap(short, long = "output", value_enum)]
-        output_format: Option<OutputFormat>,
-        #[clap(long, short)]
-        no_tui: bool,
         #[clap(long, short)]
         limit: Option<i32>,
-    },
-    /// Stream an individual track by its ID.
-    StreamTrack {
-        #[clap(value_parser)]
-        track_id: i32,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
-        #[clap(short, long)]
-        no_tui: bool,
-    },
-    /// Stream a full album by its ID.
-    StreamAlbum {
-        #[clap(value_parser)]
-        album_id: String,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
-        #[clap(short, long)]
-        no_tui: bool,
-    },
-    /// Retreive a list of your playlsits.
-    MyPlaylists {
         #[clap(short, long = "output", value_enum)]
         output_format: Option<OutputFormat>,
-        #[clap(short, long)]
-        no_tui: bool,
     },
     /// Retreive information about a specific playlist.
     Playlist {
         playlist_id: i64,
         output_format: Option<OutputFormat>,
-    },
-    /// Reset the player state
-    Reset,
-    /// Set configuration options
-    Config {
-        #[clap(subcommand)]
-        command: ConfigCommands,
     },
 }
 
@@ -161,12 +151,51 @@ impl From<player::error::Error> for Error {
     }
 }
 
-impl From<ui::Error> for Error {
-    fn from(error: ui::Error) -> Self {
-        Error::TerminalError {
-            error: error.to_string(),
-        }
+async fn setup_player<'s>(
+    database: Database,
+    quit_when_done: bool,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<(Arc<RwLock<Player>>, CursiveUI), Error> {
+    let client = qobuz::make_client(username, password, &database).await?;
+    let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), database)));
+
+    let new_player = player::new(client.clone(), state.clone(), quit_when_done).await?;
+
+    let notify_receiver = new_player.notify_receiver();
+    let safe_player = new_player.safe();
+
+    let controls = safe_player.read().await.controls();
+    let tui = CursiveUI::new(controls, client.clone());
+
+    let s = safe_player.clone();
+    tokio::spawn(async move {
+        s.write()
+            .await
+            .resume(false)
+            .await
+            .expect("failed to resume");
+    });
+
+    #[cfg(target_os = "linux")]
+    {
+        let controls = safe_player.read().await.controls();
+        let conn = mpris::init(controls).await;
+
+        let nr = notify_receiver.clone();
+        let s = state.clone();
+        tokio::spawn(async {
+            mpris::receive_notifications(s, conn, nr).await;
+        });
     }
+
+    let sink = tui.sink().await.clone();
+    tokio::spawn(async { cursive::receive_notifications(sink, notify_receiver).await });
+
+    let p = safe_player.clone();
+    tokio::spawn(async { player::player_loop(p, client, state).await });
+
+    Ok((safe_player, tui))
 }
 
 pub async fn run() -> Result<(), Error> {
@@ -193,296 +222,129 @@ pub async fn run() -> Result<(), Error> {
 
     // CLI COMMANDS
     match cli.command {
-        Commands::Resume { no_tui } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
-            let safe_player = player::new(client.clone(), state, quit_when_done)
-                .await?
-                .safe();
+        Commands::Open {  } => {
+            let (_player, mut tui) = setup_player(
+                data.to_owned(),
+                cli.quit_when_done.unwrap_or(false),
+                cli.username.to_owned(),
+                cli.password.to_owned(),
+            )
+            .await?;
 
-            let mut new_player = safe_player.write().await;
-
-            new_player.resume(true).await?;
-
-            if no_tui {
-                wait!(new_player.state());
-            } else {
-                let mut tui = ui::new(
-                    new_player.state(),
-                    new_player.controls().clone(),
-                    client,
-                    None,
-                    None,
-                )
-                .await?;
-                tui.event_loop().await?;
-            }
+            tui.run().await;
 
             Ok(())
         }
-        Commands::Play { uri, no_tui } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
-            let safe_player = player::new(client.clone(), state, quit_when_done)
-                .await?
-                .safe();
+        Commands::Play { url, quality } => {
+            let (player, mut tui) = setup_player(
+                data.to_owned(),
+                cli.quit_when_done.unwrap_or(false),
+                cli.username.to_owned(),
+                cli.password.to_owned(),
+            )
+            .await?;
 
-            let new_player = safe_player.write().await;
+            player.read_owned().await.play_uri(url, quality).await?;
 
-            new_player.play_uri(uri, Some(client.quality())).await?;
+            tui.run().await;
 
-            if no_tui {
-                wait!(new_player.state());
-            } else {
-                let mut tui = ui::new(
-                    new_player.state(),
-                    new_player.controls().clone(),
-                    client,
-                    None,
-                    None,
-                )
-                .await?;
-                tui.event_loop().await?;
-            }
-            Ok(())
-        }
-        #[allow(unused_variables)]
-        Commands::Search {
-            query,
-            limit,
-            output_format,
-        } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-            match client.search_all(query).await {
-                Ok(results) => {
-                    let json = serde_json::to_string(&results).expect("failed to convert json");
-                    print!("{}", json);
-                    Ok(())
-                }
-                Err(error) => Err(Error::ClientError {
-                    error: error.to_string(),
-                }),
-            }
-        }
-        Commands::SearchAlbums {
-            query,
-            limit,
-            output_format,
-            no_tui,
-        } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
-
-            let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
-
-            if no_tui {
-                output!(results, output_format);
-            } else {
-                let safe_player = player::new(client.clone(), state, quit_when_done)
-                    .await?
-                    .safe();
-                //let mut player = safe_player.write().await;
-
-                //player.resume(false).await?;
-
-                if no_tui {
-                    wait!(safe_player.read().await.state());
-                } else {
-                    let mut tui = ui::new(
-                        safe_player.read().await.state(),
-                        safe_player.read().await.controls().clone(),
-                        client,
-                        Some(results),
-                        Some(query),
-                    )
-                    .await?;
-                    tui.event_loop().await?;
-                }
-            }
-
-            Ok(())
-        }
-        Commands::SearchArtists {
-            query,
-            limit,
-            output_format,
-            no_tui,
-        } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
-
-            let results =
-                SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
-
-            if no_tui {
-                output!(results, output_format);
-            } else {
-                let safe_player = player::new(client.clone(), state, quit_when_done)
-                    .await?
-                    .safe();
-                let mut new_player = safe_player.write().await;
-
-                new_player.resume(false).await?;
-
-                if no_tui {
-                    wait!(new_player.state());
-                } else {
-                    let mut tui = ui::new(
-                        new_player.state(),
-                        new_player.controls().clone(),
-                        client,
-                        Some(results),
-                        Some(query),
-                    )
-                    .await?;
-                    tui.event_loop().await?;
-                }
-            }
-
-            Ok(())
-        }
-        Commands::MyPlaylists {
-            no_tui,
-            output_format,
-        } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
-
-            if output_format.is_some() {
-                if let Ok(playlists) = client.user_playlists().await {
-                    let results = SearchResults::UserPlaylists(playlists);
-                    output!(results, output_format)
-                }
-            } else {
-                let new_player = player::new(client.clone(), state.clone(), quit_when_done).await?;
-
-                if no_tui {
-                    wait!(state);
-                } else {
-                    let controls = new_player.controls().clone();
-                    let mut tui = CursiveUI::new(&controls, client.clone());
-
-                    let notify_receiver = new_player.notify_receiver();
-                    let safe_player = new_player.safe();
-
-                    let s = safe_player.clone();
-                    tokio::spawn(async move {
-                        s.write()
-                            .await
-                            .resume(false)
-                            .await
-                            .expect("failed to resume");
-                    });
-
-                    #[cfg(target_os = "linux")]
-                    {
-                        let conn = mpris::init(&controls).await;
-
-                        let nr = notify_receiver.clone();
-                        let s = state.clone();
-                        tokio::spawn(async {
-                            mpris::receive_notifications(s, conn, nr).await;
-                        });
-                    }
-
-                    let sink = tui.sink().await.clone();
-                    tokio::spawn(async {
-                        cursive::receive_notifications(sink, notify_receiver).await
-                    });
-
-                    let p = safe_player.clone();
-                    tokio::spawn(async { player::player_loop(p, client, state).await });
-
-                    tui.run().await;
-                }
-            }
-
-            Ok(())
-        }
-        Commands::Playlist {
-            playlist_id,
-            output_format,
-        } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-            let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
-            output!(results, output_format);
             Ok(())
         }
         Commands::StreamTrack {
             track_id,
             quality,
-            no_tui,
         } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
+            let (player, mut tui) = setup_player(
+                data.to_owned(),
+                cli.quit_when_done.unwrap_or(false),
+                cli.username.to_owned(),
+                cli.password.to_owned(),
+            )
+            .await?;
 
-            let safe_player = player::new(client.clone(), state, quit_when_done)
-                .await?
-                .safe();
-
-            let player = safe_player.write().await;
-
-            player.play_track(track_id, Some(quality.unwrap())).await?;
-
-            if no_tui {
-                wait!(player.state());
-            } else {
-                let mut tui = ui::new(
-                    player.state(),
-                    player.controls().clone(),
-                    client,
-                    None,
-                    None,
-                )
+            player
+                .read_owned()
+                .await
+                .play_track(track_id, quality)
                 .await?;
-                tui.event_loop().await?;
-            }
+
+            tui.run().await;
 
             Ok(())
         }
         Commands::StreamAlbum {
             album_id,
             quality,
-            no_tui,
         } => {
-            let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-            let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), data)));
+            let (player, mut tui) = setup_player(
+                data.to_owned(),
+                cli.quit_when_done.unwrap_or(false),
+                cli.username.to_owned(),
+                cli.password.to_owned(),
+            )
+            .await?;
 
-            let quality = if let Some(q) = quality {
-                q
-            } else {
-                client.quality()
-            };
-
-            let safe_player = player::new(client.clone(), state, quit_when_done)
-                .await?
-                .safe();
-            let player = safe_player.read().await;
-
-            player.play_album(album_id, Some(quality)).await?;
-
-            if no_tui {
-                wait!(player.state());
-            } else {
-                let mut tui = ui::new(
-                    player.state(),
-                    player.controls().clone(),
-                    client,
-                    None,
-                    None,
-                )
+            player
+                .read_owned()
+                .await
+                .play_album(album_id, quality)
                 .await?;
 
-                let state = player.state();
-                switch_screen!(state.write().await, ActiveScreen::NowPlaying);
-
-                tui.event_loop().await?;
-            }
+            tui.run().await;
 
             Ok(())
         }
+        Commands::Api { command } => { 
+        match command {
+            ApiCommands::Search {
+                    query,
+                    limit,
+                    output_format,
+                } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                    let results = client.search_all(query, limit.unwrap_or_default()).await?;
+
+                    output!(results, output_format);
+
+                    Ok(())
+                }
+                ApiCommands::SearchAlbums {
+                    query,
+                    limit,
+                    output_format,
+                } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                    let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
+
+                    output!(results, output_format);
+
+                    Ok(())
+                }
+                ApiCommands::SearchArtists {
+                    query,
+                    limit,
+                    output_format,
+                } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                    let results =
+                        SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
+
+                    output!(results, output_format);
+
+                    Ok(())
+                },
+                ApiCommands::Playlist {
+                    playlist_id,
+                    output_format,
+                } => {
+                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                    let results = SearchResults::Playlist(Box::new(client.playlist(playlist_id).await?));
+                    output!(results, output_format);
+                    Ok(())
+                }
+                    }
+                } 
         Commands::Reset => {
             data.clear_state().await;
             Ok(())
@@ -571,30 +433,29 @@ macro_rules! output {
                 print!("{}", json);
             }
             Some(OutputFormat::Tsv) => {
-                let formatted_results: Vec<Vec<String>> = $results.into();
+                // let formatted_results: Vec<Vec<String>> = $results.into();
 
-                let rows = formatted_results
-                    .iter()
-                    .map(|row| {
-                        let tabbed = row.join("\t");
+                // let rows = formatted_results
+                //     .iter()
+                //     .map(|row| {
+                //         let tabbed = row.join("\t");
 
-                        tabbed
-                    })
-                    .collect::<Vec<String>>();
+                //         tabbed
+                //     })
+                //     .collect::<Vec<String>>();
 
-                print!("{}", rows.join("\n"));
+                print!("");
             }
             None => {
                 let mut table = Table::new();
                 table.load_preset(UTF8_FULL);
                 table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-                table.set_header($results.headers());
 
-                let table_rows: Vec<Vec<String>> = $results.into();
+                //let table_rows: Vec<Vec<String>> = $results.into();
 
-                for row in table_rows {
-                    table.add_row(row);
-                }
+                // for row in table_rows {
+                //     table.add_row(row);
+                // }
 
                 print!("{}", table);
             }

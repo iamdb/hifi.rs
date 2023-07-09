@@ -1,7 +1,6 @@
 use crate::{
     sql::db::Database,
     state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
-    ui::components::{Row, TableRows},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
@@ -310,10 +309,6 @@ impl PlayerState {
 
     pub fn live(&self) -> bool {
         self.is_live
-    }
-
-    pub fn rows(&self) -> Vec<Row> {
-        self.tracklist.rows()
     }
 
     pub fn jumps(&self) -> usize {

@@ -1,24 +1,24 @@
-use crate::{
-    cursive::CursiveFormat,
-    ui::components::{ColumnWidth, Row, TableHeaders, TableRow, TableRows, TableWidths},
-};
+use crate::cursive::CursiveFormat;
 use cursive::{
     theme::{Effect, Style},
     utils::markup::StyledString,
 };
 use gstreamer::ClockTime;
-use hifirs_qobuz_api::client::{
-    playlist::TrackListTracks,
-    track::{Track, TrackListTrack, TrackStatus, Tracks},
-};
+use hifirs_qobuz_api::client::track::Track;
 
 impl CursiveFormat for Track {
     fn list_item(&self) -> StyledString {
-        let mut title = StyledString::styled(self.title.trim(), Effect::Bold);
+        let mut style = Style::none();
+
+        if !self.streamable {
+            style = style.combine(Effect::Dim).combine(Effect::Strikethrough);
+        }
+
+        let mut title = StyledString::styled(self.title.trim(), style.combine(Effect::Bold));
 
         if let Some(performer) = &self.performer {
-            title.append_plain(" by ");
-            title.append_plain(performer.name.trim());
+            title.append_styled(" by ", style);
+            title.append_styled(performer.name.trim(), style);
         }
 
         let duration = ClockTime::from_seconds(self.duration as u64)
@@ -26,15 +26,15 @@ impl CursiveFormat for Track {
             .as_str()[2..7]
             .to_string();
         title.append_plain(" ");
-        title.append_styled(duration, Effect::Dim);
+        title.append_styled(duration, style.combine(Effect::Dim));
         title.append_plain(" ");
 
         if self.parental_warning {
-            title.append_styled("e", Effect::Dim);
+            title.append_styled("e", style.combine(Effect::Dim));
         }
 
         if self.hires_streamable {
-            title.append_styled("*", Effect::Dim);
+            title.append_styled("*", style.combine(Effect::Dim));
         }
 
         title
@@ -42,8 +42,8 @@ impl CursiveFormat for Track {
     fn track_list_item(&self, inactive: bool, index: Option<usize>) -> StyledString {
         let mut style = Style::none();
 
-        if inactive {
-            style = style.combine(Effect::Dim).combine(Effect::Italic);
+        if inactive || !self.streamable {
+            style = style.combine(Effect::Dim).combine(Effect::Italic).combine(Effect::Strikethrough);
         }
 
         let num = if let Some(index) = index {
@@ -53,7 +53,7 @@ impl CursiveFormat for Track {
         };
 
         let mut item = StyledString::styled(format!("{:02} ", num), style);
-        item.append_styled(self.title.trim(), style.combine(Effect::Bold));
+        item.append_styled(self.title.trim(), style.combine(Effect::Simple));
         item.append_plain(" ");
 
         let duration = ClockTime::from_seconds(self.duration as u64)
@@ -64,68 +64,5 @@ impl CursiveFormat for Track {
         item.append_styled(duration, style.combine(Effect::Dim));
 
         item
-    }
-}
-
-impl TableRow for Track {
-    fn row(&self) -> Row {
-        Row::new(self.columns(), Track::widths())
-    }
-}
-
-impl TableRows for Tracks {
-    fn rows(&self) -> Vec<Row> {
-        self.items.iter().map(|i| i.row()).collect::<Vec<Row>>()
-    }
-}
-
-impl TableHeaders for Track {
-    fn headers() -> Vec<String> {
-        vec![
-            "#".to_string(),
-            "Title".to_string(),
-            "Artist".to_string(),
-            "Len".to_string(),
-        ]
-    }
-}
-
-impl TableWidths for Track {
-    fn widths() -> Vec<ColumnWidth> {
-        vec![
-            ColumnWidth::new(6),
-            ColumnWidth::new(44),
-            ColumnWidth::new(35),
-            ColumnWidth::new(15),
-        ]
-    }
-}
-
-impl TableRow for TrackListTrack {
-    fn row(&self) -> Row {
-        let mut row = Row::new(self.columns(), Track::widths());
-
-        if self.status == TrackStatus::Played {
-            row.set_dim(true);
-        }
-
-        row
-    }
-}
-
-impl TableRows for TrackListTracks {
-    fn rows(&self) -> Vec<Row> {
-        self.iter().map(|i| i.row()).collect::<Vec<Row>>()
-    }
-}
-
-impl TableHeaders for TrackListTrack {
-    fn headers() -> Vec<String> {
-        vec![
-            "#".to_string(),
-            "Title".to_string(),
-            "Artist".to_string(),
-            "Len".to_string(),
-        ]
     }
 }

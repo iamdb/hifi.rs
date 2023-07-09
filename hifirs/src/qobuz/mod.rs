@@ -1,15 +1,11 @@
-use crate::{
-    sql::db::Database,
-    ui::components::{ColumnWidth, Row, Table, TableHeaders, TableRow, TableRows, TableWidths},
-};
+use crate::sql::db::Database;
 use enum_as_inner::EnumAsInner;
 use hifirs_qobuz_api::{
     client::{
         album::{Album, AlbumSearchResults},
         api::{self, Client},
         artist::{Artist, ArtistSearchResults},
-        playlist::{Playlist, Playlists, UserPlaylistsResult},
-        track::Track,
+        playlist::{Playlist, UserPlaylistsResult},
         AudioQuality,
     },
     Credentials,
@@ -20,7 +16,6 @@ pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;
-pub mod playlist;
 pub mod track;
 
 pub async fn make_client(
@@ -158,18 +153,6 @@ pub enum SearchResults {
     Artist(Artist),
 }
 
-impl From<SearchResults> for Table {
-    fn from(results: SearchResults) -> Self {
-        let mut table = Table::new(None, None, None);
-
-        table.set_header(results.headers());
-        table.set_rows(results.rows());
-        table.set_widths(results.widths());
-
-        table
-    }
-}
-
 impl From<SearchResults> for Vec<Vec<String>> {
     fn from(results: SearchResults) -> Self {
         match results {
@@ -198,40 +181,5 @@ impl From<Box<Album>> for SearchResults {
 impl From<SearchResults> for Album {
     fn from(results: SearchResults) -> Self {
         results.into()
-    }
-}
-
-impl SearchResults {
-    pub fn headers(&self) -> Vec<String> {
-        match self {
-            SearchResults::Albums(_) => Album::headers(),
-            SearchResults::Artists(_) => Artist::headers(),
-            SearchResults::UserPlaylists(_) => Playlists::headers(),
-            SearchResults::Playlist(_) => Track::headers(),
-            SearchResults::Album(_) => Album::headers(),
-            SearchResults::Artist(_) => Artist::headers(),
-        }
-    }
-
-    pub fn widths(&self) -> Vec<ColumnWidth> {
-        match self {
-            SearchResults::Albums(_) => Album::widths(),
-            SearchResults::Artists(_) => Artist::widths(),
-            SearchResults::UserPlaylists(_) => Playlist::widths(),
-            SearchResults::Playlist(_) => Track::widths(),
-            SearchResults::Album(_) => Album::widths(),
-            SearchResults::Artist(_) => Artist::widths(),
-        }
-    }
-
-    pub fn rows(&self) -> Vec<Row> {
-        match self {
-            SearchResults::Albums(r) => r.albums.rows(),
-            SearchResults::Artists(r) => r.artists.rows(),
-            SearchResults::UserPlaylists(r) => r.playlists.rows(),
-            SearchResults::Playlist(r) => r.rows(),
-            SearchResults::Album(r) => vec![r.row()],
-            SearchResults::Artist(r) => vec![r.row()],
-        }
     }
 }
