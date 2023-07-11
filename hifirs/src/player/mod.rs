@@ -61,16 +61,6 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
 
     playbin.set_property_from_str("flags", "audio+buffering");
 
-    playbin.connect("element-setup", false, |value| {
-        let element = &value[1].get::<gst::Element>().unwrap();
-
-        if element.name().contains("urisourcebin") {
-            element.set_property("parse-streams", true);
-        }
-
-        None
-    });
-
     playbin.connect("source-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 

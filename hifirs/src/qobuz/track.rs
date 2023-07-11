@@ -43,7 +43,10 @@ impl CursiveFormat for Track {
         let mut style = Style::none();
 
         if inactive || !self.streamable {
-            style = style.combine(Effect::Dim).combine(Effect::Italic).combine(Effect::Strikethrough);
+            style = style
+                .combine(Effect::Dim)
+                .combine(Effect::Italic)
+                .combine(Effect::Strikethrough);
         }
 
         let num = if let Some(index) = index {
