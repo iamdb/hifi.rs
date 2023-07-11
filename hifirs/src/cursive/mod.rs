@@ -9,7 +9,7 @@ use cursive::{
     direction::Orientation,
     event::{Event, Key},
     reexports::crossbeam_channel::Sender,
-    theme::{BorderStyle, Effect, Palette,  Style},
+    theme::{BorderStyle, Effect, Palette, Style},
     utils::{markup::StyledString, Counter},
     view::{Nameable, Resizable, Scrollable, SizeConstraint},
     views::{
@@ -60,7 +60,10 @@ impl CursiveUI {
                     use cursive::theme::Effect::*;
                     use cursive::theme::PaletteStyle::*;
 
-                    palette[Highlight] = Style::from(Cyan.dark()).combine(Underline).combine(Reverse).combine(Bold);
+                    palette[Highlight] = Style::from(Cyan.dark())
+                        .combine(Underline)
+                        .combine(Reverse)
+                        .combine(Bold);
                     palette[HighlightInactive] = Style::from(TerminalDefault).combine(Reverse);
                     palette[TitlePrimary] = Style::from(Cyan.dark()).combine(Bold);
                 }
@@ -280,7 +283,7 @@ impl CursiveUI {
                     .with_name("user_playlists")
                     .scrollable()
                     .scroll_y(true)
-                    .resized(SizeConstraint::Full, SizeConstraint::Free)
+                    .resized(SizeConstraint::Full, SizeConstraint::Free),
             )
             .title("my playlists"),
         );
@@ -571,13 +574,11 @@ fn submit_playlist(
             });
 
             let c = controls;
-            let client = client;
             let meta = LinearLayout::horizontal()
                 .child(Button::new("play", move |s| {
-                    let client = client.clone();
                     let c = c.clone();
 
-                    submit_playlist(s, item, client, c);
+                    block_on(async { c.play_playlist(playlist.id).await });
                 }))
                 .child(
                     TextView::new(format!("total tracks: {}", playlist.tracks_count))
@@ -830,7 +831,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                     }
                     Notification::Buffering { is_buffering: _ } => {
                         cb.send(Box::new(move |_s| {
-                            
+
                         })).expect("failed to send update");
                     },
                     Notification::Error { error: _ } => {

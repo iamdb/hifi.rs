@@ -61,7 +61,7 @@ enum Commands {
     },
     Api {
         #[clap(subcommand)]
-        command: ApiCommands
+        command: ApiCommands,
     },
     /// Reset the player state
     Reset,
@@ -242,7 +242,7 @@ pub async fn run() -> Result<(), Error> {
 
     // CLI COMMANDS
     match cli.command {
-        Commands::Open {  } => {
+        Commands::Open {} => {
             let (_player, mut tui) = setup_player(
                 data.to_owned(),
                 quit_when_done,
@@ -270,10 +270,7 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::StreamTrack {
-            track_id,
-            quality,
-        } => {
+        Commands::StreamTrack { track_id, quality } => {
             let (player, mut tui) = setup_player(
                 data.to_owned(),
                 quit_when_done,
@@ -292,10 +289,7 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::StreamAlbum {
-            album_id,
-            quality,
-        } => {
+        Commands::StreamAlbum { album_id, quality } => {
             let (player, mut tui) = setup_player(
                 data.to_owned(),
                 quit_when_done,
@@ -314,78 +308,74 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::Api { command } => { 
-            match command {
-                ApiCommands::Search {
-                        query,
-                        limit,
-                        output_format,
-                } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                    let results = client.search_all(query, limit.unwrap_or_default()).await?;
+        Commands::Api { command } => match command {
+            ApiCommands::Search {
+                query,
+                limit,
+                output_format,
+            } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let results = client.search_all(query, limit.unwrap_or_default()).await?;
 
-                    output!(results, output_format);
+                output!(results, output_format);
 
-                    Ok(())
-                }
-                ApiCommands::SearchAlbums {
-                    query,
-                    limit,
-                    output_format,
-                } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                    let results = SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
-
-                    output!(results, output_format);
-
-                    Ok(())
-                }
-                ApiCommands::SearchArtists {
-                    query,
-                    limit,
-                    output_format,
-                } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                    let results =
-                        SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
-
-                    output!(results, output_format);
-
-                    Ok(())
-                },
-                ApiCommands::Playlist {
-                    id,
-                    output_format,
-                } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-                    let results = client.playlist(id).await?;
-                    output!(results, output_format);
-                    Ok(())
-                }
-                ApiCommands::Album { id, output_format } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-                    let results = client.album(&id).await?;
-                    output!(results, output_format);
-                    Ok(())
-                },
-                ApiCommands::Artist { id, output_format } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-                    let results = client.artist(id, Some(500)).await?;
-                    output!(results, output_format);
-                    Ok(())
-                },
-                ApiCommands::Track { id, output_format } => {
-                    let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-
-                    let results = client.track(id).await?;
-                    output!(results, output_format);
-                    Ok(())
-                },
+                Ok(())
             }
-        } 
+            ApiCommands::SearchAlbums {
+                query,
+                limit,
+                output_format,
+            } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let results =
+                    SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
+
+                output!(results, output_format);
+
+                Ok(())
+            }
+            ApiCommands::SearchArtists {
+                query,
+                limit,
+                output_format,
+            } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let results =
+                    SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
+
+                output!(results, output_format);
+
+                Ok(())
+            }
+            ApiCommands::Playlist { id, output_format } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                let results = client.playlist(id).await?;
+                output!(results, output_format);
+                Ok(())
+            }
+            ApiCommands::Album { id, output_format } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                let results = client.album(&id).await?;
+                output!(results, output_format);
+                Ok(())
+            }
+            ApiCommands::Artist { id, output_format } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                let results = client.artist(id, Some(500)).await?;
+                output!(results, output_format);
+                Ok(())
+            }
+            ApiCommands::Track { id, output_format } => {
+                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+
+                let results = client.track(id).await?;
+                output!(results, output_format);
+                Ok(())
+            }
+        },
         Commands::Reset => {
             data.clear_state().await;
             Ok(())
