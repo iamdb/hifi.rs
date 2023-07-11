@@ -108,17 +108,17 @@ impl CursiveUI {
 
         let track_num = LinearLayout::new(Orientation::Vertical)
             .child(
-                TextView::new("00")
-                    .h_align(HAlign::Center)
+                TextView::new("000")
+                    .h_align(HAlign::Left)
                     .with_name("current_track_number"),
             )
             .child(TextView::new("of").h_align(HAlign::Center))
             .child(
-                TextView::new("00")
-                    .h_align(HAlign::Center)
+                TextView::new("000")
+                    .h_align(HAlign::Left)
                     .with_name("total_tracks"),
             )
-            .fixed_width(2);
+            .fixed_width(3);
 
         let player_status = LinearLayout::new(Orientation::Vertical)
             .child(
@@ -575,7 +575,7 @@ fn submit_playlist(
 
             let c = controls;
             let meta = LinearLayout::horizontal()
-                .child(Button::new("play", move |s| {
+                .child(Button::new("play", move |_s| {
                     let c = c.clone();
 
                     block_on(async { c.play_playlist(playlist.id).await });
@@ -740,9 +740,9 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                         cb.send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
                                 if track.album.is_some() {
-                                    track_num.set_content(format!("{:02}", track.track.track_number));
+                                    track_num.set_content(format!("{:03}", track.track.track_number));
                                 } else {
-                                    track_num.set_content(format!("{:02}", track.index));
+                                    track_num.set_content(format!("{:03}", track.index));
                                 }
                                 track_title.set_content(track.track.title.trim());
                                 progress.set_max(track.track.duration as usize);
