@@ -71,7 +71,7 @@ pub async fn receive_notifications(
         select! {
             Ok(notification) = receiver.recv() => {
                 match notification {
-                    Notification::Buffering { is_buffering: _ } => {
+                    Notification::Buffering { is_buffering: _, target_status: _, percent: _ } => {
                         let iface_ref = object_server
                             .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
                             .await
@@ -444,7 +444,7 @@ fn track_to_meta(
         );
     }
 
-    if let Some(album) = playlist_track.album {
+    if let Some(album) = playlist_track.track.album {
         meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
         meta.insert(
             "xesam:album",

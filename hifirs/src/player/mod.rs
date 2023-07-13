@@ -570,6 +570,8 @@ impl Player {
         let mut state = self.state.write().await;
 
         if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
+            drop(state);
+
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = &next_track.track_url {
                 self.playbin
@@ -772,25 +774,26 @@ pub async fn player_loop(
                         let percent = buffering.percent();
 
                         debug!("buffering {}%", percent);
-                        if percent < 100 && !safe_state.read().await.buffering() {
+                        let target_status = safe_state.read().await.target_status();
+                        let buffering = safe_state.read().await.buffering();
+
+                        if percent < 100 && !buffering {
+                            let mut state = safe_state.write().await;
+                            state.set_buffering(true);
+                            drop(state);
+
                             if !player.is_paused() {
                                 player.pause(false).await?;
                             }
-
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(true);
-
-                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: true }).await?;
-                        } else if percent > 99 && safe_state.read().await.buffering() {
+                        } else if percent > 99 && buffering  {
                             let mut state = safe_state.write().await;
                             state.set_buffering(false);
+                            drop(state);
 
-                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: false }).await?;
-
-                            if player.current_state() != state.target_status()  {
-                                player.set_player_state(state.target_status().into(), false).await?;
-                            }
+                            player.set_player_state(target_status.clone().into(), false).await?;
                         }
+
+                        player.notify_sender.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
                     }
                     MessageView::StateChanged(state_changed) => {
                         let current_state = state_changed
@@ -805,6 +808,7 @@ pub async fn player_loop(
                         if state.status() != current_state.into() && state.target_status() == current_state.into() {
                             debug!("player state changed {:?}", current_state);
                             state.set_status(current_state.into());
+                            drop(state);
 
                             player.notify_sender.broadcast(Notification::Status { status: current_state.into() }).await?;
                         }
