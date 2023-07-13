@@ -115,18 +115,15 @@ impl PlayerState {
             tracklist.set_album(album.clone());
             tracklist.set_list_type(TrackListType::Album);
 
-            let mut first_track = tracklist.front().unwrap().clone();
-            first_track.status = TrackStatus::Playing;
-
-            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
-
             self.replace_list(tracklist.clone());
 
-            self.attach_track_url(&mut first_track).await;
+            let first_track = tracklist.queue.front_mut().unwrap();
+
+            self.attach_track_url(first_track).await;
             self.set_current_track(first_track.clone());
             self.set_target_status(GstState::Playing);
 
-            (Some(first_track), Some(tracklist))
+            (Some(first_track.clone()), Some(tracklist))
         } else {
             (None, None)
         }
@@ -167,18 +164,15 @@ impl PlayerState {
             tracklist.set_playlist(playlist.clone());
             tracklist.set_list_type(TrackListType::Playlist);
 
-            let mut first_track = tracklist.front().unwrap().clone();
-            first_track.status = TrackStatus::Playing;
-
-            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
-
             self.replace_list(tracklist.clone());
 
-            self.attach_track_url(&mut first_track).await;
+            let first_track = tracklist.queue.front_mut().unwrap();
+
+            self.attach_track_url(first_track).await;
             self.set_current_track(first_track.clone());
             self.set_target_status(GstState::Playing);
 
-            (Some(first_track), Some(tracklist))
+            (Some(first_track.clone()), Some(tracklist))
         } else {
             (None, None)
         }

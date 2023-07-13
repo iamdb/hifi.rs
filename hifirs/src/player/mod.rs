@@ -775,21 +775,12 @@ pub async fn player_loop(
 
                         debug!("buffering {}%", percent);
                         let target_status = safe_state.read().await.target_status();
-                        let buffering = safe_state.read().await.buffering();
 
-                        if percent < 100 && !buffering {
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(true);
-                            drop(state);
-
+                        if percent < 100 {
                             if !player.is_paused() {
                                 player.pause(false).await?;
                             }
-                        } else if percent > 99 && buffering  {
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(false);
-                            drop(state);
-
+                        } else if percent > 99 {
                             player.set_player_state(target_status.clone().into(), false).await?;
                         }
 

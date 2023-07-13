@@ -176,6 +176,7 @@ async fn setup_player<'s>(
     quit_when_done: bool,
     username: Option<String>,
     password: Option<String>,
+    resume: bool,
 ) -> Result<(Arc<RwLock<Player>>, CursiveUI), Error> {
     let client = qobuz::make_client(username, password, &database).await?;
     let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), database)));
@@ -188,14 +189,16 @@ async fn setup_player<'s>(
     let controls = safe_player.read().await.controls();
     let tui = CursiveUI::new(controls, client.clone());
 
-    let s = safe_player.clone();
-    tokio::spawn(async move {
-        s.write()
-            .await
-            .resume(false)
-            .await
-            .expect("failed to resume");
-    });
+    if resume {
+        let s = safe_player.clone();
+        tokio::spawn(async move {
+            s.write()
+                .await
+                .resume(false)
+                .await
+                .expect("failed to resume");
+        });
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -248,6 +251,7 @@ pub async fn run() -> Result<(), Error> {
                 quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
+                true,
             )
             .await?;
 
@@ -261,6 +265,7 @@ pub async fn run() -> Result<(), Error> {
                 quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
+                false,
             )
             .await?;
 
@@ -276,6 +281,7 @@ pub async fn run() -> Result<(), Error> {
                 quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
+                false,
             )
             .await?;
 
@@ -295,6 +301,7 @@ pub async fn run() -> Result<(), Error> {
                 quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
+                false,
             )
             .await?;
 

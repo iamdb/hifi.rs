@@ -784,10 +784,6 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                         title.append_plain(" ");
                                         title.append_styled(format!("({year})"), Effect::Dim);
 
-                                        if let Some(mut artist_name) = s.find_name::<TextView>("artist_name") {
-                                            artist_name.set_content(album.artist.name.clone());
-                                        }
-
                                         entity_title.set_content(title);
                                         total_tracks.set_content(format!("{:03}", album.tracks_count));
                                     }
