@@ -789,7 +789,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                         }
 
                                         entity_title.set_content(title);
-                                        total_tracks.set_content(format!("{:02}", album.tracks_count));
+                                        total_tracks.set_content(format!("{:03}", album.tracks_count));
                                     }
                                 })).expect("failed to send update");
                             }
@@ -822,16 +822,36 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                         entity_title.set_content(album.title.trim());
                                     }
                                     if let Some(mut total_tracks) = s.find_name::<TextView>("total_tracks") {
-                                        total_tracks.set_content("00");
+                                        total_tracks.set_content("000");
                                     }
                                 })).expect("failed to send update");
                             }
                             _ => {}
                         }
                     }
-                    Notification::Buffering { is_buffering: _ } => {
-                        cb.send(Box::new(move |_s| {
-
+                    Notification::Buffering { is_buffering, target_status, percent } => {
+                        cb.send(Box::new(move |s| {
+                            s.call_on_name("player_status", |view: &mut TextView| {
+                                if is_buffering {
+                                    view.set_content(format!("{}%", percent));
+                                } else {
+                                    match target_status.into() {
+                                        GstState::Playing => {
+                                            view.set_content(format!(" {}", '\u{25B6}'));
+                                        }
+                                        GstState::Paused => {
+                                            view.set_content(format!(" {}", '\u{23F8}'));
+                                        }
+                                        GstState::Ready => {
+                                            view.set_content("...");
+                                        }
+                                        GstState::Null => {
+                                            view.set_content("Null");
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            });
                         })).expect("failed to send update");
                     },
                     Notification::Error { error: _ } => {
