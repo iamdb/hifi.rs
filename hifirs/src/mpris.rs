@@ -444,7 +444,13 @@ fn track_to_meta(
         );
     }
 
-    if let Some(album) = playlist_track.track.album {
+    let album = if let Some(album) = playlist_track.album {
+        Some(album)
+    } else {
+        playlist_track.track.album
+    };
+
+    if let Some(album) = album {
         meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
         meta.insert(
             "xesam:album",
