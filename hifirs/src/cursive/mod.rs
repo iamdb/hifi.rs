@@ -713,9 +713,17 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
                                     GstState::Ready => {
                                         view.set_content("...");
+
+                                        s.call_on_name("progress", |progress: &mut ProgressBar| {
+                                            progress.set_value(0);
+                                        });
                                     }
                                     GstState::Null => {
                                         view.set_content("Null");
+
+                                        s.call_on_name("progress", |progress: &mut ProgressBar| {
+                                            progress.set_value(0);
+                                        });
                                     }
                                     _ => {}
                                 }

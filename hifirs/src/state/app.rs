@@ -366,7 +366,7 @@ impl PlayerState {
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
         let next_track_index = if let Some(i) = index {
-            if i < self.tracklist.total() {
+            if i <= self.tracklist.total() {
                 Some(i)
             } else {
                 None
@@ -393,7 +393,7 @@ impl PlayerState {
         };
 
         if let Some(index) = next_track_index {
-            let mut current_track = self.current_track.clone();
+            let mut current_track = None;
 
             for t in self.tracklist.queue.iter_mut() {
                 match t.index.cmp(&index) {

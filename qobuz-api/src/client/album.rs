@@ -70,17 +70,18 @@ impl Album {
         self.tracks.as_ref().map(|t| {
             t.items
                 .iter()
-                .filter_map(|t| {
+                .enumerate()
+                .filter_map(|(i, t)| {
                     if t.streamable {
                         let mut track = TrackListTrack::new(
                             t.clone(),
-                            Some(t.track_number as usize),
+                            Some(i),
                             Some(self.tracks_count as usize),
                             Some(quality.clone()),
                             Some(self.clone()),
                         );
 
-                        if t.track_number == 1 {
+                        if i == 0 {
                             track.status = TrackStatus::Playing;
                         }
 

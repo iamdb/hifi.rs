@@ -351,13 +351,13 @@ impl Player {
             }
         }
 
-        if !self.is_ready() {
-            self.ready(false).await?;
-        }
-
         let mut state = self.state.write().await;
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             drop(state);
+
+            if !self.is_ready() {
+                self.ready(false).await?;
+            }
 
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
@@ -728,7 +728,11 @@ pub async fn player_loop(
                         if player.quit_when_done {
                             safe_state.read().await.quit();
                         } else {
-                            player.ready(true).await?;
+                            let mut state = safe_state.write().await;
+                            state.set_target_status(GstState::Paused);
+                            drop(state);
+
+                            player.skip(SkipDirection::Backward, Some(0)).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
