@@ -72,7 +72,7 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
                 USER_AGENTS[1]
             };
             element.set_property("user-agent", ua);
-            element.set_property("compress", true);
+            element.set_property("compress", false);
             element.set_property("retries", 10);
             element.set_property("timeout", 30_u32);
             element.set_property(
@@ -118,31 +118,31 @@ pub async fn new(client: Client, state: SafePlayerState, quit_when_done: bool) -
 
 impl Player {
     /// Play the player.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play(&self, wait: bool) -> Result<()> {
         self.set_player_state(gst::State::Playing, wait).await?;
         Ok(())
     }
     /// Pause the player.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn pause(&self, wait: bool) -> Result<()> {
         self.set_player_state(gst::State::Paused, wait).await?;
         Ok(())
     }
     /// Ready the player.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn ready(&self, wait: bool) -> Result<()> {
         self.set_player_state(gst::State::Ready, wait).await?;
         Ok(())
     }
     /// Stop the player.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn stop(&self, wait: bool) -> Result<()> {
         self.set_player_state(gst::State::Null, wait).await?;
         Ok(())
     }
     /// Sets the player to a specific state.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn set_player_state(&self, state: gst::State, wait: bool) -> Result<()> {
         let ret = self.playbin.set_state(state)?;
 
@@ -173,7 +173,7 @@ impl Player {
         Ok(())
     }
     /// Toggle play and pause.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play_pause(&self) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -188,46 +188,46 @@ impl Player {
         Ok(())
     }
     /// Retreive the current player state.
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn state(&self) -> SafePlayerState {
         self.state.clone()
     }
     /// Is the player paused?
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn is_paused(&self) -> bool {
         self.playbin.current_state() == gst::State::Paused
     }
     /// Is the player playing?
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn is_playing(&self) -> bool {
         self.playbin.current_state() == gst::State::Playing
     }
     /// Is the player ready?
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn is_ready(&self) -> bool {
         self.playbin.current_state() == gst::State::Ready
     }
     /// Current player state
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn current_state(&self) -> StatusValue {
         self.playbin.current_state().into()
     }
     /// Current track position.
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn position(&self) -> Option<ClockValue> {
         self.playbin
             .query_position::<ClockTime>()
             .map(|position| position.into())
     }
     /// Current track duraiton.
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn duration(&self) -> Option<ClockValue> {
         self.playbin
             .query_duration::<ClockTime>()
             .map(|duration| duration.into())
     }
     /// Seek to a specified time in the current track.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn seek(&self, time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
         let flags = if let Some(flags) = flags {
             flags
@@ -239,7 +239,7 @@ impl Player {
         Ok(())
     }
     /// Load the previous player state and seek to the last known position.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn resume(&mut self, autoplay: bool) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -287,12 +287,12 @@ impl Player {
         Ok(())
     }
     /// Retreive controls for the player.
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn controls(&self) -> Controls {
         self.controls.clone()
     }
     /// Jump forward in the currently playing track +10 seconds.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn jump_forward(&self) -> Result<()> {
         if let (Some(current_position), Some(duration)) = (
             self.playbin.query_position::<ClockTime>(),
@@ -311,7 +311,7 @@ impl Player {
         Ok(())
     }
     /// Jump forward in the currently playing track -10 seconds.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn jump_backward(&self) -> Result<()> {
         if let Some(current_position) = self.playbin.query_position::<ClockTime>() {
             if current_position.seconds() < 10 {
@@ -327,7 +327,7 @@ impl Player {
         Ok(())
     }
     /// Skip to the next, previous or specific track in the playlist.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn skip(&self, direction: SkipDirection, num: Option<usize>) -> Result<()> {
         // Typical previous skip functionality where if,
         // the track is greater than 1 second into playing,
@@ -353,14 +353,16 @@ impl Player {
 
         let mut state = self.state.write().await;
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
-            drop(state);
-
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
-                self.playbin.set_property("instant-uri", true);
+                self.ready(true).await?;
+
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
+
+                self.set_player_state(state.status().into(), true).await?;
+                drop(state);
 
                 self.notify_sender
                     .broadcast(Notification::CurrentTrackList {
@@ -379,7 +381,7 @@ impl Player {
     }
     /// Skip to a specific track in the current playlist
     /// by its index in the list.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn skip_to(&self, index: usize) -> Result<()> {
         let state = self.state.read().await;
 
@@ -404,7 +406,7 @@ impl Player {
     }
     /// Skip to a specific track in the current playlist, by the
     /// track id.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn skip_to_by_id(&self, track_id: usize) -> Result<()> {
         if let Some(track_number) = self.state.read().await.track_index(track_id) {
             self.skip_to(track_number).await?;
@@ -413,7 +415,7 @@ impl Player {
         Ok(())
     }
     /// Plays a single track.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play_track(&self, track_id: i32, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
             self.ready(true).await?;
@@ -445,7 +447,7 @@ impl Player {
         Ok(())
     }
     /// Plays a full album.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play_album(&self, album_id: String, quality: Option<AudioQuality>) -> Result<()> {
         if !self.is_ready() {
             self.ready(true).await?;
@@ -479,7 +481,7 @@ impl Player {
         Ok(())
     }
     /// Play an item from Qobuz web uri
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play_uri(&self, uri: String, quality: Option<AudioQuality>) -> Result<()> {
         let quality = if let Some(quality) = quality {
             quality
@@ -509,7 +511,7 @@ impl Player {
         Ok(())
     }
     /// Plays all tracks in a playlist.
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn play_playlist(
         &self,
         playlist_id: i64,
@@ -557,7 +559,7 @@ impl Player {
     }
     /// In response to the about-to-finish signal,
     /// prepare the next track by downloading the stream url.
-    #[instrument]
+    #[instrument(skip(self))]
     async fn prep_next_track(&self) -> Result<()> {
         let mut state = self.state.write().await;
 
@@ -577,17 +579,17 @@ impl Player {
         Ok(())
     }
     /// Get Gstreamer message stream
-    #[instrument]
+    #[instrument(skip(self))]
     pub async fn message_stream(&self) -> BusStream {
         self.playbin.bus().unwrap().stream()
     }
     /// Get a notification channel receiver
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn notify_receiver(&self) -> BroadcastReceiver {
         self.notify_receiver.clone()
     }
     /// Consume the player and return a thread/async safe version.
-    #[instrument]
+    #[instrument(skip(self))]
     pub fn safe(self) -> SafePlayer {
         Arc::new(RwLock::new(self))
     }
@@ -626,7 +628,7 @@ pub async fn clock_loop(safe_player: SafePlayer, safe_state: SafePlayerState) {
 
 /// Handles messages from GStreamer, receives player actions from external controls
 /// receives the about-to-finish event and takes necessary action.
-#[instrument]
+#[instrument(skip(safe_player, safe_state, client))]
 pub async fn player_loop(
     safe_player: SafePlayer,
     client: Client,
@@ -729,6 +731,7 @@ pub async fn player_loop(
                         }
                     },
                     MessageView::AsyncDone(msg) => {
+                        debug!("ASYNC DONE");
                         let player = safe_player.read().await;
 
                         let position = if let Some(p)= msg.running_time() {
@@ -771,18 +774,20 @@ pub async fn player_loop(
                         let player = safe_player.read().await;
                         let percent = buffering.percent();
 
-                        debug!("buffering {}%", percent);
                         let target_status = safe_state.read().await.target_status();
+                        let is_buffering = safe_state.read().await.buffering();
 
-                        if percent < 100 {
-                            if !player.is_paused() {
-                                player.pause(true).await?;
-                            }
-                        } else if percent > 99 {
-                            player.set_player_state(target_status.clone().into(), false).await?;
+                        if percent < 100 && !player.is_paused() && !is_buffering {
+                            player.pause(true).await?;
+
+                            safe_state.write().await.set_buffering(true);
+                        } else if percent > 99 && is_buffering && player.is_paused() {
+                            player.set_player_state(target_status.clone().into(), true).await?;
+                            safe_state.write().await.set_buffering(false);
                         }
 
                         if percent.rem_euclid(5) == 0 {
+                            debug!("buffering {}%", percent);
                             player.notify_sender.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
                         }
                     }

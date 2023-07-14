@@ -223,7 +223,7 @@ async fn setup_player<'s>(
 
 pub async fn run() -> Result<(), Error> {
     tracing_subscriber::registry()
-        .with(fmt::layer().compact().pretty().with_writer(std::io::stderr))
+        .with(fmt::layer().pretty().with_writer(std::io::stderr))
         .with(EnvFilter::from_env("HIFIRS_LOG"))
         .init();
     //pretty_env_logger::init();
