@@ -50,7 +50,7 @@ impl CursiveFormat for Track {
         }
 
         let num = if let Some(index) = index {
-            index
+            index + 1
         } else {
             self.track_number as usize
         };

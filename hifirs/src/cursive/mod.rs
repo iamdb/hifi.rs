@@ -750,7 +750,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 if track.album.is_some() {
                                     track_num.set_content(format!("{:03}", track.track.track_number));
                                 } else {
-                                    track_num.set_content(format!("{:03}", track.index));
+                                    track_num.set_content(format!("{:03}", track.index + 1));
                                 }
                                 track_title.set_content(track.track.title.trim());
                                 progress.set_max(track.track.duration as usize);

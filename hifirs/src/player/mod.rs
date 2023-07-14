@@ -355,12 +355,12 @@ impl Player {
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             drop(state);
 
-            if !self.is_ready() {
-                self.ready(false).await?;
-            }
-
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
+
+                if !self.is_ready() {
+                    self.ready(true).await?;
+                }
 
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
