@@ -89,8 +89,8 @@ impl Playlist {
                     if t.streamable {
                         let mut track = TrackListTrack::new(
                             t,
-                            Some(i + 1),
-                            Some(tracks.items.len()),
+                            Some(i),
+                            Some(tracks.total as usize),
                             Some(quality.clone()),
                             None,
                         );

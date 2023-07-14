@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
-    track::{TrackListTrack, Tracks},
+    track::{TrackListTrack, TrackStatus, Tracks},
     AudioQuality, Composer, Image,
 };
 use serde::{Deserialize, Serialize};
@@ -70,16 +70,21 @@ impl Album {
         self.tracks.as_ref().map(|t| {
             t.items
                 .iter()
-                .enumerate()
-                .filter_map(|(i, t)| {
+                .filter_map(|t| {
                     if t.streamable {
-                        Some(TrackListTrack::new(
+                        let mut track = TrackListTrack::new(
                             t.clone(),
-                            Some(i),
+                            Some(t.track_number as usize),
                             Some(self.tracks_count as usize),
                             Some(quality.clone()),
                             Some(self.clone()),
-                        ))
+                        );
+
+                        if t.track_number == 1 {
+                            track.status = TrackStatus::Playing;
+                        }
+
+                        Some(track)
                     } else {
                         None
                     }

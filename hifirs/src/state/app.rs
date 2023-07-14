@@ -366,7 +366,7 @@ impl PlayerState {
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
         let next_track_index = if let Some(i) = index {
-            if i < self.tracklist.len() {
+            if i < self.tracklist.total() {
                 Some(i)
             } else {
                 None
@@ -374,7 +374,7 @@ impl PlayerState {
         } else if let Some(current_track_index) = self.current_track_index() {
             match direction {
                 SkipDirection::Forward => {
-                    if current_track_index < self.tracklist.len() - 1 {
+                    if current_track_index < self.tracklist.total() {
                         Some(current_track_index + 1)
                     } else {
                         None
