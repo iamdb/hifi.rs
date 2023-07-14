@@ -179,17 +179,9 @@ pub async fn receive_notifications(
 
                         let mut iface = iface_ref.get_mut().await;
 
-                        if track.index == 0 {
-                            iface.can_previous = false;
-                        } else {
-                            iface.can_previous = true;
-                        }
+                        iface.can_previous = track.index != 0;
 
-                        if iface.total_tracks != 0 && track.index == iface.total_tracks - 1 {
-                            iface.can_next = false;
-                        } else {
-                            iface.can_next = true;
-                        }
+                        iface.can_next = !(iface.total_tracks != 0 && track.index == iface.total_tracks - 1);
 
                         iface.total_tracks = track.total;
                         iface.current_track = Some(track);

@@ -370,7 +370,7 @@ impl PlayerState {
         let now = chrono::offset::Local::now().timestamp_millis();
         let last_skip = self.last_skip.timestamp_millis();
 
-        if now - last_skip < 250 {
+        if self.is_buffering || now - last_skip < 500 {
             return None;
         }
 

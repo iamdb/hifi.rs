@@ -358,16 +358,9 @@ impl Player {
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
-                if !self.is_ready() {
-                    self.ready(true).await?;
-                }
-
                 self.playbin.set_property("instant-uri", true);
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
-
-                self.set_player_state(self.state.read().await.target_status().into(), false)
-                    .await?;
 
                 self.notify_sender
                     .broadcast(Notification::CurrentTrackList {
@@ -413,9 +406,7 @@ impl Player {
     /// track id.
     #[instrument]
     pub async fn skip_to_by_id(&self, track_id: usize) -> Result<()> {
-        let state = self.state.read().await;
-
-        if let Some(track_number) = state.track_index(track_id) {
+        if let Some(track_number) = self.state.read().await.track_index(track_id) {
             self.skip_to(track_number).await?;
         }
 
@@ -767,6 +758,7 @@ pub async fn player_loop(
                             debug!("setting track duration");
                             let mut state = safe_state.write().await;
                             state.set_duration(duration.clone());
+                            drop(state);
 
                             player.notify_sender.broadcast(Notification::Duration { duration }).await?;
                         }
@@ -784,13 +776,15 @@ pub async fn player_loop(
 
                         if percent < 100 {
                             if !player.is_paused() {
-                                player.pause(false).await?;
+                                player.pause(true).await?;
                             }
                         } else if percent > 99 {
                             player.set_player_state(target_status.clone().into(), false).await?;
                         }
 
-                        player.notify_sender.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
+                        if percent.rem_euclid(5) == 0 {
+                            player.notify_sender.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
+                        }
                     }
                     MessageView::StateChanged(state_changed) => {
                         let current_state = state_changed
