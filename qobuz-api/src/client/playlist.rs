@@ -84,25 +84,22 @@ impl Playlist {
                 .items
                 .iter()
                 .cloned()
+                .filter(|t| t.streamable)
                 .enumerate()
-                .filter_map(|(i, t)| {
-                    if t.streamable {
-                        let mut track = TrackListTrack::new(
-                            t,
-                            Some(i),
-                            Some(tracks.total as usize),
-                            Some(quality.clone()),
-                            None,
-                        );
+                .map(|(i, t)| {
+                    let mut track = TrackListTrack::new(
+                        t,
+                        Some(i),
+                        Some(tracks.total as usize),
+                        Some(quality.clone()),
+                        None,
+                    );
 
-                        if i == 0 {
-                            track.status = TrackStatus::Playing;
-                        }
-
-                        Some(track)
-                    } else {
-                        None
+                    if i == 0 {
+                        track.status = TrackStatus::Playing;
                     }
+
+                    track
                 })
                 .collect::<VecDeque<TrackListTrack>>()
         })

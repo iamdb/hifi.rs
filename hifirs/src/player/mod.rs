@@ -362,6 +362,7 @@ impl Player {
                     self.ready(true).await?;
                 }
 
+                self.playbin.set_property("instant-uri", true);
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
 
@@ -574,6 +575,7 @@ impl Player {
 
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = &next_track.track_url {
+                self.playbin.set_property("instant-uri", false);
                 self.playbin
                     .set_property("uri", Some(next_playlist_track_url.url.clone()));
             }

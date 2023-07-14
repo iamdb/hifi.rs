@@ -2,6 +2,7 @@ use crate::{
     sql::db::Database,
     state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
 };
+use chrono::{DateTime, Local};
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::{
@@ -41,6 +42,7 @@ pub struct PlayerState {
     quit_sender: BroadcastSender<bool>,
     jumps: usize,
     last_jump: SystemTime,
+    last_skip: DateTime<Local>,
 }
 
 pub type SafePlayerState = Arc<RwLock<PlayerState>>;
@@ -365,6 +367,13 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
+        let now = chrono::offset::Local::now().timestamp_millis();
+        let last_skip = self.last_skip.timestamp_millis();
+
+        if now - last_skip < 250 {
+            return None;
+        }
+
         let next_track_index = if let Some(i) = index {
             if i <= self.tracklist.total() {
                 Some(i)
@@ -416,6 +425,10 @@ impl PlayerState {
                 }
             }
 
+            if current_track.is_some() {
+                self.last_skip = chrono::offset::Local::now();
+            }
+
             current_track
         } else {
             debug!("no more tracks");
@@ -439,6 +452,14 @@ impl PlayerState {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
+    }
+
+    pub fn set_last_skip(&mut self, last_skip: DateTime<Local>) {
+        self.last_skip = last_skip;
+    }
+
+    pub fn last_skip(&self) -> DateTime<Local> {
+        self.last_skip
     }
 
     pub fn reset(&mut self) {
@@ -474,6 +495,7 @@ impl PlayerState {
             quit_sender,
             jumps: 0,
             last_jump: SystemTime::now(),
+            last_skip: chrono::offset::Local::now(),
         }
     }
 

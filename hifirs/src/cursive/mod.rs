@@ -812,7 +812,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
                                     if let (Some(playlist), Some(mut entity_title), Some(mut total_tracks)) = (list.get_playlist(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
                                         entity_title.set_content(playlist.name.clone());
-                                        total_tracks.set_content(format!("{:03}", playlist.tracks_count));
+                                        total_tracks.set_content(format!("{:03}", list.len()));
                                     }
                                 })).expect("failed to send update");
                             }
