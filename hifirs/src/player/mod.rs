@@ -351,10 +351,6 @@ impl Player {
             }
         }
 
-        if !self.is_ready() {
-            self.ready(false).await?;
-        }
-
         let mut state = self.state.write().await;
         if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
             drop(state);
@@ -362,6 +358,11 @@ impl Player {
             if let Some(track_url) = &next_track_to_play.track_url {
                 debug!("skipping {direction} to next track");
 
+                if !self.is_ready() {
+                    self.ready(true).await?;
+                }
+
+                self.playbin.set_property("instant-uri", true);
                 self.playbin
                     .set_property("uri", Some(track_url.url.clone()));
 
@@ -574,6 +575,7 @@ impl Player {
 
             debug!("received new track, adding to player");
             if let Some(next_playlist_track_url) = &next_track.track_url {
+                self.playbin.set_property("instant-uri", false);
                 self.playbin
                     .set_property("uri", Some(next_playlist_track_url.url.clone()));
             }
@@ -728,7 +730,11 @@ pub async fn player_loop(
                         if player.quit_when_done {
                             safe_state.read().await.quit();
                         } else {
-                            player.ready(true).await?;
+                            let mut state = safe_state.write().await;
+                            state.set_target_status(GstState::Paused);
+                            drop(state);
+
+                            player.skip(SkipDirection::Backward, Some(0)).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
@@ -775,21 +781,12 @@ pub async fn player_loop(
 
                         debug!("buffering {}%", percent);
                         let target_status = safe_state.read().await.target_status();
-                        let buffering = safe_state.read().await.buffering();
 
-                        if percent < 100 && !buffering {
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(true);
-                            drop(state);
-
+                        if percent < 100 {
                             if !player.is_paused() {
                                 player.pause(false).await?;
                             }
-                        } else if percent > 99 && buffering  {
-                            let mut state = safe_state.write().await;
-                            state.set_buffering(false);
-                            drop(state);
-
+                        } else if percent > 99 {
                             player.set_player_state(target_status.clone().into(), false).await?;
                         }
 

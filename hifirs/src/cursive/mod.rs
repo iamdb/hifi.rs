@@ -713,9 +713,17 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
                                     GstState::Ready => {
                                         view.set_content("...");
+
+                                        s.call_on_name("progress", |progress: &mut ProgressBar| {
+                                            progress.set_value(0);
+                                        });
                                     }
                                     GstState::Null => {
                                         view.set_content("Null");
+
+                                        s.call_on_name("progress", |progress: &mut ProgressBar| {
+                                            progress.set_value(0);
+                                        });
                                     }
                                     _ => {}
                                 }
@@ -742,7 +750,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 if track.album.is_some() {
                                     track_num.set_content(format!("{:03}", track.track.track_number));
                                 } else {
-                                    track_num.set_content(format!("{:03}", track.index));
+                                    track_num.set_content(format!("{:03}", track.index + 1));
                                 }
                                 track_title.set_content(track.track.title.trim());
                                 progress.set_max(track.track.duration as usize);
@@ -784,10 +792,6 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                         title.append_plain(" ");
                                         title.append_styled(format!("({year})"), Effect::Dim);
 
-                                        if let Some(mut artist_name) = s.find_name::<TextView>("artist_name") {
-                                            artist_name.set_content(album.artist.name.clone());
-                                        }
-
                                         entity_title.set_content(title);
                                         total_tracks.set_content(format!("{:03}", album.tracks_count));
                                     }
@@ -808,7 +812,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                     }
                                     if let (Some(playlist), Some(mut entity_title), Some(mut total_tracks)) = (list.get_playlist(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
                                         entity_title.set_content(playlist.name.clone());
-                                        total_tracks.set_content(playlist.tracks_count.to_string());
+                                        total_tracks.set_content(format!("{:03}", list.len()));
                                     }
                                 })).expect("failed to send update");
                             }

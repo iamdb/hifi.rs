@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::client::{
-    track::{TrackListTrack, Tracks},
+    track::{TrackListTrack, TrackStatus, Tracks},
     AudioQuality, User,
 };
 use serde::{Deserialize, Serialize};
@@ -84,19 +84,22 @@ impl Playlist {
                 .items
                 .iter()
                 .cloned()
+                .filter(|t| t.streamable)
                 .enumerate()
-                .filter_map(|(i, t)| {
-                    if t.streamable {
-                        Some(TrackListTrack::new(
-                            t,
-                            Some(i + 1),
-                            Some(tracks.items.len()),
-                            Some(quality.clone()),
-                            None,
-                        ))
-                    } else {
-                        None
+                .map(|(i, t)| {
+                    let mut track = TrackListTrack::new(
+                        t,
+                        Some(i),
+                        Some(tracks.total as usize),
+                        Some(quality.clone()),
+                        None,
+                    );
+
+                    if i == 0 {
+                        track.status = TrackStatus::Playing;
                     }
+
+                    track
                 })
                 .collect::<VecDeque<TrackListTrack>>()
         })

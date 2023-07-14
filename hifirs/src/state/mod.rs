@@ -184,6 +184,16 @@ impl TrackListValue {
         }
     }
 
+    pub fn total(&self) -> usize {
+        if let Some(album) = &self.album {
+            album.tracks_count as usize
+        } else if let Some(list) = &self.playlist {
+            list.tracks_count as usize
+        } else {
+            self.queue.len()
+        }
+    }
+
     #[instrument]
     pub fn clear(&mut self) {
         self.list_type = TrackListType::Unknown;

@@ -2,6 +2,7 @@ use crate::{
     sql::db::Database,
     state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
 };
+use chrono::{DateTime, Local};
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::{
@@ -41,6 +42,7 @@ pub struct PlayerState {
     quit_sender: BroadcastSender<bool>,
     jumps: usize,
     last_jump: SystemTime,
+    last_skip: DateTime<Local>,
 }
 
 pub type SafePlayerState = Arc<RwLock<PlayerState>>;
@@ -115,18 +117,15 @@ impl PlayerState {
             tracklist.set_album(album.clone());
             tracklist.set_list_type(TrackListType::Album);
 
-            let mut first_track = tracklist.front().unwrap().clone();
-            first_track.status = TrackStatus::Playing;
-
-            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
-
             self.replace_list(tracklist.clone());
 
-            self.attach_track_url(&mut first_track).await;
+            let first_track = tracklist.queue.front_mut().unwrap();
+
+            self.attach_track_url(first_track).await;
             self.set_current_track(first_track.clone());
             self.set_target_status(GstState::Playing);
 
-            (Some(first_track), Some(tracklist))
+            (Some(first_track.clone()), Some(tracklist))
         } else {
             (None, None)
         }
@@ -167,18 +166,15 @@ impl PlayerState {
             tracklist.set_playlist(playlist.clone());
             tracklist.set_list_type(TrackListType::Playlist);
 
-            let mut first_track = tracklist.front().unwrap().clone();
-            first_track.status = TrackStatus::Playing;
-
-            tracklist.set_track_status(first_track.track.id as usize, TrackStatus::Playing);
-
             self.replace_list(tracklist.clone());
 
-            self.attach_track_url(&mut first_track).await;
+            let first_track = tracklist.queue.front_mut().unwrap();
+
+            self.attach_track_url(first_track).await;
             self.set_current_track(first_track.clone());
             self.set_target_status(GstState::Playing);
 
-            (Some(first_track), Some(tracklist))
+            (Some(first_track.clone()), Some(tracklist))
         } else {
             (None, None)
         }
@@ -371,8 +367,15 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
+        let now = chrono::offset::Local::now().timestamp_millis();
+        let last_skip = self.last_skip.timestamp_millis();
+
+        if now - last_skip < 250 {
+            return None;
+        }
+
         let next_track_index = if let Some(i) = index {
-            if i < self.tracklist.len() {
+            if i <= self.tracklist.total() {
                 Some(i)
             } else {
                 None
@@ -380,7 +383,7 @@ impl PlayerState {
         } else if let Some(current_track_index) = self.current_track_index() {
             match direction {
                 SkipDirection::Forward => {
-                    if current_track_index < self.tracklist.len() - 1 {
+                    if current_track_index < self.tracklist.total() {
                         Some(current_track_index + 1)
                     } else {
                         None
@@ -399,7 +402,7 @@ impl PlayerState {
         };
 
         if let Some(index) = next_track_index {
-            let mut current_track = self.current_track.clone();
+            let mut current_track = None;
 
             for t in self.tracklist.queue.iter_mut() {
                 match t.index.cmp(&index) {
@@ -420,6 +423,10 @@ impl PlayerState {
                         t.status = TrackStatus::Unplayed;
                     }
                 }
+            }
+
+            if current_track.is_some() {
+                self.last_skip = chrono::offset::Local::now();
             }
 
             current_track
@@ -445,6 +452,14 @@ impl PlayerState {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
+    }
+
+    pub fn set_last_skip(&mut self, last_skip: DateTime<Local>) {
+        self.last_skip = last_skip;
+    }
+
+    pub fn last_skip(&self) -> DateTime<Local> {
+        self.last_skip
     }
 
     pub fn reset(&mut self) {
@@ -480,6 +495,7 @@ impl PlayerState {
             quit_sender,
             jumps: 0,
             last_jump: SystemTime::now(),
+            last_skip: chrono::offset::Local::now(),
         }
     }
 
