@@ -2,7 +2,6 @@ use crate::{
     sql::db::Database,
     state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
 };
-use chrono::{DateTime, Local};
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::{
@@ -12,12 +11,7 @@ use hifirs_qobuz_api::client::{
     track::{TrackListTrack, TrackStatus},
     AudioQuality,
 };
-use std::{
-    collections::VecDeque,
-    fmt::Display,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{collections::VecDeque, fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     RwLock,
@@ -40,9 +34,6 @@ pub struct PlayerState {
     active_screen: ActiveScreen,
     audio_quality: AudioQuality,
     quit_sender: BroadcastSender<bool>,
-    jumps: usize,
-    last_jump: SystemTime,
-    last_skip: DateTime<Local>,
 }
 
 pub type SafePlayerState = Arc<RwLock<PlayerState>>;
@@ -307,25 +298,6 @@ impl PlayerState {
         self.is_live
     }
 
-    pub fn jumps(&self) -> usize {
-        self.jumps
-    }
-
-    pub fn add_jump(&mut self) {
-        self.jumps += 1;
-    }
-
-    pub fn sub_jump(&mut self) {
-        self.jumps -= 1;
-    }
-
-    pub fn check_last_jump(&self) -> bool {
-        self.last_jump
-            .elapsed()
-            .expect("failed to get elapsed time, should not occur")
-            < Duration::from_millis(500)
-    }
-
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut TrackListTrack) {
         debug!("fetching track url");
@@ -367,10 +339,7 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
-        let now = chrono::offset::Local::now().timestamp_millis();
-        let last_skip = self.last_skip.timestamp_millis();
-
-        if now - last_skip < 250 {
+        if self.is_buffering {
             return None;
         }
 
@@ -425,10 +394,6 @@ impl PlayerState {
                 }
             }
 
-            if current_track.is_some() {
-                self.last_skip = chrono::offset::Local::now();
-            }
-
             current_track
         } else {
             debug!("no more tracks");
@@ -452,14 +417,6 @@ impl PlayerState {
         self.quit_sender
             .send(true)
             .expect("failed to send quit message");
-    }
-
-    pub fn set_last_skip(&mut self, last_skip: DateTime<Local>) {
-        self.last_skip = last_skip;
-    }
-
-    pub fn last_skip(&self) -> DateTime<Local> {
-        self.last_skip
     }
 
     pub fn reset(&mut self) {
@@ -493,9 +450,6 @@ impl PlayerState {
             resume: false,
             active_screen: ActiveScreen::NowPlaying,
             quit_sender,
-            jumps: 0,
-            last_jump: SystemTime::now(),
-            last_skip: chrono::offset::Local::now(),
         }
     }
 

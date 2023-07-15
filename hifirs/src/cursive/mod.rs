@@ -1,4 +1,11 @@
-use std::{rc::Rc, str::FromStr};
+use std::{
+    rc::Rc,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use crate::{
     player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
@@ -9,12 +16,13 @@ use cursive::{
     direction::Orientation,
     event::{Event, Key},
     reexports::crossbeam_channel::Sender,
-    theme::{BorderStyle, Effect, Palette, Style},
+    theme::{BorderStyle, ColorStyle, Effect, Palette, Style},
     utils::{markup::StyledString, Counter},
-    view::{Nameable, Resizable, Scrollable, SizeConstraint},
+    view::{Nameable, Position, Resizable, Scrollable, SizeConstraint},
     views::{
-        Button, Dialog, EditView, HideableView, LinearLayout, MenuPopup, NamedView, OnEventView,
-        PaddedView, Panel, ProgressBar, ResizedView, ScreensView, ScrollView, SelectView, TextView,
+        Button, Dialog, EditView, HideableView, Layer, LinearLayout, MenuPopup, NamedView,
+        OnEventView, PaddedView, Panel, ProgressBar, ResizedView, ScreensView, ScrollView,
+        SelectView, TextView,
     },
     CbSink, Cursive, CursiveRunnable, With,
 };
@@ -205,6 +213,7 @@ impl CursiveUI {
         self.root.add_global_callback('1', move |s| {
             s.set_screen(0);
         });
+
         self.root.add_global_callback('2', move |s| {
             s.set_screen(1);
         });
@@ -458,28 +467,143 @@ impl CursiveUI {
         panel
     }
 
+    fn enter_url<F>(callback: F) -> NamedView<OnEventView<ResizedView<Panel<EditView>>>>
+    where
+        F: Fn(&mut Cursive, &str) + 'static,
+    {
+        let mut input = EditView::new();
+
+        input.set_on_submit(callback);
+
+        let panel = OnEventView::new(Panel::new(input).title("Enter URL").full_width());
+
+        panel.with_name("event_url")
+    }
+
     pub fn menubar(&mut self) {
         self.root.set_autohide_menu(false);
+        let enter_url_open = Arc::new(AtomicBool::new(false));
 
+        let c = self.controls.clone();
+
+        let e0 = enter_url_open.clone();
+        let open = Arc::new(move |s: &mut Cursive| {
+            let c = c.clone();
+
+            let e = e0.clone();
+            let mut panel = CursiveUI::enter_url(move |s, url| {
+                block_on(async { c.play_uri(url.to_string()).await });
+                s.pop_layer();
+                e.store(false, Ordering::Relaxed);
+            });
+
+            let e = e0.clone();
+            panel
+                .get_mut()
+                .set_on_pre_event(Event::Key(Key::Esc), move |s| {
+                    s.pop_layer();
+                    e.store(false, Ordering::Relaxed);
+                });
+
+            let bg = Layer::with_color(
+                PaddedView::lrtb(
+                    2,
+                    2,
+                    2,
+                    2,
+                    panel.resized(SizeConstraint::Full, SizeConstraint::Fixed(3)),
+                )
+                .full_width(),
+                ColorStyle::highlight_inactive(),
+            )
+            .full_width();
+
+            s.screen_mut().add_layer_at(Position::parent((0, 3)), bg);
+
+            e0.store(true, Ordering::Relaxed);
+        });
+
+        let o = open.clone();
+        let e0 = enter_url_open.clone();
+        let e1 = enter_url_open.clone();
+        let e2 = enter_url_open.clone();
+        let e3 = enter_url_open.clone();
+        let e4 = enter_url_open.clone();
         self.root
             .menubar()
-            .add_leaf(
-                StyledString::styled("Now Playing", Effect::Underline),
-                |s| {
-                    s.set_screen(0);
-                },
-            )
+            .add_leaf("Now Playing", move |s| {
+                let e = e0.clone();
+
+                if e.load(Ordering::Relaxed) {
+                    s.pop_layer();
+                    e.store(false, Ordering::Relaxed);
+                }
+
+                s.set_screen(0);
+            })
             .add_delimiter()
-            .add_leaf(
-                StyledString::styled("My Playlists", Effect::Underline),
-                |s| {
-                    s.set_screen(1);
-                },
-            )
+            .add_leaf("My Playlists", move |s| {
+                let e = e1.clone();
+
+                if e.load(Ordering::Relaxed) {
+                    s.pop_layer();
+                    e.store(false, Ordering::Relaxed);
+                }
+
+                s.set_screen(1);
+            })
             .add_delimiter()
-            .add_leaf(StyledString::styled("Search", Effect::Underline), |s| {
+            .add_leaf("Search", move |s| {
+                let e = e2.clone();
+
+                if e.load(Ordering::Relaxed) {
+                    s.pop_layer();
+                    e.store(false, Ordering::Relaxed);
+                }
+
                 s.set_screen(2);
+            })
+            .add_delimiter()
+            .add_leaf("Enter URL", move |s| {
+                if !e3.load(Ordering::Relaxed) {
+                    o(s);
+                }
             });
+
+        let o = open.clone();
+        self.root.add_global_callback('4', move |s| {
+            o(s);
+        });
+
+        let e = e4.clone();
+        self.root.add_global_callback('1', move |s| {
+            if e.load(Ordering::Relaxed) {
+                s.pop_layer();
+                e.store(false, Ordering::Relaxed);
+            }
+
+            s.set_screen(0);
+        });
+
+        let e = e4.clone();
+        self.root.add_global_callback('2', move |s| {
+            if e.load(Ordering::Relaxed) {
+                s.pop_layer();
+                e.store(false, Ordering::Relaxed);
+            }
+
+            s.set_screen(1);
+        });
+
+        let e = e4.clone();
+        self.root.add_global_callback('3', move |s| {
+            if e.load(Ordering::Relaxed) {
+                s.pop_layer();
+                e.store(false, Ordering::Relaxed);
+            }
+
+            s.set_screen(2);
+        });
     }
 
     pub async fn run(&mut self) {
