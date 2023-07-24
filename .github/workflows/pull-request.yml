@@ -34,6 +34,7 @@ jobs:
       - name: Install gstreamer (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
+          brew update
           brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav gst-rtsp-server gst-editing-services 
       - name: Install Rust Toolchain
         uses: actions-rs/toolchain@v1
