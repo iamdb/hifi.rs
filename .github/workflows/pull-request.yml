@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
+          shared-key: ${{ runner.os }}-rust-cache
       - name: Install gstreamer (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -41,7 +41,7 @@ jobs:
           profile: minimal
           toolchain: stable
           components: rustfmt, clippy
-      - name: Run CI Flow
+      - name: Install Cargo Plugins
         uses: actions-rs/cargo@v1
         with:
           command: install
