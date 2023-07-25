@@ -11,6 +11,7 @@ lto = true
 opt-level = "z"
 panic = 'abort'
 debug = 1
+strip = false
 
 [profile.dev]
 opt-level = 1
