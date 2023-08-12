@@ -80,7 +80,10 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
     // Connects to the `about-to-finish` signal so the player
     // can setup the next track to play. Enables gapless playback.
-    playbin.connect("about-to-finish", false, move |_| {
+    playbin.connect("about-to-finish", false, move |value| {
+        let element = &value[0].get::<gst::Element>().unwrap();
+        element.set_property("instant-uri", false);
+
         debug!("about to finish");
         ABOUT_TO_FINISH
             .0
@@ -352,11 +355,10 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
         if let Some(track_url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
-            ready(true).await?;
-
+            PLAYBIN.set_property("instant-uri", true);
             PLAYBIN.set_property("uri", Some(track_url.url.clone()));
 
-            set_player_state(state.status().into(), true).await?;
+            set_player_state(state.status().into(), false).await?;
             drop(state);
 
             BROADCAST_CHANNELS
