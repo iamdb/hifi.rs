@@ -173,8 +173,6 @@ async fn setup_player<'s>(
 
     player::init(client.clone(), database, quit_when_done).await?;
 
-    let notify_receiver = player::notify_receiver();
-
     let controls = player::controls();
     let tui = CursiveUI::new(controls, client.clone());
 
@@ -189,14 +187,14 @@ async fn setup_player<'s>(
         let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        let nr = notify_receiver.clone();
+        let notify_receiver = player::notify_receiver();
         tokio::spawn(async {
-            mpris::receive_notifications(conn, nr).await;
+            mpris::receive_notifications(conn, notify_receiver).await;
         });
     }
 
-    let sink = tui.sink().await.clone();
-    tokio::spawn(async { cursive::receive_notifications(sink, notify_receiver).await });
+    let notify_receiver = player::notify_receiver();
+    tokio::spawn(async { cursive::receive_notifications(notify_receiver).await });
 
     tokio::spawn(async { player::player_loop().await });
 

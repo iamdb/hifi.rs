@@ -33,8 +33,6 @@ pub async fn new() -> Database {
     let options = SqliteConnectOptions::new()
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .filename(database_url)
-        .synchronous(sqlx::sqlite::SqliteSynchronous::Full)
-        .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
         .create_if_missing(true);
 
     let pool = SqlitePool::connect_with(options)

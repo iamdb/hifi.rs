@@ -77,7 +77,7 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
                 }
             }
         } else if let (Some(username), Some(password)) = (config.username, config.password) {
-            info!("using username and password from cache");
+            info!("setting auth using username and password from cache");
             client.set_credentials(Credentials {
                 username: Some(username),
                 password: Some(password),

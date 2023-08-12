@@ -29,7 +29,12 @@ use cursive::{
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
+use once_cell::sync::OnceCell;
 use tokio::select;
+
+type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
+
+static SINK: OnceCell<CursiveSender> = OnceCell::new();
 
 static UNSTREAMABLE: &str = "UNSTREAMABLE";
 
@@ -42,6 +47,8 @@ pub struct CursiveUI {
 impl CursiveUI {
     pub fn new(controls: Controls, client: Client) -> Self {
         let mut siv = cursive::default();
+
+        SINK.set(siv.cb_sink().clone()).expect("error setting sink");
 
         siv.set_theme(cursive::theme::Theme {
             shadow: false,
@@ -254,10 +261,16 @@ impl CursiveUI {
         let mut user_playlists = SelectView::new().popup();
         user_playlists.add_item("Select Playlist", 0);
 
-        if let Ok(my_playlists) = self.client.user_playlists().await {
-            my_playlists.playlists.items.iter().for_each(|p| {
-                user_playlists.add_item(p.name.clone(), p.id);
-            });
+        match self.client.user_playlists().await {
+            Ok(my_playlists) => {
+                debug!("received user playlists, adding to screen");
+                my_playlists.playlists.items.iter().for_each(|p| {
+                    user_playlists.add_item(p.name.clone(), p.id);
+                });
+            }
+            Err(error) => {
+                debug!(?error);
+            }
         }
 
         let c = self.controls.clone();
@@ -818,15 +831,13 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
     s.screen_mut().add_layer(album_or_track);
 }
 
-type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
-
-pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastReceiver) {
+pub async fn receive_notifications(mut receiver: BroadcastReceiver) {
     loop {
         select! {
             Ok(notification) = receiver.recv() => {
                 match notification {
                     Notification::Status { status } => {
-                        cb.send(Box::new(|s| {
+                        SINK.get().unwrap().send(Box::new(|s| {
                             if let Some(mut view) = s.find_name::<TextView>("player_status") {
                                 match status.into() {
                                     GstState::Playing => {
@@ -855,21 +866,21 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                         })).expect("failed to send update");
                     }
                     Notification::Position { position } => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
                                 progress.set_value(position.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }
                     Notification::Duration {duration} => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
                                 progress.set_max(duration.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }
                     Notification::CurrentTrack {track} => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
                                 if track.album.is_some() {
                                     track_num.set_content(format!("{:03}", track.track.track_number));
@@ -895,7 +906,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                     Notification::CurrentTrackList { list } => {
                         match list.list_type() {
                             TrackListType::Album => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
 
@@ -922,7 +933,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 })).expect("failed to send update");
                             }
                             TrackListType::Playlist => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
 
@@ -941,7 +952,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 })).expect("failed to send update");
                             }
                             TrackListType::Track => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
                                     }
@@ -958,7 +969,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                         }
                     }
                     Notification::Buffering { is_buffering, target_status, percent } => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             s.call_on_name("player_status", |view: &mut TextView| {
                                 if is_buffering {
                                     view.set_content(format!("{}%", percent));

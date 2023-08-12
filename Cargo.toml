@@ -6,15 +6,8 @@ members = [
 ]
 
 [profile.release]
-codegen-units = 1
 lto = true
+strip = true
+debug = false
 opt-level = "z"
-panic = 'abort'
-debug = 1
-strip = false
-
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
+codegen-units = 1

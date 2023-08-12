@@ -40,33 +40,12 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     gst::init().expect("error initializing gstreamer");
 
-    gst::ElementFactory::make("playbin3")
+    let playbin = gst::ElementFactory::make("playbin3")
         .build()
-        .expect("error building playbin element")
-});
-static CONTROLS: Lazy<Controls> = Lazy::new(Controls::new);
-static BROADCAST_CHANNELS: Lazy<(BroadcastSender, BroadcastReceiver)> = Lazy::new(|| {
-    let (mut sender, receiver) = async_broadcast::broadcast(10);
-    sender.set_overflow(true);
+        .expect("error building playbin element");
 
-    (sender, receiver)
-});
-static ABOUT_TO_FINISH: Lazy<(Sender<bool>, Receiver<bool>)> =
-    Lazy::new(|| flume::bounded::<bool>(1));
-static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
-static STATE: OnceCell<SafePlayerState> = OnceCell::new();
-
-const USER_AGENTS: &[&str] = &["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"];
-
-#[instrument]
-pub async fn init(client: Client, database: Database, quit_when_done: bool) -> Result<()> {
-    let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), database)));
-
-    STATE.set(state).expect("error setting player state");
-    QUIT_WHEN_DONE.store(quit_when_done, Ordering::Relaxed);
-
-    PLAYBIN.set_property_from_str("flags", "audio+buffering");
-    PLAYBIN.connect("element-setup", false, |value| {
+    playbin.set_property_from_str("flags", "audio+buffering");
+    playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
         if element.name().contains("urisourcebin") {
@@ -75,7 +54,7 @@ pub async fn init(client: Client, database: Database, quit_when_done: bool) -> R
 
         None
     });
-    PLAYBIN.connect("source-setup", false, |value| {
+    playbin.connect("source-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
         if element.name().contains("souphttpsrc") {
@@ -101,7 +80,7 @@ pub async fn init(client: Client, database: Database, quit_when_done: bool) -> R
 
     // Connects to the `about-to-finish` signal so the player
     // can setup the next track to play. Enables gapless playback.
-    PLAYBIN.connect("about-to-finish", false, move |_| {
+    playbin.connect("about-to-finish", false, move |_| {
         debug!("about to finish");
         ABOUT_TO_FINISH
             .0
@@ -110,6 +89,29 @@ pub async fn init(client: Client, database: Database, quit_when_done: bool) -> R
 
         None
     });
+
+    playbin
+});
+static CONTROLS: Lazy<Controls> = Lazy::new(Controls::new);
+static BROADCAST_CHANNELS: Lazy<(BroadcastSender, BroadcastReceiver)> = Lazy::new(|| {
+    let (mut sender, receiver) = async_broadcast::broadcast(10);
+    sender.set_overflow(true);
+
+    (sender, receiver)
+});
+static ABOUT_TO_FINISH: Lazy<(Sender<bool>, Receiver<bool>)> =
+    Lazy::new(|| flume::bounded::<bool>(1));
+static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
+static STATE: OnceCell<SafePlayerState> = OnceCell::new();
+
+const USER_AGENTS: &[&str] = &["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"];
+
+#[instrument]
+pub async fn init(client: Client, database: Database, quit_when_done: bool) -> Result<()> {
+    let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), database)));
+
+    STATE.set(state).expect("error setting player state");
+    QUIT_WHEN_DONE.store(quit_when_done, Ordering::Relaxed);
 
     Ok(())
 }
@@ -575,15 +577,12 @@ async fn prep_next_track() -> Result<()> {
 pub fn notify_receiver() -> BroadcastReceiver {
     BROADCAST_CHANNELS.1.clone()
 }
-// /// Consume the player and return a thread/async safe version.
-// #[instrument(skip(self))]
-// pub fn safe(self) -> SafePlayer {
-//     Arc::new(RwLock::new(self))
-// }
 
 /// Inserts the most recent position into the state at a set interval.
 #[instrument]
 pub async fn clock_loop() {
+    debug!("starting clock loop");
+
     let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
     let mut last_position = ClockValue::default();
 
