@@ -105,6 +105,7 @@ static BROADCAST_CHANNELS: Lazy<(BroadcastSender, BroadcastReceiver)> = Lazy::ne
 static ABOUT_TO_FINISH: Lazy<(Sender<bool>, Receiver<bool>)> =
     Lazy::new(|| flume::bounded::<bool>(1));
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
+static IS_SKIPPING: AtomicBool = AtomicBool::new(false);
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 
 const USER_AGENTS: &[&str] = &["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"];
@@ -350,16 +351,21 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
         }
     }
 
+    if IS_SKIPPING.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+
+    IS_SKIPPING.store(true, Ordering::Relaxed);
+
     let mut state = STATE.get().unwrap().write().await;
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
+        drop(state);
+
         if let Some(track_url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
             PLAYBIN.set_property("instant-uri", true);
             PLAYBIN.set_property("uri", Some(track_url.url.clone()));
-
-            set_player_state(state.status().into(), false).await?;
-            drop(state);
 
             BROADCAST_CHANNELS
                 .0
@@ -752,6 +758,10 @@ pub async fn player_loop() -> Result<()> {
                         } else if percent > 99 && is_buffering && is_paused() {
                             set_player_state(target_status.clone().into(), false).await?;
                             STATE.get().unwrap().write().await.set_buffering(false);
+
+                            if IS_SKIPPING.load(Ordering::Relaxed) {
+                                IS_SKIPPING.store(false, Ordering::Relaxed);
+                            }
                         }
 
                         if percent.rem_euclid(5) == 0 {
