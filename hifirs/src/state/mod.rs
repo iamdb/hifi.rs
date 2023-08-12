@@ -289,6 +289,16 @@ impl TrackListValue {
         index
     }
 
+    pub fn current_track(&self) -> Option<TrackListTrack> {
+        for track in &self.queue {
+            if track.status == TrackStatus::Playing {
+                return Some(track.clone());
+            }
+        }
+
+        None
+    }
+
     #[instrument]
     pub fn vec(&self) -> VecDeque<TrackListTrack> {
         self.queue.clone()

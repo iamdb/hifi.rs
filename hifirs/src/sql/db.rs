@@ -33,6 +33,8 @@ pub async fn new() -> Database {
     let options = SqliteConnectOptions::new()
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
         .filename(database_url)
+        .synchronous(sqlx::sqlite::SqliteSynchronous::Full)
+        .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
         .create_if_missing(true);
 
     let pool = SqlitePool::connect_with(options)
@@ -54,7 +56,7 @@ impl Database {
     pub async fn clear_state(&self) {
         if let Ok(mut conn) = acquire!(self) {
             sqlx::query("DELETE FROM state WHERE state.key != 'active_screen'")
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await
                 .expect("failed to clear state");
         }
@@ -191,7 +193,7 @@ impl Database {
                 saved_state.playback_entity_id,
                 playback_entity_type
             )
-            .execute(&mut conn)
+            .execute(&mut *conn)
             .await
             .expect("database failure");
         }

@@ -130,7 +130,7 @@ impl CursiveUI {
 
         let player_status = LinearLayout::new(Orientation::Vertical)
             .child(
-                TextView::new("Null")
+                TextView::new(format!(" {}", '\u{23f9}'))
                     .h_align(HAlign::Center)
                     .with_name("player_status"),
             )
@@ -830,20 +830,20 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                             if let Some(mut view) = s.find_name::<TextView>("player_status") {
                                 match status.into() {
                                     GstState::Playing => {
-                                        view.set_content(format!(" {}", '\u{25B6}'));
+                                        view.set_content(format!(" {}", '\u{23f5}'));
                                     }
                                     GstState::Paused => {
-                                        view.set_content(format!(" {}", '\u{23F8}'));
+                                        view.set_content(format!(" {}", '\u{23f8}'));
                                     }
                                     GstState::Ready => {
-                                        view.set_content("...");
+                                        view.set_content(format!(" {}", '\u{23f9}'));
 
                                         s.call_on_name("progress", |progress: &mut ProgressBar| {
                                             progress.set_value(0);
                                         });
                                     }
                                     GstState::Null => {
-                                        view.set_content("Null");
+                                        view.set_content(format!(" {}", '\u{23f9}'));
 
                                         s.call_on_name("progress", |progress: &mut ProgressBar| {
                                             progress.set_value(0);
@@ -965,16 +965,16 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 } else {
                                     match target_status.into() {
                                         GstState::Playing => {
-                                            view.set_content(format!(" {}", '\u{25B6}'));
+                                            view.set_content(format!(" {}", '\u{23f5}'));
                                         }
                                         GstState::Paused => {
-                                            view.set_content(format!(" {}", '\u{23F8}'));
+                                            view.set_content(format!(" {}", '\u{23f8}'));
                                         }
                                         GstState::Ready => {
-                                            view.set_content("...");
+                                            view.set_content(format!(" {}", '\u{23f9}'));
                                         }
                                         GstState::Null => {
-                                            view.set_content("Null");
+                                            view.set_content(format!(" {}", '\u{23f9}'));
                                         }
                                         _ => {}
                                     }

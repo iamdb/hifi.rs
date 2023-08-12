@@ -1,6 +1,6 @@
 use crate::{
     player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
-    state::{app::SafePlayerState, ClockValue, StatusValue, TrackListValue},
+    state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
@@ -46,7 +46,6 @@ pub async fn init(controls: Controls) -> Connection {
         .unwrap()
         .name("org.mpris.MediaPlayer2.hifirs")
         .unwrap()
-        .internal_executor(false)
         .build()
         .await;
 
@@ -60,11 +59,7 @@ pub async fn init(controls: Controls) -> Connection {
     }
 }
 
-pub async fn receive_notifications(
-    safe_state: SafePlayerState,
-    conn: Connection,
-    mut receiver: BroadcastReceiver,
-) {
+pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastReceiver) {
     let object_server = conn.object_server();
 
     loop {
@@ -157,7 +152,7 @@ pub async fn receive_notifications(
                             .expect("failed to signal metadata change");
                     },
                     Notification::CurrentTrackList { list } => {
-                        if let Some(current) = safe_state.read().await.current_track() {
+                        if let Some(current) = list.current_track() {
                             let list_ref = object_server
                                 .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
                                 .await

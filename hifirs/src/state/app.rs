@@ -150,10 +150,9 @@ impl PlayerState {
     pub async fn play_playlist(
         &mut self,
         playlist_id: i64,
-        quality: AudioQuality,
     ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
         if let Ok(mut playlist) = self.client.playlist(playlist_id).await {
-            let mut tracklist = TrackListValue::new(playlist.to_tracklist(quality));
+            let mut tracklist = TrackListValue::new(playlist.to_tracklist(None));
             tracklist.set_playlist(playlist.clone());
             tracklist.set_list_type(TrackListType::Playlist);
 
@@ -505,9 +504,7 @@ impl PlayerState {
                         )
                         .await
                     {
-                        if let Some(tracklist_tracks) =
-                            playlist.to_tracklist(self.audio_quality.clone())
-                        {
+                        if let Some(tracklist_tracks) = playlist.to_tracklist(None) {
                             self.replace_list(TrackListValue::new(Some(tracklist_tracks)));
                             self.tracklist.set_list_type(TrackListType::Playlist);
                             self.tracklist.set_playlist(playlist);
