@@ -96,11 +96,17 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     playbin
 });
 static CONTROLS: Lazy<Controls> = Lazy::new(Controls::new);
-static BROADCAST_CHANNELS: Lazy<(BroadcastSender, BroadcastReceiver)> = Lazy::new(|| {
-    let (mut sender, receiver) = async_broadcast::broadcast(10);
-    sender.set_overflow(true);
 
-    (sender, receiver)
+struct Broadcast {
+    tx: BroadcastSender,
+    rx: BroadcastReceiver,
+}
+
+static BROADCAST_CHANNELS: Lazy<Broadcast> = Lazy::new(|| {
+    let (mut tx, rx) = async_broadcast::broadcast(10);
+    tx.set_overflow(true);
+
+    Broadcast { rx, tx }
 });
 static ABOUT_TO_FINISH: Lazy<(Sender<bool>, Receiver<bool>)> =
     Lazy::new(|| flume::bounded::<bool>(1));
@@ -251,7 +257,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
         }
 
         BROADCAST_CHANNELS
-            .0
+            .tx
             .broadcast(Notification::CurrentTrackList {
                 list: state.track_list(),
             })
@@ -259,7 +265,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
 
         if let Some(track) = state.current_track() {
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrack {
                     track: track.clone(),
                 })
@@ -368,13 +374,13 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
             PLAYBIN.set_property("uri", Some(track_url.url.clone()));
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrackList {
                     list: STATE.get().unwrap().read().await.track_list(),
                 })
                 .await?;
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrack {
                     track: next_track_to_play,
                 })
@@ -442,12 +448,12 @@ pub async fn play_track(track_id: i32) -> Result<()> {
             }
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrackList { list: tracklist })
                 .await?;
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrack {
                     track: track_list_track.clone(),
                 })
@@ -480,14 +486,14 @@ pub async fn play_album(album_id: String) -> Result<()> {
             }
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrackList {
                     list: tracklist.clone(),
                 })
                 .await?;
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrack {
                     track: track.clone(),
                 })
@@ -544,14 +550,14 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
             }
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrackList {
                     list: tracklist.clone(),
                 })
                 .await?;
 
             BROADCAST_CHANNELS
-                .0
+                .tx
                 .broadcast(Notification::CurrentTrack {
                     track: first_track.clone(),
                 })
@@ -583,7 +589,7 @@ async fn prep_next_track() -> Result<()> {
 /// Get a notification channel receiver
 #[instrument]
 pub fn notify_receiver() -> BroadcastReceiver {
-    BROADCAST_CHANNELS.1.clone()
+    BROADCAST_CHANNELS.rx.clone()
 }
 
 /// Inserts the most recent position into the state at a set interval.
@@ -607,7 +613,7 @@ pub async fn clock_loop() {
                     drop(state);
 
                     BROADCAST_CHANNELS
-                        .0
+                        .tx
                         .broadcast(Notification::Position { position })
                         .await
                         .expect("failed to send notification");
@@ -719,18 +725,18 @@ pub async fn player_loop() -> Result<()> {
                             ClockTime::default().into()
                         };
 
-                        BROADCAST_CHANNELS.0.broadcast(Notification::Position { position }).await?;
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { position }).await?;
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
                         if let Some(current_track) = STATE.get().unwrap().read().await.current_track() {
-                            BROADCAST_CHANNELS.0
+                            BROADCAST_CHANNELS.tx
                                 .broadcast(Notification::CurrentTrack { track: current_track })
                                 .await?;
                         }
 
                         let list = STATE.get().unwrap().read().await.track_list();
-                        BROADCAST_CHANNELS.0.broadcast(Notification::CurrentTrackList{ list }).await?;
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::CurrentTrackList{ list }).await?;
 
                         if let Some(duration) = duration() {
                             debug!("setting track duration");
@@ -738,7 +744,7 @@ pub async fn player_loop() -> Result<()> {
                             state.set_duration(duration.clone());
                             drop(state);
 
-                            BROADCAST_CHANNELS.0.broadcast(Notification::Duration { duration }).await?;
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { duration }).await?;
                         }
                     }
                     MessageView::Buffering(buffering) => {
@@ -766,7 +772,7 @@ pub async fn player_loop() -> Result<()> {
 
                         if percent.rem_euclid(5) == 0 {
                             debug!("buffering {}%", percent);
-                            BROADCAST_CHANNELS.0.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
                         }
                     }
                     MessageView::StateChanged(state_changed) => {
@@ -783,7 +789,7 @@ pub async fn player_loop() -> Result<()> {
                             state.set_status(current_state.into());
                             drop(state);
 
-                            BROADCAST_CHANNELS.0.broadcast(Notification::Status { status: current_state.into() }).await?;
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Status { status: current_state.into() }).await?;
                         }
                     }
                     MessageView::ClockLost(_) => {
@@ -792,7 +798,7 @@ pub async fn player_loop() -> Result<()> {
                         play(true).await?;
                     }
                     MessageView::Error(err) => {
-                        BROADCAST_CHANNELS.0.broadcast(Notification::Error { error: err.into() }).await?;
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::Error { error: err.into() }).await?;
 
                         ready(true).await?;
                         pause(true).await?;
