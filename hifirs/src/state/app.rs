@@ -9,7 +9,6 @@ use hifirs_qobuz_api::client::{
     api::Client,
     playlist::Playlist,
     track::{TrackListTrack, TrackStatus},
-    AudioQuality,
 };
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 use tokio::sync::{
@@ -32,7 +31,6 @@ pub struct PlayerState {
     resume: bool,
     target_status: StatusValue,
     active_screen: ActiveScreen,
-    audio_quality: AudioQuality,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -91,20 +89,13 @@ impl PlayerState {
     pub async fn play_album(
         &mut self,
         album_id: String,
-        quality: Option<AudioQuality>,
     ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
         if let Ok(mut album) = self.client.album(album_id.as_str()).await {
             if album.tracks.is_none() {
                 album.attach_tracks(self.client.clone()).await;
             }
 
-            let quality = if let Some(quality) = quality {
-                quality
-            } else {
-                self.client.quality()
-            };
-
-            let mut tracklist = TrackListValue::new(album.to_tracklist(quality.clone()));
+            let mut tracklist = TrackListValue::new(album.to_tracklist());
             tracklist.set_album(album.clone());
             tracklist.set_list_type(TrackListType::Album);
 
@@ -124,10 +115,9 @@ impl PlayerState {
     pub async fn play_track(
         &mut self,
         track_id: i32,
-        quality: Option<AudioQuality>,
     ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
         if let Ok(new_track) = self.client.track(track_id).await {
-            let mut track = TrackListTrack::new(new_track, Some(0), Some(1), quality, None);
+            let mut track = TrackListTrack::new(new_track, Some(0), Some(1), None);
             track.status = TrackStatus::Playing;
 
             let mut queue = VecDeque::new();
@@ -152,7 +142,7 @@ impl PlayerState {
         playlist_id: i64,
     ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
         if let Ok(mut playlist) = self.client.playlist(playlist_id).await {
-            let mut tracklist = TrackListValue::new(playlist.to_tracklist(None));
+            let mut tracklist = TrackListValue::new(playlist.to_tracklist());
             tracklist.set_playlist(playlist.clone());
             tracklist.set_list_type(TrackListType::Playlist);
 
@@ -436,7 +426,6 @@ impl PlayerState {
         Self {
             db,
             current_track: None,
-            audio_quality: client.quality(),
             client,
             tracklist,
             duration: ClockValue::default(),
@@ -466,9 +455,7 @@ impl PlayerState {
             match entity_type {
                 TrackListType::Album => {
                     if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
-                        self.replace_list(TrackListValue::new(
-                            album.to_tracklist(self.audio_quality.clone()),
-                        ));
+                        self.replace_list(TrackListValue::new(album.to_tracklist()));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
@@ -504,7 +491,7 @@ impl PlayerState {
                         )
                         .await
                     {
-                        if let Some(tracklist_tracks) = playlist.to_tracklist(None) {
+                        if let Some(tracklist_tracks) = playlist.to_tracklist() {
                             self.replace_list(TrackListValue::new(Some(tracklist_tracks)));
                             self.tracklist.set_list_type(TrackListType::Playlist);
                             self.tracklist.set_playlist(playlist);
@@ -537,13 +524,7 @@ impl PlayerState {
                         .parse()
                         .expect("failed to parse track id");
                     if let Ok(track) = self.client.track(track_id).await {
-                        let mut track = TrackListTrack::new(
-                            track,
-                            Some(0),
-                            Some(1),
-                            Some(self.audio_quality.clone()),
-                            None,
-                        );
+                        let mut track = TrackListTrack::new(track, Some(0), Some(1), None);
                         track.status = TrackStatus::Playing;
 
                         let mut queue = VecDeque::new();

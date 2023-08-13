@@ -57,7 +57,6 @@ impl CursiveUI {
                 use cursive::theme::BaseColor::*;
 
                 {
-                    // First, override some colors from the base palette.
                     use cursive::theme::Color::TerminalDefault;
                     use cursive::theme::PaletteColor::*;
 
@@ -70,7 +69,6 @@ impl CursiveUI {
                 }
 
                 {
-                    // Then override some styles.
                     use cursive::theme::Color::TerminalDefault;
                     use cursive::theme::Effect::*;
                     use cursive::theme::PaletteStyle::*;

@@ -4,7 +4,7 @@ use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
     track::{TrackListTrack, TrackStatus, Tracks},
-    AudioQuality, Composer, Image,
+    Composer, Image,
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,7 +66,7 @@ pub struct Album {
 }
 
 impl Album {
-    pub fn to_tracklist(&self, quality: AudioQuality) -> Option<VecDeque<TrackListTrack>> {
+    pub fn to_tracklist(&self) -> Option<VecDeque<TrackListTrack>> {
         self.tracks.as_ref().map(|t| {
             t.items
                 .iter()
@@ -77,7 +77,6 @@ impl Album {
                             t.clone(),
                             Some(i),
                             Some(self.tracks_count as usize),
-                            Some(quality.clone()),
                             Some(self.clone()),
                         );
 

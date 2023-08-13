@@ -86,7 +86,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
         debug!("about to finish");
         ABOUT_TO_FINISH
-            .0
+            .tx
             .send(true)
             .expect("failed to send about to finish message");
 
@@ -108,13 +108,28 @@ static BROADCAST_CHANNELS: Lazy<Broadcast> = Lazy::new(|| {
 
     Broadcast { rx, tx }
 });
-static ABOUT_TO_FINISH: Lazy<(Sender<bool>, Receiver<bool>)> =
-    Lazy::new(|| flume::bounded::<bool>(1));
+
+struct AboutToFinish {
+    tx: Sender<bool>,
+    rx: Receiver<bool>,
+}
+
+static ABOUT_TO_FINISH: Lazy<AboutToFinish> = Lazy::new(|| {
+    let (tx, rx) = flume::bounded::<bool>(1);
+
+    AboutToFinish { tx, rx }
+});
+
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
+
 static IS_SKIPPING: AtomicBool = AtomicBool::new(false);
+
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 
-const USER_AGENTS: &[&str] = &["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36", "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"];
+static USER_AGENTS: &[&str] = &[
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+];
 
 #[instrument]
 pub async fn init(client: Client, database: Database, quit_when_done: bool) -> Result<()> {
@@ -125,7 +140,6 @@ pub async fn init(client: Client, database: Database, quit_when_done: bool) -> R
 
     Ok(())
 }
-
 /// Play the player.
 #[instrument]
 pub async fn play(wait: bool) -> Result<()> {
@@ -437,7 +451,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         .unwrap()
         .write()
         .await
-        .play_track(track_id, None)
+        .play_track(track_id)
         .await
     {
         if let Some(track_url) = &track_list_track.track_url {
@@ -475,7 +489,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
         .unwrap()
         .write()
         .await
-        .play_album(album_id, None)
+        .play_album(album_id)
         .await
     {
         if let Some(track_url) = &track.track_url {
@@ -628,7 +642,7 @@ pub async fn clock_loop() {
 #[instrument]
 pub async fn player_loop() -> Result<()> {
     let mut messages = PLAYBIN.bus().unwrap().stream();
-    let mut about_to_finish = ABOUT_TO_FINISH.1.stream();
+    let mut about_to_finish = ABOUT_TO_FINISH.rx.stream();
 
     let action_rx = CONTROLS.action_receiver();
     let mut actions = action_rx.stream();
