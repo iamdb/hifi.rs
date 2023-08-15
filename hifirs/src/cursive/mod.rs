@@ -29,7 +29,12 @@ use cursive::{
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
 use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
+use once_cell::sync::OnceCell;
 use tokio::select;
+
+type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
+
+static SINK: OnceCell<CursiveSender> = OnceCell::new();
 
 static UNSTREAMABLE: &str = "UNSTREAMABLE";
 
@@ -43,6 +48,8 @@ impl CursiveUI {
     pub fn new(controls: Controls, client: Client) -> Self {
         let mut siv = cursive::default();
 
+        SINK.set(siv.cb_sink().clone()).expect("error setting sink");
+
         siv.set_theme(cursive::theme::Theme {
             shadow: false,
             borders: BorderStyle::Simple,
@@ -50,7 +57,6 @@ impl CursiveUI {
                 use cursive::theme::BaseColor::*;
 
                 {
-                    // First, override some colors from the base palette.
                     use cursive::theme::Color::TerminalDefault;
                     use cursive::theme::PaletteColor::*;
 
@@ -63,7 +69,6 @@ impl CursiveUI {
                 }
 
                 {
-                    // Then override some styles.
                     use cursive::theme::Color::TerminalDefault;
                     use cursive::theme::Effect::*;
                     use cursive::theme::PaletteStyle::*;
@@ -130,7 +135,7 @@ impl CursiveUI {
 
         let player_status = LinearLayout::new(Orientation::Vertical)
             .child(
-                TextView::new("Null")
+                TextView::new(format!(" {}", '\u{23f9}'))
                     .h_align(HAlign::Center)
                     .with_name("player_status"),
             )
@@ -254,10 +259,16 @@ impl CursiveUI {
         let mut user_playlists = SelectView::new().popup();
         user_playlists.add_item("Select Playlist", 0);
 
-        if let Ok(my_playlists) = self.client.user_playlists().await {
-            my_playlists.playlists.items.iter().for_each(|p| {
-                user_playlists.add_item(p.name.clone(), p.id);
-            });
+        match self.client.user_playlists().await {
+            Ok(my_playlists) => {
+                debug!("received user playlists, adding to screen");
+                my_playlists.playlists.items.iter().for_each(|p| {
+                    user_playlists.add_item(p.name.clone(), p.id);
+                });
+            }
+            Err(error) => {
+                debug!(?error);
+            }
         }
 
         let c = self.controls.clone();
@@ -818,32 +829,30 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
     s.screen_mut().add_layer(album_or_track);
 }
 
-type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
-
-pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastReceiver) {
+pub async fn receive_notifications(mut receiver: BroadcastReceiver) {
     loop {
         select! {
             Ok(notification) = receiver.recv() => {
                 match notification {
                     Notification::Status { status } => {
-                        cb.send(Box::new(|s| {
+                        SINK.get().unwrap().send(Box::new(|s| {
                             if let Some(mut view) = s.find_name::<TextView>("player_status") {
                                 match status.into() {
                                     GstState::Playing => {
-                                        view.set_content(format!(" {}", '\u{25B6}'));
+                                        view.set_content(format!(" {}", '\u{23f5}'));
                                     }
                                     GstState::Paused => {
-                                        view.set_content(format!(" {}", '\u{23F8}'));
+                                        view.set_content(format!(" {}", '\u{23f8}'));
                                     }
                                     GstState::Ready => {
-                                        view.set_content("...");
+                                        view.set_content(format!(" {}", '\u{23f9}'));
 
                                         s.call_on_name("progress", |progress: &mut ProgressBar| {
                                             progress.set_value(0);
                                         });
                                     }
                                     GstState::Null => {
-                                        view.set_content("Null");
+                                        view.set_content(format!(" {}", '\u{23f9}'));
 
                                         s.call_on_name("progress", |progress: &mut ProgressBar| {
                                             progress.set_value(0);
@@ -855,21 +864,21 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                         })).expect("failed to send update");
                     }
                     Notification::Position { position } => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
                                 progress.set_value(position.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }
                     Notification::Duration {duration} => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
                                 progress.set_max(duration.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }
                     Notification::CurrentTrack {track} => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
                                 if track.album.is_some() {
                                     track_num.set_content(format!("{:03}", track.track.track_number));
@@ -895,7 +904,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                     Notification::CurrentTrackList { list } => {
                         match list.list_type() {
                             TrackListType::Album => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
 
@@ -922,7 +931,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 })).expect("failed to send update");
                             }
                             TrackListType::Playlist => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
 
@@ -941,7 +950,7 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                                 })).expect("failed to send update");
                             }
                             TrackListType::Track => {
-                                cb.send(Box::new(move |s| {
+                                SINK.get().unwrap().send(Box::new(move |s| {
                                     if let Some(mut list_view) = s.find_name::<ScrollView<SelectView<usize>>>("current_track_list") {
                                         list_view.get_inner_mut().clear();
                                     }
@@ -958,23 +967,23 @@ pub async fn receive_notifications(cb: CursiveSender, mut receiver: BroadcastRec
                         }
                     }
                     Notification::Buffering { is_buffering, target_status, percent } => {
-                        cb.send(Box::new(move |s| {
+                        SINK.get().unwrap().send(Box::new(move |s| {
                             s.call_on_name("player_status", |view: &mut TextView| {
                                 if is_buffering {
                                     view.set_content(format!("{}%", percent));
                                 } else {
                                     match target_status.into() {
                                         GstState::Playing => {
-                                            view.set_content(format!(" {}", '\u{25B6}'));
+                                            view.set_content(format!(" {}", '\u{23f5}'));
                                         }
                                         GstState::Paused => {
-                                            view.set_content(format!(" {}", '\u{23F8}'));
+                                            view.set_content(format!(" {}", '\u{23f8}'));
                                         }
                                         GstState::Ready => {
-                                            view.set_content("...");
+                                            view.set_content(format!(" {}", '\u{23f9}'));
                                         }
                                         GstState::Null => {
-                                            view.set_content("Null");
+                                            view.set_content(format!(" {}", '\u{23f9}'));
                                         }
                                         _ => {}
                                     }

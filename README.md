@@ -24,6 +24,10 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 Download tar from releases page, extract the tar and execute it or copy it to the your $PATH.
 
+## Requirements
+
+- [GStreamer v1.20+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (should come with most/all current Linux and MacOS versions)
+
 ## Get started
 
 Run `hifi-rs --help` or `hifi-rs <subcommand> --help` to see all available options.
@@ -34,35 +38,40 @@ To get started:
 hifi-rs config username # enter username at prompt
 hifi-rs config password # enter password at prompt
 hifi-rs config default-quality # enter quality at prompt (mp3, cd, hifi96 or hifi192)
-hifi-rs play --uri <Qobuz Album, Playlist or Track URL>
+
+# play from the command line
+hifi-rs play --url <Qobuz Album, Playlist or Track URL>
+
+# open player
+hifi-rs open
 ```
+
+The TUI has full mouse support.
 
 ## Keyboard Shortcuts
 
 | Command             | Key(s)                                 |
 | ------------------- | -------------------------------------- |
-| Switch screen       | <kbd>tab</kbd>                         |
+| Now Playing         | <kbd>1</kbd>                           |
+| My Playlists        | <kbd>2</kbd>                           |
+| Search              | <kbd>3</kbd>                           |
+| Enter URL           | <kbd>3</kbd>                           |
+| Cycle elements      | <kbd>tab</kbd>                         |
 | Play/Pause          | <kbd>space</kbd>                       |
 | Next track          | <kbd>N</kbd>                           |
 | Previous track      | <kbd>P</kbd>                           |
-| Jump forward        | <kbd>l</kbd> or <kbd>right arrow</kbd> |
-| Jump backward       | <kbd>h</kbd> or <kbd>left arrow</kbd>  |
+| Jump forward        | <kbd>l</kbd>                           |
+| Jump backward       | <kbd>h</kbd>                           |
 | Quit                | <kbd>ctrl</kbd> + <kbd>c</kbd>         |
-| Move up in list     | <kbd>k</kbd>                           |
-| Move down in list   | <kbd>j</kbd>                           |
+| Move up in list     | <kbd>up arrow</kbd>                           |
+| Move down in list   | <kbd>down arrow</kbd>                           |
 | Select item in list | <kbd>enter</kbd>                       |
 | Dismiss popup       | <kbd>esc</kbd>                         |
-| Enter search query  | <kbd>/</kbd>                           |
 
 ## Known Issues
 
-- If left paused for a while, the player will crash when attempting to play again
 - UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior. Probably best solved when switching to Cursive.
 
 ## Todo
 
-- Build binaries and make Github releases
-- Use unified search endpoint instead of individual
-- Switch to [Cursive](https://crates.io/crates/cursive) for UI library
-- Enable searching for albums, tracks and playlists in the UI
 - Sortable lists

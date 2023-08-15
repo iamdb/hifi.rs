@@ -2,4 +2,5 @@
 fn main() {
     // trigger recompilation when a new migration is added
     println!("cargo:rerun-if-changed=migrations");
+    println!("cargo:rustc-link-search=static=/usr/lib/x86_64-linux-gnu/");
 }

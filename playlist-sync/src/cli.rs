@@ -52,7 +52,6 @@ impl From<hifirs_qobuz_api::Error> for Error {
 }
 
 pub async fn run() -> Result<(), Error> {
-    pretty_env_logger::init();
     let cli = Cli::parse();
 
     let term = Term::stdout();

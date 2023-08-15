@@ -54,7 +54,7 @@ impl Database {
     pub async fn clear_state(&self) {
         if let Ok(mut conn) = acquire!(self) {
             sqlx::query("DELETE FROM state WHERE state.key != 'active_screen'")
-                .execute(&mut conn)
+                .execute(&mut *conn)
                 .await
                 .expect("failed to clear state");
         }
@@ -191,7 +191,7 @@ impl Database {
                 saved_state.playback_entity_id,
                 playback_entity_type
             )
-            .execute(&mut conn)
+            .execute(&mut *conn)
             .await
             .expect("database failure");
         }

@@ -10,10 +10,12 @@ clap = { version = "4", features = ["derive", "env"] }
 flume = "0.10"
 futures = "0.3"
 indicatif = "0.17"
+log = "0.4"
+pretty_env_logger = "0.5"
 hifirs-qobuz-api = { version = "0.1.0", path = "../qobuz-api" }
-rspotify = { version = "0.11" } 
+rspotify = { version = "0.11", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] } 
 snafu = "0.7"
 tokio = { version = "1.0", features = ["full"] }
-warp = "0.3"
+warp = { version = "0.3", features = ["tokio-rustls"] }
 webbrowser = "0.8"
 console = "0.15"

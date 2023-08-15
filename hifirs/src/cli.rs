@@ -2,18 +2,15 @@
 use crate::mpris;
 use crate::{
     cursive::{self, CursiveUI},
-    player::{self, Player},
+    player::{self},
     qobuz::{self, SearchResults},
     sql::db::{self, Database},
-    state::app::PlayerState,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{fmt, prelude::*};
 
@@ -42,22 +39,16 @@ enum Commands {
     Play {
         #[clap(long, short)]
         url: String,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
     },
     /// Stream an individual track by its ID.
     StreamTrack {
         #[clap(value_parser)]
         track_id: i32,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
     },
     /// Stream a full album by its ID.
     StreamAlbum {
         #[clap(value_parser)]
         album_id: String,
-        #[clap(short, long, value_enum)]
-        quality: Option<AudioQuality>,
     },
     Api {
         #[clap(subcommand)]
@@ -177,62 +168,52 @@ async fn setup_player<'s>(
     username: Option<String>,
     password: Option<String>,
     resume: bool,
-) -> Result<(Arc<RwLock<Player>>, CursiveUI), Error> {
+) -> Result<CursiveUI, Error> {
     let client = qobuz::make_client(username, password, &database).await?;
-    let state = Arc::new(RwLock::new(PlayerState::new(client.clone(), database)));
 
-    let new_player = player::new(client.clone(), state.clone(), quit_when_done).await?;
+    player::init(client.clone(), database, quit_when_done).await?;
 
-    let notify_receiver = new_player.notify_receiver();
-    let safe_player = new_player.safe();
-
-    let controls = safe_player.read().await.controls();
+    let controls = player::controls();
     let tui = CursiveUI::new(controls, client.clone());
 
     if resume {
-        let s = safe_player.clone();
         tokio::spawn(async move {
-            s.write()
-                .await
-                .resume(false)
-                .await
-                .expect("failed to resume");
+            player::resume(false).await.expect("failed to resume");
         });
     }
 
     #[cfg(target_os = "linux")]
     {
-        let controls = safe_player.read().await.controls();
+        let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        let nr = notify_receiver.clone();
-        let s = state.clone();
+        let notify_receiver = player::notify_receiver();
         tokio::spawn(async {
-            mpris::receive_notifications(s, conn, nr).await;
+            mpris::receive_notifications(conn, notify_receiver).await;
         });
     }
 
-    let sink = tui.sink().await.clone();
-    tokio::spawn(async { cursive::receive_notifications(sink, notify_receiver).await });
+    let notify_receiver = player::notify_receiver();
+    tokio::spawn(async { cursive::receive_notifications(notify_receiver).await });
 
-    let p = safe_player.clone();
-    tokio::spawn(async { player::player_loop(p, client, state).await });
+    tokio::spawn(async { player::player_loop().await });
 
-    Ok((safe_player, tui))
+    Ok(tui)
 }
 
 pub async fn run() -> Result<(), Error> {
     tracing_subscriber::registry()
-        .with(fmt::layer().pretty().with_writer(std::io::stderr))
+        .with(
+            fmt::layer()
+                .compact()
+                .with_file(false)
+                .with_writer(std::io::stderr),
+        )
         .with(EnvFilter::from_env("HIFIRS_LOG"))
         .init();
-    //pretty_env_logger::init();
+
     // PARSE CLI ARGS
     let cli = Cli::parse();
-
-    // DATABASE DIRECTORY
-    let mut base_dir = dirs::data_local_dir().unwrap();
-    base_dir.push("hifi-rs");
 
     // SETUP DATABASE
     let data = db::new().await;
@@ -246,7 +227,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
-            let (_player, mut tui) = setup_player(
+            let mut tui = setup_player(
                 data.to_owned(),
                 quit_when_done,
                 cli.username.to_owned(),
@@ -259,8 +240,8 @@ pub async fn run() -> Result<(), Error> {
 
             Ok(())
         }
-        Commands::Play { url, quality } => {
-            let (player, mut tui) = setup_player(
+        Commands::Play { url } => {
+            let mut tui = setup_player(
                 data.to_owned(),
                 quit_when_done,
                 cli.username.to_owned(),
@@ -269,14 +250,14 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            player.read_owned().await.play_uri(url, quality).await?;
+            player::play_uri(url).await?;
 
             tui.run().await;
 
             Ok(())
         }
-        Commands::StreamTrack { track_id, quality } => {
-            let (player, mut tui) = setup_player(
+        Commands::StreamTrack { track_id } => {
+            let mut tui = setup_player(
                 data.to_owned(),
                 quit_when_done,
                 cli.username.to_owned(),
@@ -285,18 +266,14 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            player
-                .read_owned()
-                .await
-                .play_track(track_id, quality)
-                .await?;
+            player::play_track(track_id).await?;
 
             tui.run().await;
 
             Ok(())
         }
-        Commands::StreamAlbum { album_id, quality } => {
-            let (player, mut tui) = setup_player(
+        Commands::StreamAlbum { album_id } => {
+            let mut tui = setup_player(
                 data.to_owned(),
                 quit_when_done,
                 cli.username.to_owned(),
@@ -305,11 +282,7 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            player
-                .read_owned()
-                .await
-                .play_album(album_id, quality)
-                .await?;
+            player::play_album(album_id).await?;
 
             tui.run().await;
 

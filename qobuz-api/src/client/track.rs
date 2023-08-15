@@ -1,4 +1,4 @@
-use crate::client::{album::Album, AudioQuality, TrackURL};
+use crate::client::{album::Album, TrackURL};
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 
@@ -78,7 +78,6 @@ pub enum TrackStatus {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TrackListTrack {
     pub track: Track,
-    pub quality: Option<AudioQuality>,
     pub track_url: Option<TrackURL>,
     pub album: Option<Album>,
     pub index: usize,
@@ -91,7 +90,6 @@ impl TrackListTrack {
         track: Track,
         index: Option<usize>,
         total: Option<usize>,
-        quality: Option<AudioQuality>,
         album: Option<Album>,
     ) -> Self {
         let index = if let Some(index) = index { index } else { 0 };
@@ -106,7 +104,6 @@ impl TrackListTrack {
             index,
             total,
             track,
-            quality,
             track_url: None,
             album,
             status,

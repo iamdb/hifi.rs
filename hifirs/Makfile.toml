@@ -1,17 +1,4 @@
-[env]
-PKG_CONFIG_ALLOW_CROSS = 1
-PKG_CONFIG_ALL_STATIC = true
-PKG_CONFIG_PATH_x86_64_unknown_linux_gnu = "/usr/lib/x86_64-linux-gnu/pkgconfig"
-RUSTFLAGS = '-C target-feature=+crt-static'
-OPENSSL_STATIC = true
-LIBZ_SYS_STATIC = 1
-
-[tasks.build.linux]
-env = { "CARGO_BUILD_TARGET" = "x86_64-unknown-linux-gnu" } 
-
-[tasks.build-release.linux]
-env = { "CARGO_BUILD_TARGET" = "x86_64-unknown-linux-gnu" } 
-
 [tasks.sqlx-check]
+install_crate = { crate_name = "sqlx-cli", binary = "cargo" }
 command = "cargo"
 args = ["sqlx", "prepare", "--check", "--database-url", "'$(pwd)/hifirs/dev.db'"]

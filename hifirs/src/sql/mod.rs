@@ -12,7 +12,7 @@ macro_rules! acquire {
 macro_rules! query {
     ($query:expr, $conn:ident, $value:ident) => {
         sqlx::query!($query, $value)
-            .execute(&mut $conn)
+            .execute(&mut *$conn)
             .await
             .expect("database failure")
     };
@@ -32,7 +32,7 @@ macro_rules! get_all {
 macro_rules! get_one {
     ($query:expr, $return_type:ident, $conn:ident) => {
         sqlx::query_as!($return_type, $query)
-            .fetch_one(&mut $conn)
+            .fetch_one(&mut *$conn)
             .await
     };
 }

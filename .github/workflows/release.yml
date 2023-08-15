@@ -10,15 +10,7 @@ on:
 env:
   CLICOLOR_FORCE: 1
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  build-upload:
+  create-build-upload:
     name: Build, package and publish
     runs-on: ${{ matrix.os }}
     strategy:
@@ -33,44 +25,47 @@ jobs:
         uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-rust-cache
+          shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
       - name: Install gstreamer (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav libgstrtspserver-1.0-dev libges-1.0-dev libncurses5-dev libncursesw5-dev
+          sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
       - name: Install gstreamer (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
-          brew update
           brew install gstreamer
       - name: Install Rust Toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
-          components: rustfmt, clippy
-      - uses: taiki-e/upload-rust-binary-action@v1
+      - name: Install cargo binstall
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+      - name: Install Cargo Plugins
+        run: cargo binstall --no-confirm cargo-make cargo-insta sqlx-cli
+      - name: Create db file
+        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
+        env: 
+          DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Build app
         if: matrix.os == 'ubuntu-latest'
+        run: cargo build --bin hifi-rs --release --target x86_64-unknown-linux-gnu
         env:
-          CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
-          RUSTFLAGS: "-C target-feature=+crt-static"
-          PKG_CONFIG_ALLOW_CROSS: 1
+          SQLITE3_STATIC: true
           PKG_CONFIG_ALL_STATIC: true
-          PKG_CONFIG_PATH_x86_64_unknown_linux_gnu: "/usr/lib/x86_64-linux-gnu/pkgconfig"
-          OPENSSL_STATIC: true
-          LIBZ_SYS_STATIC: 1
-          QOBUZ_USERNAME: ""
-          QOBUZ_PASSWORD: ""
+          PKG_CONFIG_PATH_x86_64_unknown_linux_gnu: /usr/lib/x86_64-linux-gnu/pkgconfig
+          DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Release
+        if: matrix.os == 'ubuntu-latest'
+        uses: softprops/action-gh-release@v1
         with:
-          target: x86_64-unknown-linux-gnu
-          bin: hifi-rs
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: taiki-e/upload-rust-binary-action@v1
+          files: target/x86_64-linux-unknown-gnu/release/hifi-rs
+      - name: Build app
         if: matrix.os == 'macos-latest'
-        env:
-          QOBUZ_USERNAME: ""
-          QOBUZ_PASSWORD: ""
+        run: cargo build --bin hifi-rs --release --target x86_64-apple-darwin
+      - name: Release
+        if: matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v1
         with:
-          bin: hifi-rs
-          token: ${{ secrets.GITHUB_TOKEN }}
+          files: target/x86_64-apple-darwin/release/hifi-rs

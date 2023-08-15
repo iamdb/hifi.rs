@@ -30,7 +30,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav libgstrtspserver-1.0-dev libges-1.0-dev libncurses5-dev libncursesw5-dev
+          sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
       - name: Install gstreamer (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
@@ -42,16 +42,20 @@ jobs:
           profile: minimal
           toolchain: stable
           components: rustfmt, clippy
+      - name: Install cargo binstall
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
       - name: Install Cargo Plugins
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-make cargo-insta
+        run: cargo binstall --no-confirm cargo-make cargo-insta sqlx-cli
+      - name: Create db file
+        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
+        env: 
+          DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Run CI Flow
         uses: actions-rs/cargo@v1
         env:
           QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
           QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
+          DATABASE_URL: "sqlite:///tmp/data.db"
         with:
           command: make
           args: ci-flow

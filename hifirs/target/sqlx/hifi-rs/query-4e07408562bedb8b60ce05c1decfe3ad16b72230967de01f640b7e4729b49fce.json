@@ -1,11 +1,11 @@
 {
-  "query": "INSERT INTO player_state VALUES(NULL,?1,?2,?3,?4,?5);",
+  "query": "\n            INSERT OR IGNORE INTO config (ROWID) VALUES (?1);\n            ",
   "describe": {
     "columns": [],
     "parameters": {
-      "Right": 5
+      "Right": 1
     },
     "nullable": []
   },
-  "hash": "823e42cefeae8136283f6045d5dfed38d076c0cd725928bf7e022c3b27af52fc"
+  "hash": "dbde958e5d7da43863d35891a27de0987259097662ac351eb8992309d081968f"
 }
