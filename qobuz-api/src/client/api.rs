@@ -63,7 +63,6 @@ pub async fn new(
         );
 
     let client = reqwest::Client::builder()
-        .tcp_keepalive(None)
         .cookie_store(true)
         .default_headers(headers)
         .build()

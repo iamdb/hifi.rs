@@ -9,7 +9,7 @@ repository = "https://github.com/iamdb/hifi.rs"
 async-broadcast = "0.5"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
-comfy-table = "7"
+comfy-table = "7.0"
 ctrlc = "3.0"
 cursive = { version = "0.20", default-features = false, features = ["crossterm-backend"] } 
 dialoguer = { version = "0.10", features = ["fuzzy-select"] }
@@ -17,7 +17,7 @@ dirs = "5"
 enum-as-inner = "0.6"
 flume = "0.10"
 futures = "0.3"
-gstreamer = { version = "0.21", features = ["serde", "v1_22"] }
+gstreamer = { version = "0.21", features = ["serde", "v1_20"] }
 md5 = "0.7.0"
 hifirs-qobuz-api = { version = "*", path = "../qobuz-api" }
 rand = "0.8"
@@ -25,7 +25,7 @@ regex = "1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.7"
-sqlx = { version = "0.7", default-features = false, features = [ "runtime-tokio", "sqlite", "migrate", "macros" ] }
+sqlx = { version = "0.7", default-features = false, features = [ "runtime-tokio-rustls", "sqlite", "migrate", "macros" ] }
 tokio = { version = "1.0", features = ["full"] }
 tokio-stream = "0.1"
 tracing = "0.1"

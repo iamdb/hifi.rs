@@ -10,15 +10,7 @@ on:
 env:
   CLICOLOR_FORCE: 1
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: taiki-e/create-gh-release-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  build-upload:
+  create-build-upload:
     name: Build, package and publish
     runs-on: ${{ matrix.os }}
     strategy:
@@ -38,21 +30,42 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libunwind-dev libgstreamer1.0-dev gstreamer1.0-plugins-bad libssl-dev liblzma-dev libsqlite3-dev
+          sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
       - name: Install gstreamer (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav gst-rtsp-server gst-editing-services 
+          brew install gstreamer
       - name: Install Rust Toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
-          components: rustfmt, clippy
-      - uses: taiki-e/upload-rust-binary-action@v1
+      - name: Install cargo binstall
+        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+      - name: Install Cargo Plugins
+        run: cargo binstall --no-confirm cargo-make cargo-insta sqlx-cli
+      - name: Create db file
+        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
+        env: 
+          DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Build app
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo build --bin hifi-rs --release --target x86_64-unknown-linux-gnu
         env:
-          QOBUZ_USERNAME: ""
-          QOBUZ_PASSWORD: ""
+          SQLITE3_STATIC: true
+          PKG_CONFIG_ALL_STATIC: true
+          PKG_CONFIG_PATH_x86_64_unknown_linux_gnu: /usr/lib/x86_64-linux-gnu/pkgconfig
+          DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Release
+        if: matrix.os == 'ubuntu-latest'
+        uses: softprops/action-gh-release@v1
         with:
-          bin: hifi-rs
-          token: ${{ secrets.GITHUB_TOKEN }}
+          files: target/x86_64-linux-unknown-gnu/release/hifi-rs
+      - name: Build app
+        if: matrix.os == 'macos-latest'
+        run: cargo build --bin hifi-rs --release --target x86_64-apple-darwin
+      - name: Release
+        if: matrix.os == 'macos-latest'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/x86_64-apple-darwin/release/hifi-rs

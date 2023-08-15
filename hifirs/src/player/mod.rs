@@ -45,6 +45,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
         .expect("error building playbin element");
 
     playbin.set_property_from_str("flags", "audio+buffering");
+    playbin.set_property("instant-uri", false);
     playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
@@ -80,10 +81,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
     // Connects to the `about-to-finish` signal so the player
     // can setup the next track to play. Enables gapless playback.
-    playbin.connect("about-to-finish", false, move |value| {
-        let element = &value[0].get::<gst::Element>().unwrap();
-        element.set_property("instant-uri", false);
-
+    playbin.connect("about-to-finish", false, move |_| {
         debug!("about to finish");
         ABOUT_TO_FINISH
             .tx
@@ -726,6 +724,8 @@ pub async fn player_loop() -> Result<()> {
                             state.set_target_status(GstState::Paused);
                             drop(state);
 
+                            pause(true).await?;
+
                             skip(SkipDirection::Backward, Some(0)).await?;
                         }
                     },
@@ -740,6 +740,11 @@ pub async fn player_loop() -> Result<()> {
                         };
 
                         BROADCAST_CHANNELS.tx.broadcast(Notification::Position { position }).await?;
+
+                        if IS_SKIPPING.load(Ordering::Relaxed) {
+                            PLAYBIN.set_property("instant-uri", false);
+                            IS_SKIPPING.store(false, Ordering::Relaxed);
+                        }
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
@@ -759,6 +764,11 @@ pub async fn player_loop() -> Result<()> {
                             drop(state);
 
                             BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { duration }).await?;
+                        }
+
+                        if IS_SKIPPING.load(Ordering::Relaxed) {
+                            PLAYBIN.set_property("instant-uri", false);
+                            IS_SKIPPING.store(false, Ordering::Relaxed);
                         }
                     }
                     MessageView::Buffering(buffering) => {
@@ -780,6 +790,7 @@ pub async fn player_loop() -> Result<()> {
                             STATE.get().unwrap().write().await.set_buffering(false);
 
                             if IS_SKIPPING.load(Ordering::Relaxed) {
+                                PLAYBIN.set_property("instant-uri", false);
                                 IS_SKIPPING.store(false, Ordering::Relaxed);
                             }
                         }
