@@ -20,13 +20,21 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
-## Installation
-
-Download tar from releases page, extract the tar and execute it or copy it to the your $PATH.
-
 ## Requirements
 
-- [GStreamer v1.20+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (should come with most/all current Linux and MacOS versions)
+- [GStreamer v1.20+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (comes with most/all current Linux and MacOS versions)
+
+## Installation
+
+### Download Release
+
+Download the tar.gz file for your OS from the [releases page](https://github.com/iamdb/hifi.rs/releases), extract the file and execute `hifi-rs` or copy it to the your `$PATH`.
+
+### Build from source
+
+To make building from source easier, there is a `Dockerfile` to compile the project for Linux into a container.
+
+Run `build_linux.sh` to automatically build the app in Docker and output the file.
 
 ## Get started
 
