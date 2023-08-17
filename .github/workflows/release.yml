@@ -45,7 +45,7 @@ jobs:
       - name: Install Cargo Plugins
         run: cargo binstall --force --no-confirm cargo-make cargo-insta sqlx-cli
       - name: Create db file
-        run: "touch /tmp/data.db && cd hifirs && sqlx database reset -y"
+        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
         env: 
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Build app
