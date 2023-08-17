@@ -58,7 +58,7 @@ jobs:
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Tar app
         if: matrix.os == 'ubuntu-latest'
-        run: tar -cvf hifi-rs-x86_64-unknown-linux-gnu.tar.gz target/x86_64-unknown-linux-gnu/release/hifi-rs
+        run: tar -cvf hifi-rs-x86_64-unknown-linux-gnu.tar.gz -C ./target/x86_64-unknown-linux-gnu/release/ hifi-rs
       - name: Release
         if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v1
@@ -72,7 +72,7 @@ jobs:
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Tar app
         if: matrix.os == 'macos-latest'
-        run: tar -cvf hifi-rs-x86_64-apple-darwin.tar.gz target/x86_64-apple-darwin/release/hifi-rs
+        run: tar -cvf hifi-rs-x86_64-apple-darwin.tar.gz -C ./target/x86_64-apple-darwin/release hifi-rs
       - name: Release
         if: matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v1
