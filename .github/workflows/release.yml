@@ -60,10 +60,13 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/x86_64-linux-unknown-gnu/release/hifi-rs
+          files: target/x86_64-unknown-linux-gnu/release/hifi-rs
       - name: Build app
         if: matrix.os == 'macos-latest'
         run: cargo build --bin hifi-rs --release --target x86_64-apple-darwin
+        env:
+          SQLITE3_STATIC: true
+          DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Release
         if: matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v1
