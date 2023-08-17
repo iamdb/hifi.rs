@@ -56,19 +56,25 @@ jobs:
           PKG_CONFIG_ALL_STATIC: true
           PKG_CONFIG_PATH_x86_64_unknown_linux_gnu: /usr/lib/x86_64-linux-gnu/pkgconfig
           DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Tar app
+        if: matrix.os == 'ubuntu-latest'
+        run: tar -cvf hifi-rs-x86_64-unknown-linux-gnu.tar.gz target/x86_64-unknown-linux-gnu/release/hifi-rs
       - name: Release
         if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/x86_64-unknown-linux-gnu/release/hifi-rs
+          files: hifi-rs-x86_64-unknown-linux-gnu.tar.gz
       - name: Build app
         if: matrix.os == 'macos-latest'
         run: cargo build --bin hifi-rs --release --target x86_64-apple-darwin
         env:
           SQLITE3_STATIC: true
           DATABASE_URL: "sqlite:///tmp/data.db"
+      - name: Tar app
+        if: matrix.os == 'macos-latest'
+        run: tar -cvf hifi-rs-x86_64-apple-darwin.tar.gz target/x86_64-apple-darwin/release/hifi-rs
       - name: Release
         if: matrix.os == 'macos-latest'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/x86_64-apple-darwin/release/hifi-rs
+          files: hifi-rs-x86_64-apple-darwin.tar.gz
