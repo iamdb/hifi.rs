@@ -994,8 +994,19 @@ checksum = "1657b4441c3403d9f7b3409e47575237dac27b1b5726df654a6ecbf92f0f7577"
 dependencies = [
  "futures-core",
  "futures-sink",
- "nanorand",
  "pin-project",
+ "spin 0.9.8",
+]
+
+[[package]]
+name = "flume"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55ac459de2512911e4b674ce33cf20befaba382d05b62b008afc1c8b57cbf181"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "nanorand",
  "spin 0.9.8",
 ]
 
@@ -1392,7 +1403,7 @@ dependencies = [
  "dialoguer",
  "dirs",
  "enum-as-inner",
- "flume",
+ "flume 0.11.0",
  "futures",
  "gstreamer",
  "hifirs-qobuz-api",
@@ -1420,7 +1431,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "console",
- "flume",
+ "flume 0.11.0",
  "futures",
  "hifirs-qobuz-api",
  "indicatif",
@@ -3252,7 +3263,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4c21bf34c7cae5b283efb3ac1bcc7670df7561124dc2f8bdc0b59be40f79a2"
 dependencies = [
  "atoi",
- "flume",
+ "flume 0.10.14",
  "futures-channel",
  "futures-core",
  "futures-executor",

@@ -7,7 +7,7 @@ repository = "https://github.com/iamdb/hifi.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
-flume = "0.10"
+flume = "0.11"
 futures = "0.3"
 indicatif = "0.17"
 log = "0.4"
