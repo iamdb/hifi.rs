@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
+    player::{self, controls::Controls, notification::Notification},
     state::TrackListType,
 };
 use cursive::{
@@ -829,7 +829,9 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>), controls: Controls
     s.screen_mut().add_layer(album_or_track);
 }
 
-pub async fn receive_notifications(mut receiver: BroadcastReceiver) {
+pub async fn receive_notifications() {
+    let mut receiver = player::notify_receiver();
+
     loop {
         select! {
             Ok(notification) = receiver.recv() => {
@@ -863,17 +865,17 @@ pub async fn receive_notifications(mut receiver: BroadcastReceiver) {
                             }
                         })).expect("failed to send update");
                     }
-                    Notification::Position { position } => {
+                    Notification::Position { clock } => {
                         SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                progress.set_value(position.inner_clocktime().seconds() as usize);
+                                progress.set_value(clock.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }
-                    Notification::Duration {duration} => {
+                    Notification::Duration {clock} => {
                         SINK.get().unwrap().send(Box::new(move |s| {
                             if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                progress.set_max(duration.inner_clocktime().seconds() as usize);
+                                progress.set_max(clock.inner_clocktime().seconds() as usize);
                             }
                         })).expect("failed to send update");
                     }

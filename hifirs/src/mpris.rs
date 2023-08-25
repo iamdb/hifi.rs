@@ -1,5 +1,5 @@
 use crate::{
-    player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
+    player::{self, controls::Controls, notification::Notification},
     state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};
@@ -59,7 +59,8 @@ pub async fn init(controls: Controls) -> Connection {
     }
 }
 
-pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastReceiver) {
+pub async fn receive_notifications(conn: Connection) {
+    let mut receiver = player::notify_receiver();
     let object_server = conn.object_server();
 
     loop {
@@ -115,7 +116,7 @@ pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastRece
                                 .await
                                 .expect("failed to signal metadata change");
                     },
-                    Notification::Position { position } => {
+                    Notification::Position { clock } => {
                         let iface_ref = object_server
                             .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
                             .await
@@ -124,7 +125,7 @@ pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastRece
                         let mut iface = iface_ref.get_mut().await;
                         let now = chrono::offset::Local::now();
                         let diff = now.signed_duration_since(iface.position_ts);
-                        let position_secs = position.inner_clocktime().seconds();
+                        let position_secs = clock.inner_clocktime().seconds();
 
                         if diff.num_seconds() != position_secs as i64 {
                             debug!("mpris clock drift, sending new position");
@@ -132,14 +133,14 @@ pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastRece
 
                             MprisPlayer::seeked(
                                 iface_ref.signal_context(),
-                                position.inner_clocktime().useconds() as i64,
+                                clock.inner_clocktime().useconds() as i64,
                             )
                             .await
                             .expect("failed to send seeked signal");
                         }
 
                     },
-                    Notification::Duration { duration: _ } => {
+                    Notification::Duration { clock: _ } => {
                         let iface_ref = object_server
                             .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
                             .await

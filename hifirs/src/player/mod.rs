@@ -626,7 +626,7 @@ pub async fn clock_loop() {
 
                     BROADCAST_CHANNELS
                         .tx
-                        .broadcast(Notification::Position { position })
+                        .broadcast(Notification::Position { clock: position })
                         .await
                         .expect("failed to send notification");
                 }
@@ -739,7 +739,7 @@ pub async fn player_loop() -> Result<()> {
                             ClockTime::default().into()
                         };
 
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { position }).await?;
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position }).await?;
 
                         if IS_SKIPPING.load(Ordering::Relaxed) {
                             PLAYBIN.set_property("instant-uri", false);
@@ -763,7 +763,7 @@ pub async fn player_loop() -> Result<()> {
                             state.set_duration(duration.clone());
                             drop(state);
 
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { duration }).await?;
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { clock: duration }).await?;
                         }
 
                         if IS_SKIPPING.load(Ordering::Relaxed) {

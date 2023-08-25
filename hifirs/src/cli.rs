@@ -5,6 +5,7 @@ use crate::{
     player::{self},
     qobuz::{self, SearchResults},
     sql::db::{self, Database},
+    websocket,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -26,6 +27,10 @@ struct Cli {
     #[clap(short, long)]
     /// Quit after done playing
     pub quit_when_done: Option<bool>,
+
+    #[clap(short, long)]
+    /// Start websocket server
+    pub websockets: Option<bool>,
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -168,6 +173,7 @@ async fn setup_player<'s>(
     username: Option<String>,
     password: Option<String>,
     resume: bool,
+    websocket: bool,
 ) -> Result<CursiveUI, Error> {
     let client = qobuz::make_client(username, password, &database).await?;
 
@@ -187,15 +193,15 @@ async fn setup_player<'s>(
         let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        let notify_receiver = player::notify_receiver();
         tokio::spawn(async {
-            mpris::receive_notifications(conn, notify_receiver).await;
+            mpris::receive_notifications(conn).await;
         });
     }
 
-    let notify_receiver = player::notify_receiver();
-    tokio::spawn(async { cursive::receive_notifications(notify_receiver).await });
-
+    tokio::spawn(async { cursive::receive_notifications().await });
+    if websocket {
+        tokio::spawn(async { websocket::init().await });
+    }
     tokio::spawn(async { player::player_loop().await });
 
     Ok(tui)
@@ -233,6 +239,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 true,
+                cli.websockets.unwrap_or_default(),
             )
             .await?;
 
@@ -247,6 +254,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.websockets.unwrap_or_default(),
             )
             .await?;
 
@@ -263,6 +271,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.websockets.unwrap_or_default(),
             )
             .await?;
 
@@ -279,6 +288,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.websockets.unwrap_or_default(),
             )
             .await?;
 
