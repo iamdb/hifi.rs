@@ -1,21 +1,28 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use axum::{
+    body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    http::{Request, Response},
     response::IntoResponse,
     routing::get,
     Router,
 };
 use futures::{SinkExt, StreamExt};
+use include_dir::{include_dir, Dir};
 use tower_http::services::ServeDir;
 
 use crate::player::{self, controls::Action};
+
+static SITE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../www/build");
 
 pub async fn init() {
     let assets_dir = PathBuf::from("www").join("build");
     let app = Router::new()
         .fallback_service(ServeDir::new(assets_dir).append_index_html_on_directories(true))
-        .route("/ws", get(handler));
+        .route("/ws", get(ws_handler))
+        .route("/*key", get(static_handler))
+        .route("/", get(static_handler));
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
 
@@ -27,7 +34,37 @@ pub async fn init() {
         .unwrap();
 }
 
-async fn handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+async fn static_handler(req: Request<Body>) -> impl IntoResponse {
+    let req_path = req.uri().path();
+    let path = PathBuf::from_str(&req_path[1..]).expect("error parsing path");
+    let extension = path.extension().unwrap_or_default();
+
+    if let Some(file) = SITE.get_file(&path) {
+        let contents = file.contents_utf8().unwrap_or_default().to_string();
+
+        if extension == "html" {
+            Response::builder()
+                .header("content-type", "text/html")
+                .body(contents)
+                .expect("error making body")
+        } else if extension == "js" {
+            Response::builder()
+                .header("content-type", "application/javascript")
+                .body(contents)
+                .expect("error making body")
+        } else {
+            Response::builder()
+                .body(contents)
+                .expect("error setting body")
+        }
+    } else {
+        Response::builder()
+            .body("".to_string())
+            .expect("error setting body")
+    }
+}
+
+async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(handle_connection)
 }
 
