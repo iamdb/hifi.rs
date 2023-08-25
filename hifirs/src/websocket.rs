@@ -10,6 +10,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
+use mime_guess::MimeGuess;
 use tower_http::services::ServeDir;
 
 use crate::player::{self, controls::Action};
@@ -36,29 +37,31 @@ pub async fn init() {
 
 async fn static_handler(req: Request<Body>) -> impl IntoResponse {
     let req_path = req.uri().path();
-    let path = PathBuf::from_str(&req_path[1..]).expect("error parsing path");
-    let extension = path.extension().unwrap_or_default();
+    let mut path = PathBuf::from_str(&req_path[1..]).expect("error parsing path");
+
+    let extension = if let Some(ext) = path.extension() {
+        ext.to_str().expect("error making string")
+    } else {
+        path.push("index.html");
+        "html"
+    };
+
+    let mime_type = if let Some(mime) = MimeGuess::from_ext(extension).first() {
+        mime.essence_str().to_string()
+    } else {
+        "text/plain".to_string()
+    };
 
     if let Some(file) = SITE.get_file(&path) {
         let contents = file.contents_utf8().unwrap_or_default().to_string();
 
-        if extension == "html" {
-            Response::builder()
-                .header("content-type", "text/html")
-                .body(contents)
-                .expect("error making body")
-        } else if extension == "js" {
-            Response::builder()
-                .header("content-type", "application/javascript")
-                .body(contents)
-                .expect("error making body")
-        } else {
-            Response::builder()
-                .body(contents)
-                .expect("error setting body")
-        }
+        Response::builder()
+            .header("content-type", mime_type)
+            .body(contents)
+            .expect("error making body")
     } else {
         Response::builder()
+            .header("content-type", mime_type)
             .body("".to_string())
             .expect("error setting body")
     }
