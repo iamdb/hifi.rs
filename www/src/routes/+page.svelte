@@ -12,6 +12,7 @@
 	} from '$lib/websocket';
 	import Button from '../lib/components/Button.svelte';
 	import { writable } from 'svelte/store';
+	import { dev } from '$app/environment';
 
 	$: clockMinutes = Math.floor($position / 1000 / 1000 / 1000 / 60);
 	$: clockSeconds = Math.floor($position / 1000 / 1000 / 1000) - clockMinutes * 60;
@@ -21,7 +22,7 @@
 	const showList = writable(false);
 
 	onMount(() => {
-		controls = init();
+		controls = init(dev);
 
 		return controls.close;
 	});
@@ -35,43 +36,47 @@
 	};
 </script>
 
-<div class="container mx-auto pb-8">
-	<div class="flex flex-col">
+<div>
+	<div class="flex flex-col lg:flex-row">
 		<div
-			class="aspect-square mb-4 bg-amber-800 p-4 xl:w-1/2 mx-auto flex items-center justify-center"
+			class="aspect-square lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 flex-grow mx-auto flex items-center justify-center"
 		>
 			<img
-				class="w-full h-full object-cover"
+				class="w-full block h-full object-cover max-w-full"
 				src={$currentTrack?.album.image.large}
 				alt={$currentTrack?.album.title}
 			/>
 		</div>
-		<div
-			class="flex-grow gap-x-8 flex flex-col items-center justify-center text-center text-7xl lg:text-8xl leading-tight"
-		>
-			{#if currentTrack}
-				<span class="font-bold italic">{$currentTrack?.track.title || ''}</span>
-				<span class="text-4xl">by</span>
-				<span class="font-bold italic">{$currentTrack?.track.performer.name || ''}</span>
+		<div class="flex lg:w-1/2 flex-col justify-between">
+			<div class="flex flex-col flex-grow justify-center text-center text-7xl lg:text-7xl">
+				{#if currentTrack}
+					<span
+						class="font-bold py-8 tracking-tighter bg-yellow-800 leading-tight px-8 lg:text-8xl italic"
+						>{$currentTrack?.track.title || ''}</span
+					>
+					<span class="font-bold italic">{$currentTrack?.track.performer.name || ''}</span>
 
-				<span class="font-mono">
-					{clockMinutes.toString(10).padStart(2, '0')}:{clockSeconds.toString(10).padStart(2, '0')}
-				</span>
-			{/if}
-		</div>
+					<span class="font-mono">
+						{clockMinutes.toString(10).padStart(2, '0')}:{clockSeconds
+							.toString(10)
+							.padStart(2, '0')}
+					</span>
+				{/if}
+			</div>
 
-		<div class="flex flex-row p-12 flex-grow items-end justify-between">
-			<Button onClick={toggleList}>List</Button>
-			<div class="flex flex-row justify-end gap-x-4 flex-grow">
-				<Button onClick={controls?.previous}>Previous</Button>
-				<Button onClick={controls?.playPause}>
-					{#if $currentStatus === 'Playing'}
-						Pause
-					{:else}
-						Play
-					{/if}
-				</Button>
-				<Button onClick={controls?.next}>Next</Button>
+			<div class="flex flex-row px-12 items-end justify-between">
+				<Button onClick={toggleList}>List</Button>
+				<div class="flex flex-row justify-end gap-x-4 flex-grow">
+					<Button onClick={controls?.previous}>Previous</Button>
+					<Button onClick={controls?.playPause}>
+						{#if $currentStatus === 'Playing'}
+							Pause
+						{:else}
+							Play
+						{/if}
+					</Button>
+					<Button onClick={controls?.next}>Next</Button>
+				</div>
 			</div>
 		</div>
 	</div>

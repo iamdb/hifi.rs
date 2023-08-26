@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 use axum::{
     body::Body,
@@ -16,17 +16,15 @@ use crate::player::{self, controls::Action, notification::Notification};
 
 static SITE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../www/build");
 
-pub async fn init() {
+pub async fn init(binding_interface: SocketAddr) {
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/*key", get(static_handler))
         .route("/", get(static_handler));
 
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+    debug!("listening on {}", binding_interface);
 
-    debug!("listening on {}", addr);
-
-    axum::Server::bind(&addr)
+    axum::Server::bind(&binding_interface)
         .serve(app.into_make_service())
         .await
         .unwrap();

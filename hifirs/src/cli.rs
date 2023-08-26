@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 #[cfg(target_os = "linux")]
 use crate::mpris;
 use crate::{
@@ -21,16 +23,23 @@ struct Cli {
     /// Provide a username. (overrides any database value)
     #[clap(short, long)]
     pub username: Option<String>,
+
     #[clap(short, long)]
     /// Provide a password. (overrides any database value)
     pub password: Option<String>,
-    #[clap(short, long)]
-    /// Quit after done playing
-    pub quit_when_done: Option<bool>,
 
-    #[clap(short, long)]
-    /// Start websocket server
-    pub web: Option<bool>,
+    #[clap(short, long, default_value_t = false)]
+    /// Quit after done playing
+    pub quit_when_done: bool,
+
+    #[clap(short, long, default_value_t = false)]
+    /// Start web server with websocket API and UI.
+    /// (default 0.0.0.0:3000)
+    pub web: bool,
+
+    #[clap(long, default_value = "0.0.0.0:3000")]
+    /// Specify a different interface and port for the web server to listen on.
+    pub interface: SocketAddr,
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -167,13 +176,14 @@ impl From<player::error::Error> for Error {
     }
 }
 
-async fn setup_player<'s>(
+async fn setup_player(
     database: Database,
     quit_when_done: bool,
     username: Option<String>,
     password: Option<String>,
     resume: bool,
-    websocket: bool,
+    web: bool,
+    interface: SocketAddr,
 ) -> Result<CursiveUI, Error> {
     let client = qobuz::make_client(username, password, &database).await?;
 
@@ -199,8 +209,8 @@ async fn setup_player<'s>(
     }
 
     tokio::spawn(async { cursive::receive_notifications().await });
-    if websocket {
-        tokio::spawn(async { websocket::init().await });
+    if web {
+        tokio::spawn(async move { websocket::init(interface).await });
     }
     tokio::spawn(async { player::player_loop().await });
 
@@ -224,22 +234,17 @@ pub async fn run() -> Result<(), Error> {
     // SETUP DATABASE
     let data = db::new().await;
 
-    let mut quit_when_done = false;
-
-    if let Some(should_quit) = cli.quit_when_done {
-        quit_when_done = should_quit;
-    }
-
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 true,
-                cli.web.unwrap_or_default(),
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -250,11 +255,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::Play { url } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.web.unwrap_or_default(),
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -267,11 +273,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamTrack { track_id } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.web.unwrap_or_default(),
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -284,11 +291,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamAlbum { album_id } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.web.unwrap_or_default(),
+                cli.web,
+                cli.interface,
             )
             .await?;
 

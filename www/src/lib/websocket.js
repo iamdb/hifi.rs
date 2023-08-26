@@ -8,8 +8,9 @@ export const connected = writable(false);
 export const currentTrack = writable(null);
 export const currentTrackList = writable([]);
 
-export const init = () => {
-  const ws = new WebSocket('ws://127.0.0.1:3000/ws');
+export const init = (dev) => {
+  const host = dev ? 'localhost:3000' : window.location.host;
+  const ws = new WebSocket(`ws://${host}/ws`);
 
   ws.onopen = () => {
     connected.set(true);
