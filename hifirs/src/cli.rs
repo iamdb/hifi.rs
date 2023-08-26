@@ -30,7 +30,7 @@ struct Cli {
 
     #[clap(short, long)]
     /// Start websocket server
-    pub websockets: Option<bool>,
+    pub web: Option<bool>,
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -239,7 +239,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 true,
-                cli.websockets.unwrap_or_default(),
+                cli.web.unwrap_or_default(),
             )
             .await?;
 
@@ -254,7 +254,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.websockets.unwrap_or_default(),
+                cli.web.unwrap_or_default(),
             )
             .await?;
 
@@ -271,7 +271,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.websockets.unwrap_or_default(),
+                cli.web.unwrap_or_default(),
             )
             .await?;
 
@@ -288,7 +288,7 @@ pub async fn run() -> Result<(), Error> {
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
-                cli.websockets.unwrap_or_default(),
+                cli.web.unwrap_or_default(),
             )
             .await?;
 

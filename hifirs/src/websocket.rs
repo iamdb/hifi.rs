@@ -3,24 +3,21 @@ use std::{path::PathBuf, str::FromStr};
 use axum::{
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    http::{Request, Response},
+    http::{header, Request, Response},
     response::IntoResponse,
     routing::get,
     Router,
 };
 use futures::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
-use mime_guess::MimeGuess;
-use tower_http::services::ServeDir;
+use mime_guess::{mime::HTML, MimeGuess};
 
-use crate::player::{self, controls::Action};
+use crate::player::{self, controls::Action, notification::Notification};
 
 static SITE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../www/build");
 
 pub async fn init() {
-    let assets_dir = PathBuf::from("www").join("build");
     let app = Router::new()
-        .fallback_service(ServeDir::new(assets_dir).append_index_html_on_directories(true))
         .route("/ws", get(ws_handler))
         .route("/*key", get(static_handler))
         .route("/", get(static_handler));
@@ -39,30 +36,40 @@ async fn static_handler(req: Request<Body>) -> impl IntoResponse {
     let req_path = req.uri().path();
     let mut path = PathBuf::from_str(&req_path[1..]).expect("error parsing path");
 
-    let extension = if let Some(ext) = path.extension() {
-        ext.to_str().expect("error making string")
-    } else {
+    // If it's a directory, search for an index.html file.
+    if path.is_dir() || req.uri().path() == "/" {
         path.push("index.html");
-        "html"
-    };
+    }
 
+    // Get the extension or empty string if none.
+    let extension = path
+        .extension()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default();
+
+    // Attempt to guess the mime type of the file based on the file extension.
+    // If one can't be guessed, used text/plain.
     let mime_type = if let Some(mime) = MimeGuess::from_ext(extension).first() {
         mime.essence_str().to_string()
     } else {
         "text/plain".to_string()
     };
 
+    // Attempt to retreive the necessary file from the embedded path.
     if let Some(file) = SITE.get_file(&path) {
         let contents = file.contents_utf8().unwrap_or_default().to_string();
 
         Response::builder()
-            .header("content-type", mime_type)
+            .header(header::CONTENT_TYPE, mime_type)
+            .status(200)
             .body(contents)
             .expect("error making body")
     } else {
         Response::builder()
-            .header("content-type", mime_type)
-            .body("".to_string())
+            .header(header::CONTENT_TYPE, HTML.as_str())
+            .status(404)
+            .body("<html><body><h1>404</h1></body></html>".to_string())
             .expect("error setting body")
     }
 }
@@ -78,6 +85,36 @@ async fn handle_connection(socket: WebSocket) {
     let mut send_task = tokio::spawn(async move {
         debug!("spawning send task");
         let mut broadcast_receiver = player::notify_receiver();
+
+        if let Some(track) = player::current_track().await {
+            let ct = serde_json::to_string(&Notification::CurrentTrack { track })
+                .expect("error making json");
+            sender.send(Message::Text(ct)).await.expect("error");
+        }
+
+        if let Ok(ct) = serde_json::to_string(&Notification::CurrentTrackList {
+            list: player::current_tracklist().await,
+        }) {
+            sender.send(Message::Text(ct)).await.expect("error");
+        }
+
+        if let Some(position) = player::position() {
+            if let Ok(p) = serde_json::to_string(&Notification::Position { clock: position }) {
+                sender.send(Message::Text(p)).await.expect("error");
+            }
+        }
+
+        if let Some(duration) = player::duration() {
+            if let Ok(d) = serde_json::to_string(&Notification::Duration { clock: duration }) {
+                sender.send(Message::Text(d)).await.expect("error");
+            }
+        }
+
+        if let Ok(s) = serde_json::to_string(&Notification::Status {
+            status: player::current_state(),
+        }) {
+            sender.send(Message::Text(s)).await.expect("error");
+        }
 
         loop {
             if let Ok(message) = broadcast_receiver.recv().await {

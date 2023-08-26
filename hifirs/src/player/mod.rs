@@ -7,7 +7,7 @@ use crate::{
     sql::db::Database,
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
-        ClockValue, StatusValue,
+        ClockValue, StatusValue, TrackListValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -18,7 +18,7 @@ use gst::{
     Structure,
 };
 use gstreamer as gst;
-use hifirs_qobuz_api::client::{self, api::Client, UrlType};
+use hifirs_qobuz_api::client::{self, api::Client, track::TrackListTrack, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
     str::FromStr,
@@ -602,6 +602,16 @@ async fn prep_next_track() -> Result<()> {
 #[instrument]
 pub fn notify_receiver() -> BroadcastReceiver {
     BROADCAST_CHANNELS.rx.clone()
+}
+
+#[instrument]
+pub async fn current_tracklist() -> TrackListValue {
+    STATE.get().unwrap().read().await.track_list()
+}
+
+#[instrument]
+pub async fn current_track() -> Option<TrackListTrack> {
+    STATE.get().unwrap().read().await.current_track()
 }
 
 /// Inserts the most recent position into the state at a set interval.
