@@ -28,6 +28,7 @@ export class WS {
 
     this.ws.onclose = () => {
       connected.set(false);
+
       setTimeout(() => {
         this.init(this.dev)
       }, 1000);

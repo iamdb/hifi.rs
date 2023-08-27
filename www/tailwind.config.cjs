@@ -1,3 +1,5 @@
+const defaultTheme = require('tailwindcss/defaultTheme')
+
 /** @type {import('tailwindcss').Config}*/
 const config = {
   content: [
@@ -5,7 +7,12 @@ const config = {
   ],
 
   theme: {
-    extend: {}
+    extend: {
+      fontFamily: {
+        serif: ['Bitter', ...defaultTheme.fontFamily.serif],
+        sans: ['HandJet', ...defaultTheme.fontFamily.sans]
+      }
+    }
   },
 
   plugins: [
