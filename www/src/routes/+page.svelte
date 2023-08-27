@@ -41,8 +41,8 @@
 	};
 </script>
 
-<div class="flex flex-col justify-center h-screen overflow-hidden">
-	<div class="flex flex-col h-screen pb-4 sm:py-4 lg:py-0 lg:h-auto justify-between lg:flex-row">
+<div class="flex flex-col justify-center h-[100dvh] overflow-hidden">
+	<div class="flex flex-col h-[100dvh] pb-4 sm:py-4 lg:py-0 justify-between lg:flex-row">
 		<div
 			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
@@ -67,12 +67,12 @@
 		</div>
 		<div class="flex lg:w-1/2 flex-grow flex-col justify-between">
 			<div
-				class="flex flex-col gap-y-4 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
+				class="flex flex-col gap-y-4 py-2 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
 			>
-				{#if currentTrack}
+				{#if $currentTrack}
 					<span>{$currentTrack?.track.performer.name || ''}</span>
 
-					<span class="font-semibold py-8 bg-yellow-800 leading-[1.15em] px-4 lg:px-8"
+					<span class="font-semibold py-4 lg:py-8 bg-yellow-800 leading-[1.15em] px-4 lg:px-8"
 						>{$currentTrack?.track.title || ''}</span
 					>
 					<span class="text-4xl lg:text-5xl">
@@ -112,7 +112,7 @@
 {#if $showList}
 	<div
 		transition:slide={{ duration: 300, easing: quintOut, axis: 'x' }}
-		class="fixed top-0 right-0 bg-amber-950 h-screen"
+		class="fixed top-0 right-0 bg-amber-950 h-[100dvh]"
 	>
 		<ul class="text-2xl py-8 px-12 leading-tight">
 			{#each $currentTrackList as track}
@@ -134,6 +134,7 @@
 		<h1 class="font-semi text-4xl">BUFFERING</h1>
 	</div>
 {/if}
+
 {#if !$connected}
 	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
 		<h1 class="font-semi text-4xl">DISCONNECTED</h1>
