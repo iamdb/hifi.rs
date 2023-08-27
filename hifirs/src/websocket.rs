@@ -165,7 +165,9 @@ async fn handle_connection(socket: WebSocket) {
                         };
                     }
                 }
-                Err(_) => todo!(),
+                Err(err) => {
+                    debug!(?err)
+                }
             }
         }
     });

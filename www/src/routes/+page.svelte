@@ -41,13 +41,13 @@
 	};
 </script>
 
-<div>
-	<div class="flex flex-col lg:flex-row">
+<div class="flex flex-col justify-center h-screen overflow-hidden">
+	<div class="flex flex-col h-screen pb-8 sm:py-8 lg:py-0 lg:h-auto justify-between lg:flex-row">
 		<div
-			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 flex-grow mx-auto flex items-center justify-center"
+			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
 			<div
-				class="w-10/12 h- mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+				class="aspect-square w-10/12 h-10/12 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 			>
 				<img
 					class="block w-full h-full object-cover"
@@ -55,7 +55,9 @@
 					alt={$currentTrack?.album.title}
 				/>
 			</div>
-			<div class="w-full h-full backdrop-hue-rotate-30 flex flex-col items-center justify-center">
+			<div
+				class="aspect-square w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 backdrop-blur-sm flex flex-col items-center justify-center"
+			>
 				<img
 					class="block max-w-full relative z-10"
 					src={$currentTrack?.album.image.large}
@@ -63,12 +65,14 @@
 				/>
 			</div>
 		</div>
-		<div class="flex lg:w-1/2 flex-col justify-between">
-			<div class="flex flex-col gap-y-4 flex-grow justify-evenly text-center text-7xl lg:text-7xl">
+		<div class="flex lg:w-1/2 flex-grow flex-col justify-between">
+			<div
+				class="flex flex-col gap-y-4 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
+			>
 				{#if currentTrack}
 					<span class="font-serif">{$currentTrack?.track.performer.name || ''}</span>
 
-					<span class="font-bold py-8 bg-yellow-800 leading-[1.15em] px-8"
+					<span class="font-bold py-8 bg-yellow-800 leading-[1.15em] px-4 lg:px-8"
 						>{$currentTrack?.track.title || ''}</span
 					>
 					<span class="font-mono text-4xl">
@@ -87,7 +91,7 @@
 				{/if}
 			</div>
 
-			<div class="flex flex-row px-12 items-end justify-between">
+			<div class="flex flex-row mt-8 lg:mt-0 px-8 lg:px-12 items-end justify-between">
 				<Button onClick={toggleList}>List</Button>
 				<div class="flex flex-row justify-end gap-x-4 flex-grow">
 					<Button onClick={() => controls?.previous()}>Previous</Button>
