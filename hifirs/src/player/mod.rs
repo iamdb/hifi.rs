@@ -121,6 +121,8 @@ static ABOUT_TO_FINISH: Lazy<AboutToFinish> = Lazy::new(|| {
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
 
 static IS_SKIPPING: AtomicBool = AtomicBool::new(false);
+static IS_BUFFERING: AtomicBool = AtomicBool::new(false);
+static IS_LIVE: AtomicBool = AtomicBool::new(false);
 
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 
@@ -176,7 +178,7 @@ pub async fn set_player_state(state: gst::State, wait: bool) -> Result<()> {
         }
         StateChangeSuccess::NoPreroll => {
             debug!("*** stream is live ***");
-            STATE.get().unwrap().write().await.set_live(true);
+            IS_LIVE.store(true, Ordering::Relaxed);
         }
     }
 
@@ -615,6 +617,11 @@ pub async fn current_track() -> Option<TrackListTrack> {
 }
 
 #[instrument]
+pub fn is_buffering() -> bool {
+    IS_BUFFERING.load(Ordering::Relaxed)
+}
+
+#[instrument]
 pub async fn search(query: &str) {
     let results = STATE
         .get()
@@ -798,10 +805,6 @@ pub async fn player_loop() -> Result<()> {
 
                         if let Some(duration) = duration() {
                             debug!("setting track duration");
-                            let mut state = STATE.get().unwrap().write().await;
-                            state.set_duration(duration.clone());
-                            drop(state);
-
                             BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { clock: duration }).await?;
                         }
 
@@ -811,22 +814,21 @@ pub async fn player_loop() -> Result<()> {
                         }
                     }
                     MessageView::Buffering(buffering) => {
-                        if STATE.get().unwrap().read().await.live() {
+                        if IS_LIVE.load(Ordering::Relaxed) {
                             debug!("stream is live, ignore buffering");
                             continue;
                         }
                         let percent = buffering.percent();
 
                         let target_status = STATE.get().unwrap().read().await.target_status();
-                        let is_buffering = STATE.get().unwrap().read().await.buffering();
 
-                        if percent < 100 && !is_paused() && !is_buffering {
+                        if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
                             pause(false).await?;
 
-                            STATE.get().unwrap().write().await.set_buffering(true);
-                        } else if percent > 99 && is_buffering && is_paused() {
+                            IS_BUFFERING.store(true, Ordering::Relaxed);
+                        } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
                             set_player_state(target_status.clone().into(), false).await?;
-                            STATE.get().unwrap().write().await.set_buffering(false);
+                            IS_BUFFERING.store(false, Ordering::Relaxed);
 
                             if IS_SKIPPING.load(Ordering::Relaxed) {
                                 PLAYBIN.set_property("instant-uri", false);

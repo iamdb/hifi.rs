@@ -8,56 +8,68 @@ export const connected = writable(false);
 export const currentTrack = writable(null);
 export const currentTrackList = writable([]);
 
-export const init = (dev) => {
-  const host = dev ? 'localhost:9888' : window.location.host;
-  const ws = new WebSocket(`ws://${host}/ws`);
+export class WS {
+  constructor(dev) {
+    this.dev = dev;
+    this.host = dev ? 'localhost:9888' : window.location.host;
+    this.init();
 
-  ws.onopen = () => {
-    connected.set(true);
-  };
+    this.playPause.bind(this)
+    this.next.bind(this)
+    this.previous.bind(this)
+    this.close.bind(this)
+  }
 
-  ws.onclose = () => {
-    setTimeout(() => {
-      init(dev)
-    }, 1000);
-  };
+  init() {
+    this.ws = new WebSocket(`ws://${this.host}/ws`);
+    this.ws.onopen = () => {
+      connected.set(true);
+    };
 
-  ws.onmessage = (message) => {
-    const json = JSON.parse(message.data);
-    console.log(json);
+    this.ws.onclose = () => {
+      connected.set(false);
+      setTimeout(() => {
+        this.init(this.dev)
+      }, 1000);
+    };
 
-    if (Object.hasOwn(json, 'buffering')) {
-      isBuffering.set(json.buffering.is_buffering);
-    } else if (Object.hasOwn(json, 'position')) {
-      position.set(json.position.clock);
-    } else if (Object.hasOwn(json, 'duration')) {
-      duration.set(json.duration.clock);
-    } else if (Object.hasOwn(json, 'status')) {
-      currentStatus.set(json.status.status);
-    } else if (Object.hasOwn(json, 'currentTrack')) {
-      currentTrack.set(json.currentTrack.track);
-    } else if (Object.hasOwn(json, 'currentTrackList')) {
-      currentTrackList.set(json.currentTrackList.list.queue);
+    this.ws.onmessage = (message) => {
+      const json = JSON.parse(message.data);
+      console.log(json);
+
+      if (Object.hasOwn(json, 'buffering')) {
+        isBuffering.set(json.buffering.is_buffering);
+      } else if (Object.hasOwn(json, 'position')) {
+        position.set(json.position.clock);
+      } else if (Object.hasOwn(json, 'duration')) {
+        duration.set(json.duration.clock);
+      } else if (Object.hasOwn(json, 'status')) {
+        currentStatus.set(json.status.status);
+      } else if (Object.hasOwn(json, 'currentTrack')) {
+        currentTrack.set(json.currentTrack.track);
+      } else if (Object.hasOwn(json, 'currentTrackList')) {
+        currentTrackList.set(json.currentTrackList.list.queue);
+      }
+    };
+
+    this.ws.onerror = () => {
+      this.ws.close();
     }
-  };
-
-  ws.onerror = () => {
-    ws.close();
   }
 
-  const playPause = () => {
-    ws.send(JSON.stringify({ playPause: null }));
-  };
-
-  const next = () => {
-    ws.send(JSON.stringify({ next: null }));
+  playPause() {
+    this.ws.send(JSON.stringify({ playPause: null }));
   }
 
-  const previous = () => {
-    ws.send(JSON.stringify({ previous: null }));
+  next() {
+    this.ws.send(JSON.stringify({ next: null }));
   }
 
-  const close = ws.close;
+  previous() {
+    this.ws.send(JSON.stringify({ previous: null }));
+  }
 
-  return { playPause, next, previous, close }
+  close() {
+    this.ws.close()
+  }
 }

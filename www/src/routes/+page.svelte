@@ -3,13 +3,14 @@
 	import { slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import {
-		init,
+		WS,
 		currentTrack,
 		currentTrackList,
 		isBuffering,
 		currentStatus,
 		position,
-		duration
+		duration,
+		connected
 	} from '$lib/websocket';
 	import Button from '../lib/components/Button.svelte';
 	import { writable } from 'svelte/store';
@@ -26,7 +27,7 @@
 	const showList = writable(false);
 
 	onMount(() => {
-		controls = init(dev);
+		controls = new WS(dev);
 
 		return controls.close;
 	});
@@ -46,7 +47,7 @@
 			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 flex-grow mx-auto flex items-center justify-center"
 		>
 			<div
-				class="w-10/12 h-10/12 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+				class="w-10/12 h- mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 			>
 				<img
 					class="block w-full h-full object-cover"
@@ -89,15 +90,15 @@
 			<div class="flex flex-row px-12 items-end justify-between">
 				<Button onClick={toggleList}>List</Button>
 				<div class="flex flex-row justify-end gap-x-4 flex-grow">
-					<Button onClick={controls?.previous}>Previous</Button>
-					<Button onClick={controls?.playPause}>
+					<Button onClick={() => controls?.previous()}>Previous</Button>
+					<Button onClick={() => controls?.playPause()}>
 						{#if $currentStatus === 'Playing'}
 							Pause
 						{:else}
 							Play
 						{/if}
 					</Button>
-					<Button onClick={controls?.next}>Next</Button>
+					<Button onClick={() => controls?.next()}>Next</Button>
 				</div>
 			</div>
 		</div>
@@ -127,5 +128,10 @@
 {#if $isBuffering}
 	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
 		<h1 class="font-bold text-4xl">BUFFERING</h1>
+	</div>
+{/if}
+{#if !$connected}
+	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
+		<h1 class="font-bold text-4xl">DISCONNECTED</h1>
 	</div>
 {/if}

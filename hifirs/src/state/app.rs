@@ -1,6 +1,7 @@
 use crate::{
+    player,
     sql::db::Database,
-    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
+    state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
@@ -23,15 +24,10 @@ pub struct PlayerState {
     client: Client,
     current_track: Option<TrackListTrack>,
     tracklist: TrackListValue,
-    current_progress: FloatValue,
-    duration: ClockValue,
     position: ClockValue,
     status: StatusValue,
-    is_buffering: bool,
-    is_live: bool,
     resume: bool,
     target_status: StatusValue,
-    active_screen: ActiveScreen,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -160,13 +156,6 @@ impl PlayerState {
             (None, None)
         }
     }
-    pub fn set_active_screen(&mut self, screen: ActiveScreen) {
-        self.active_screen = screen;
-    }
-
-    pub fn active_screen(&self) -> ActiveScreen {
-        self.active_screen.clone()
-    }
 
     pub fn set_status(&mut self, status: StatusValue) {
         self.status = status;
@@ -188,39 +177,12 @@ impl PlayerState {
         self.position.clone()
     }
 
-    pub fn set_buffering(&mut self, buffering: bool) {
-        self.is_buffering = buffering;
-    }
-
-    pub fn buffering(&self) -> bool {
-        self.is_buffering
-    }
-
     pub fn set_resume(&mut self, resume: bool) {
         self.resume = resume;
     }
 
     pub fn resume(&self) -> bool {
         self.resume
-    }
-
-    pub fn progress(&self) -> FloatValue {
-        let duration = self.duration.inner_clocktime().mseconds() as f64;
-        let position = self.position.inner_clocktime().mseconds() as f64;
-
-        if duration >= position {
-            FloatValue(position / duration)
-        } else {
-            FloatValue(1.0)
-        }
-    }
-
-    pub fn set_duration(&mut self, duration: ClockValue) {
-        self.duration = duration;
-    }
-
-    pub fn duration(&self) -> ClockValue {
-        self.duration.clone()
     }
 
     pub fn current_track(&self) -> Option<TrackListTrack> {
@@ -280,14 +242,6 @@ impl PlayerState {
         self.target_status = target.into();
     }
 
-    pub fn set_live(&mut self, live: bool) {
-        self.is_live = live;
-    }
-
-    pub fn live(&self) -> bool {
-        self.is_live
-    }
-
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut TrackListTrack) {
         debug!("fetching track url");
@@ -329,7 +283,7 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
-        if self.is_buffering {
+        if player::is_buffering() {
             return None;
         }
 
@@ -401,7 +355,6 @@ impl PlayerState {
     pub fn reset_player(&mut self) {
         self.target_status = GstState::Paused.into();
         self.position = ClockValue::default();
-        self.current_progress = FloatValue(0.0);
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
@@ -419,11 +372,8 @@ impl PlayerState {
     pub fn reset(&mut self) {
         self.tracklist.clear();
         self.current_track = None;
-        self.current_progress = FloatValue(0.0);
-        self.duration = ClockValue::default();
         self.position = ClockValue::default();
         self.status = gstreamer::State::Null.into();
-        self.is_buffering = false;
         self.resume = false;
     }
 
@@ -436,15 +386,10 @@ impl PlayerState {
             current_track: None,
             client,
             tracklist,
-            duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
             target_status: StatusValue(gstreamer::State::Null),
-            current_progress: FloatValue(0.0),
-            is_buffering: false,
-            is_live: false,
             resume: false,
-            active_screen: ActiveScreen::NowPlaying,
             quit_sender,
         }
     }
@@ -467,17 +412,10 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
-                        if let Some(track) = self
-                            .tracklist
-                            .find_track_by_index(last_state.playback_track_index as usize)
-                        {
-                            let duration = ClockTime::from_seconds(track.track.duration as u64);
-                            let position =
-                                ClockTime::from_mseconds(last_state.playback_position as u64);
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
 
-                            self.set_position(position.into());
-                            self.set_duration(duration.into());
-                        }
+                        self.set_position(position.into());
 
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
@@ -504,17 +442,9 @@ impl PlayerState {
                             self.tracklist.set_list_type(TrackListType::Playlist);
                             self.tracklist.set_playlist(playlist);
 
-                            if let Some(track) = self
-                                .tracklist
-                                .find_track_by_index(last_state.playback_track_index as usize)
-                            {
-                                let duration = ClockTime::from_seconds(track.track.duration as u64);
-                                let position =
-                                    ClockTime::from_mseconds(last_state.playback_position as u64);
-
-                                self.set_position(position.into());
-                                self.set_duration(duration.into());
-                            }
+                            let position =
+                                ClockTime::from_mseconds(last_state.playback_position as u64);
+                            self.set_position(position.into());
 
                             self.skip_track(
                                 Some(last_state.playback_track_index as usize),
@@ -544,12 +474,10 @@ impl PlayerState {
                         self.replace_list(tracklist);
                         self.tracklist.set_list_type(TrackListType::Track);
 
-                        let duration = ClockTime::from_seconds(track.track.duration as u64);
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
 
                         self.set_position(position.into());
-                        self.set_duration(duration.into());
 
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
