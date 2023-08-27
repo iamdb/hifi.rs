@@ -1,4 +1,4 @@
-use hifirs_qobuz_api::client::track::TrackListTrack;
+use hifirs_qobuz_api::client::{search_results::SearchAllResults, track::TrackListTrack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -31,6 +31,9 @@ pub enum Notification {
     },
     CurrentTrack {
         track: TrackListTrack,
+    },
+    SearchResults {
+        results: SearchAllResults,
     },
     Error {
         error: player::error::Error,

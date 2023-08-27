@@ -614,6 +614,24 @@ pub async fn current_track() -> Option<TrackListTrack> {
     STATE.get().unwrap().read().await.current_track()
 }
 
+#[instrument]
+pub async fn search(query: &str) {
+    let results = STATE
+        .get()
+        .unwrap()
+        .read()
+        .await
+        .search_all(query)
+        .await
+        .unwrap_or_default();
+
+    BROADCAST_CHANNELS
+        .tx
+        .broadcast(Notification::SearchResults { results })
+        .await
+        .expect("failed to send notification");
+}
+
 /// Inserts the most recent position into the state at a set interval.
 #[instrument]
 pub async fn clock_loop() {
@@ -627,7 +645,8 @@ pub async fn clock_loop() {
 
         if current_state() == GstState::Playing.into() {
             if let Some(position) = position() {
-                if position != last_position {
+                if position.inner_clocktime().seconds() != last_position.inner_clocktime().seconds()
+                {
                     last_position = position.clone();
 
                     let mut state = STATE.get().unwrap().write().await;
@@ -695,32 +714,42 @@ pub async fn player_loop() -> Result<()> {
             }
             Some(almost_done) = about_to_finish.next() => {
                 if almost_done {
-                    prep_next_track().await?
+                    tokio::spawn(async { prep_next_track().await });
                 }
             }
             Some(action) = actions.next() => {
                 match action {
                     Action::JumpBackward => jump_backward().await?,
                     Action::JumpForward => jump_forward().await?,
-                    Action::Next => skip(SkipDirection::Forward,None).await?,
+                    Action::Next => {
+                        tokio::spawn(async { skip(SkipDirection::Forward,None).await });
+                    },
                     Action::Pause => pause(false).await?,
                     Action::Play => play(false).await?,
                     Action::PlayPause => play_pause().await?,
-                    Action::Previous => skip(SkipDirection::Backward,None).await?,
+                    Action::Previous => {
+                        tokio::spawn(async { skip(SkipDirection::Backward,None).await });
+                    },
                     Action::Stop => stop(false).await?,
                     Action::PlayAlbum { album_id } => {
-                        play_album(album_id).await?;
+                        tokio::spawn(async { play_album(album_id).await });
                     },
                     Action::PlayTrack { track_id } => {
-                        play_track(track_id).await?;
+                        tokio::spawn(async move { play_track(track_id).await });
                     },
-                    Action::PlayUri { uri } => play_uri(uri).await?,
+                    Action::PlayUri { uri } => {
+                        tokio::spawn(async { play_uri(uri).await });
+                    },
                     Action::PlayPlaylist { playlist_id } => {
-                        play_playlist(playlist_id).await?;
+                        tokio::spawn(async move { play_playlist(playlist_id).await });
                     },
                     Action::Quit => STATE.get().unwrap().read().await.quit(),
-                    Action::SkipTo { num } => skip_to(num).await?,
-                    Action::SkipToById { track_id } => skip_to_by_id(track_id).await?
+                    Action::SkipTo { num } => {
+                        tokio::spawn(async move { skip_to(num).await });
+                    },
+                    Action::SkipToById { track_id } => {
+                        tokio::spawn(async move { skip_to_by_id(track_id).await });
+                    }
                 }
             }
             Some(msg) = messages.next() => {

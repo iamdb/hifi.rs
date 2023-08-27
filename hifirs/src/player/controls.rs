@@ -51,9 +51,6 @@ impl Controls {
     pub async fn play_pause(&self) {
         action!(self, Action::PlayPause);
     }
-    pub fn play_pause_blocking(&self) {
-        action_blocking!(self, Action::PlayPause);
-    }
     pub async fn stop(&self) {
         action!(self, Action::Stop);
     }

@@ -33,12 +33,12 @@ struct Cli {
     pub quit_when_done: bool,
 
     #[clap(short, long, default_value_t = false)]
-    /// Start web server with websocket API and UI.
-    /// (default 0.0.0.0:3000)
+    /// Start web server with websocket API and embedded UI.
     pub web: bool,
 
-    #[clap(long, default_value = "0.0.0.0:3000")]
+    #[clap(long, default_value = "0.0.0.0:9888")]
     /// Specify a different interface and port for the web server to listen on.
+    /// (default 0.0.0.0:9888)
     pub interface: SocketAddr,
 
     #[clap(subcommand)]
@@ -189,8 +189,7 @@ async fn setup_player(
 
     player::init(client.clone(), database, quit_when_done).await?;
 
-    let controls = player::controls();
-    let tui = CursiveUI::new(controls, client.clone());
+    let tui = CursiveUI::new(client.clone());
 
     if resume {
         tokio::spawn(async move {

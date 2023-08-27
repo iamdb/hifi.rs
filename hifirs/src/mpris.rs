@@ -187,9 +187,8 @@ pub async fn receive_notifications(conn: Connection) {
                             .await
                             .expect("failed to signal metadata change");
                     },
-                    Notification::Error { error: _ } => {
-
-                    }
+                    Notification::Error { error: _ } => {},
+                    Notification::SearchResults { results: _ } => {}
                 }
             }
             else => {}

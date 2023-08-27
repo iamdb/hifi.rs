@@ -8,6 +8,7 @@ use hifirs_qobuz_api::client::{
     album::Album,
     api::Client,
     playlist::Playlist,
+    search_results::SearchAllResults,
     track::{TrackListTrack, TrackStatus},
 };
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
@@ -387,6 +388,13 @@ impl PlayerState {
         } else {
             debug!("no more tracks");
             None
+        }
+    }
+
+    pub async fn search_all(&self, query: &str) -> Option<SearchAllResults> {
+        match self.client.search_all(query.to_string(), 500).await {
+            Ok(results) => Some(results),
+            Err(_) => None,
         }
     }
 

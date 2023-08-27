@@ -9,19 +9,17 @@ export const currentTrack = writable(null);
 export const currentTrackList = writable([]);
 
 export const init = (dev) => {
-  const host = dev ? 'localhost:3000' : window.location.host;
+  const host = dev ? 'localhost:9888' : window.location.host;
   const ws = new WebSocket(`ws://${host}/ws`);
 
   ws.onopen = () => {
     connected.set(true);
   };
 
-  let retryInterval;
-
   ws.onclose = () => {
-    retryInterval = setInterval(() => {
-      ws.connected;
-    });
+    setTimeout(() => {
+      init(dev)
+    }, 1000);
   };
 
   ws.onmessage = (message) => {
@@ -33,7 +31,7 @@ export const init = (dev) => {
     } else if (Object.hasOwn(json, 'position')) {
       position.set(json.position.clock);
     } else if (Object.hasOwn(json, 'duration')) {
-      position.set(json.duration.clock);
+      duration.set(json.duration.clock);
     } else if (Object.hasOwn(json, 'status')) {
       currentStatus.set(json.status.status);
     } else if (Object.hasOwn(json, 'currentTrack')) {
@@ -43,6 +41,9 @@ export const init = (dev) => {
     }
   };
 
+  ws.onerror = () => {
+    ws.close();
+  }
 
   const playPause = () => {
     ws.send(JSON.stringify({ playPause: null }));

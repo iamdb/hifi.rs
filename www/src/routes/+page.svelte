@@ -8,14 +8,18 @@
 		currentTrackList,
 		isBuffering,
 		currentStatus,
-		position
+		position,
+		duration
 	} from '$lib/websocket';
 	import Button from '../lib/components/Button.svelte';
 	import { writable } from 'svelte/store';
 	import { dev } from '$app/environment';
 
-	$: clockMinutes = Math.floor($position / 1000 / 1000 / 1000 / 60);
-	$: clockSeconds = Math.floor($position / 1000 / 1000 / 1000) - clockMinutes * 60;
+	$: positionMinutes = Math.floor($position / 1000 / 1000 / 1000 / 60);
+	$: positionSeconds = Math.floor($position / 1000 / 1000 / 1000) - positionMinutes * 60;
+
+	$: durationMinutes = Math.floor($duration / 1000 / 1000 / 1000 / 60);
+	$: durationSeconds = Math.floor($duration / 1000 / 1000 / 1000) - durationMinutes * 60;
 
 	let controls;
 
@@ -39,27 +43,45 @@
 <div>
 	<div class="flex flex-col lg:flex-row">
 		<div
-			class="aspect-square lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 flex-grow mx-auto flex items-center justify-center"
+			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 flex-grow mx-auto flex items-center justify-center"
 		>
-			<img
-				class="w-full block h-full object-cover max-w-full"
-				src={$currentTrack?.album.image.large}
-				alt={$currentTrack?.album.title}
-			/>
+			<div
+				class="w-10/12 h-10/12 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+			>
+				<img
+					class="block w-full h-full object-cover"
+					src={$currentTrack?.album.image.large}
+					alt={$currentTrack?.album.title}
+				/>
+			</div>
+			<div class="w-full h-full backdrop-hue-rotate-30 flex flex-col items-center justify-center">
+				<img
+					class="block max-w-full relative z-10"
+					src={$currentTrack?.album.image.large}
+					alt={$currentTrack?.album.title}
+				/>
+			</div>
 		</div>
 		<div class="flex lg:w-1/2 flex-col justify-between">
-			<div class="flex flex-col flex-grow justify-center text-center text-7xl lg:text-7xl">
+			<div class="flex flex-col gap-y-4 flex-grow justify-evenly text-center text-7xl lg:text-7xl">
 				{#if currentTrack}
-					<span
-						class="font-bold py-8 tracking-tighter bg-yellow-800 leading-tight px-8 lg:text-8xl italic"
+					<span class="font-serif">{$currentTrack?.track.performer.name || ''}</span>
+
+					<span class="font-bold py-8 bg-yellow-800 leading-[1.15em] px-8"
 						>{$currentTrack?.track.title || ''}</span
 					>
-					<span class="font-bold italic">{$currentTrack?.track.performer.name || ''}</span>
-
-					<span class="font-mono">
-						{clockMinutes.toString(10).padStart(2, '0')}:{clockSeconds
-							.toString(10)
-							.padStart(2, '0')}
+					<span class="font-mono text-4xl">
+						<span>
+							{positionMinutes.toString(10).padStart(2, '0')}:{positionSeconds
+								.toString(10)
+								.padStart(2, '0')}
+						</span>
+						<span>/</span>
+						<span>
+							{durationMinutes.toString(10).padStart(2, '0')}:{durationSeconds
+								.toString(10)
+								.padStart(2, '0')}
+						</span>
 					</span>
 				{/if}
 			</div>
@@ -103,9 +125,7 @@
 {/if}
 
 {#if $isBuffering}
-	<div
-		class="fixed top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 z-10 w-3/5 h-3/5 bg-amber-800 flex items-center justify-center"
-	>
-		<h1 class="font-bold text-8xl">BUFFERING</h1>
+	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
+		<h1 class="font-bold text-4xl">BUFFERING</h1>
 	</div>
 {/if}
