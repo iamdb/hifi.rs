@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { afterUpdate, onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import {
@@ -51,7 +51,7 @@
 		}
 	};
 
-	let panel;
+	let navHeight;
 </script>
 
 <svelte:head>
@@ -67,12 +67,12 @@
 />
 
 <div class="flex flex-col justify-center h-[100dvh] overflow-x-hidden">
-	<div class="flex flex-col h-[100dvh] lg:h-auto pb-4 sm:py-4 lg:py-0 justify-between lg:flex-row">
+	<div class="flex flex-col h-[100dvh] md:h-auto pb-4 sm:py-4 md:py-0 justify-between md:flex-row">
 		<div
-			class="w-full lg:aspect-square relative bg-amber-900 p-4 lg:p-8 flex-shrink-0 mx-auto flex items-center justify-center"
+			class="w-full md:w-1/2 md:aspect-square relative bg-amber-900 p-4 lg:p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
 			<div
-				class="w-full h-full p-4 lg:p-8 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+				class="w-full h-full p-4 md:p-8 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 			>
 				<img
 					class="block w-full h-full max-w-full object-cover"
@@ -84,23 +84,23 @@
 				class="w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 backdrop-blur-sm flex flex-col items-center justify-center"
 			>
 				<img
-					class="w-full lg:w-auto block max-w-full relative z-10"
+					class="w-full md:w-auto block max-w-full relative z-10"
 					src={$currentTrack?.album.image.large}
 					alt={$currentTrack?.album.title}
 				/>
 			</div>
 		</div>
-		<div class="flex lg:w-1/2 flex-grow flex-col justify-between">
+		<div class="flex md:w-1/2 flex-grow flex-col justify-between">
 			<div
 				class="flex relative flex-col gap-y-4 py-2 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
 			>
 				{#if $currentTrack}
 					<span>{$currentTrack?.track.performer.name || ''}</span>
 
-					<span class="font-semibold py-4 lg:py-8 bg-amber-900 leading-[1.15em] px-4 lg:px-8"
+					<span class="font-semibold py-4 md:py-8 bg-amber-900 leading-[1.15em] px-4 md:px-8"
 						>{$currentTrack?.track.title || ''}</span
 					>
-					<span class="text-4xl lg:text-5xl">
+					<span class="text-4xl md:text-5xl">
 						<span>
 							{positionMinutes.toString(10).padStart(2, '0')}:{positionSeconds
 								.toString(10)
@@ -121,16 +121,18 @@
 						on:keyup|stopPropagation={() => {}}
 						role="menu"
 						tabindex="0"
-						bind:this={panel}
+						style:padding-bottom={`${navHeight + 32}px`}
 						transition:fly={{ duration: 300, easing: quintOut, x: '100%' }}
-						class="fixed lg:absolute p-8 flex flex-col backdrop-blur-sm bg-opacity-90 w-full lg:w-4/5 text-left h-5/6 lg:h-full top-0 right-0 bg-amber-950 max-h-[100dvh]"
+						class="fixed h-[100dvh] md:!pb-0 md:h-full md:absolute z-10 flex flex-col backdrop-blur-sm bg-opacity-90 w-full text-left top-0 right-0 bg-amber-950"
 					>
-						<div class="flex flex-row gap-x-8 justify-between text-center mb-4 text-4xl">
+						<div
+							class="flex flex-row gap-x-8 py-1 px-2 justify-between text-center text-xl xl:text-4xl"
+						>
 							<p>{$currentTrack?.track.performer.name}</p>
 							<p class="font-bold">{$currentTrack?.album.title}</p>
 							<p>{new Date($currentTrack.album.release_date_original).getFullYear()}</p>
 						</div>
-						<ul class="text-3xl leading-tight overflow-y-scroll">
+						<ul class="text-2xl xl:text-3xl px-2 leading-tight overflow-y-scroll">
 							{#each $currentTrackList as track}
 								<li
 									class:opacity-60={track.status === 'Played'}
@@ -150,8 +152,13 @@
 				{/if}
 			</div>
 
-			<div class="flex flex-row gap-x-4 mt-8 lg:mt-0 px-4 lg:px-12 items-end justify-between">
-				<Button onClick={toggleList}>{$showList ? 'Close' : 'List'}</Button>
+			<div
+				bind:offsetHeight={navHeight}
+				class="flex flex-row gap-x-4 md:mt-0 px-4 md:px-12 items-end justify-between"
+			>
+				<span class:fixed-button={$showList}>
+					<Button onClick={toggleList}>{$showList ? 'Close' : 'List'}</Button>
+				</span>
 				<div class="flex flex-row justify-end gap-x-4 flex-grow">
 					<Button onClick={() => controls?.previous()}>Previous</Button>
 					<Button onClick={() => controls?.playPause()}>
@@ -178,3 +185,9 @@
 		{/if}
 	</div>
 {/if}
+
+<style lang="postcss">
+	.fixed-button {
+		@apply fixed z-20 bottom-4 left-4 md:z-auto md:relative md:bottom-auto md:left-auto;
+	}
+</style>

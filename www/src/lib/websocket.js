@@ -45,7 +45,6 @@ export class WS {
 
     this.ws.onmessage = (message) => {
       const json = JSON.parse(message.data);
-      console.log(json);
 
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);
