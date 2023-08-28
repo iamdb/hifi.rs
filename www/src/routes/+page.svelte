@@ -41,8 +41,12 @@
 	};
 </script>
 
-<div class="flex flex-col justify-center h-[100dvh] overflow-hidden">
-	<div class="flex flex-col h-[100dvh] pb-4 sm:py-4 lg:py-0 justify-between lg:flex-row">
+<svelte:head>
+	<title>hifi.rs: {$currentStatus}</title>
+</svelte:head>
+
+<div class="flex flex-col justify-center h-[100dvh]">
+	<div class="flex flex-col h-[100dvh] lg:h-auto pb-4 sm:py-4 lg:py-0 justify-between lg:flex-row">
 		<div
 			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
