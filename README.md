@@ -110,7 +110,7 @@ Skip To Track:
 ```json
 { "skipTo": { "num": "<track index>"} }
 ```
-For more options, see the [`Action`](https://github.com/iamdb/hifi.rs/blob/main/hifirs/src/player/controls.rs#L5) enum.
+For more options, see the [`Action`](hifirs/src/player/controls.rs#L5) enum.
 
 ## Known Issues
 
