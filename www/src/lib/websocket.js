@@ -12,15 +12,24 @@ export class WS {
   constructor(dev) {
     this.dev = dev;
     this.host = dev ? 'localhost:9888' : window.location.host;
-    this.init();
 
     this.playPause.bind(this)
     this.next.bind(this)
     this.previous.bind(this)
     this.close.bind(this)
+
+    this.connect();
   }
 
-  init() {
+  connected() {
+    this.ws.readyState == this.ws.OPEN
+  }
+
+  connecting() {
+    this.ws.readyState == this.ws.CONNECTING
+  }
+
+  connect() {
     this.ws = new WebSocket(`ws://${this.host}/ws`);
     this.ws.onopen = () => {
       connected.set(true);
@@ -30,7 +39,7 @@ export class WS {
       connected.set(false);
 
       setTimeout(() => {
-        this.init(this.dev)
+        this.connect(this.dev)
       }, 1000);
     };
 

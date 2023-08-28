@@ -29,7 +29,18 @@
 	onMount(() => {
 		controls = new WS(dev);
 
-		return controls.close;
+		const onFocus = () => {
+			if (!controls.connected()) {
+				controls.connect();
+			}
+		};
+
+		window.addEventListener('focus', onFocus);
+
+		return () => {
+			controls.close();
+			window.removeEventListener('focus', onFocus);
+		};
 	});
 
 	const toggleList = () => {
