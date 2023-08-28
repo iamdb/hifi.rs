@@ -16,7 +16,7 @@ Qobuz only supports Linux through the browser and has no officially supported AP
 - MPRIS support (control via [playerctl](https://github.com/altdesktop/playerctl) or other D-Bus client)
 - Gapless playback
 - Resume last session
-- Web UI with websocket api
+- Web UI with WebSocket API
 
 In addition to the player, there is a Spotify to Qobuz playlist sync tool and an incomplete Rust library for the Qobuz API.
 
