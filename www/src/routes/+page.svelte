@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import { slide } from 'svelte/transition';
+	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import {
 		WS,
@@ -50,31 +50,41 @@
 			showList.set(true);
 		}
 	};
+
+	let panel;
 </script>
 
 <svelte:head>
 	<title>hifi.rs: {$currentStatus}</title>
 </svelte:head>
 
-<div class="flex flex-col justify-center h-[100dvh]">
+<svelte:body
+	on:click={(e) => {
+		if (e.currentTarget !== document.getElementsByTagName('body') && $showList) {
+			toggleList();
+		}
+	}}
+/>
+
+<div class="flex flex-col justify-center h-[100dvh] overflow-x-hidden">
 	<div class="flex flex-col h-[100dvh] lg:h-auto pb-4 sm:py-4 lg:py-0 justify-between lg:flex-row">
 		<div
-			class="aspect-square relative lg:w-1/2 bg-amber-800 p-8 flex-shrink-0 mx-auto flex items-center justify-center"
+			class="w-full lg:aspect-square relative bg-amber-900 p-4 lg:p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
 			<div
-				class="aspect-square overflow-hidden w-11/12 h-11/12 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+				class="w-full h-full p-4 lg:p-8 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 			>
 				<img
-					class="block w-full h-full object-cover"
+					class="block w-full h-full max-w-full object-cover"
 					src={$currentTrack?.album.image.large}
 					alt={$currentTrack?.album.title}
 				/>
 			</div>
 			<div
-				class="aspect-square w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 backdrop-blur-sm flex flex-col items-center justify-center"
+				class="w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 backdrop-blur-sm flex flex-col items-center justify-center"
 			>
 				<img
-					class="block max-w-full relative z-10"
+					class="w-full lg:w-auto block max-w-full relative z-10"
 					src={$currentTrack?.album.image.large}
 					alt={$currentTrack?.album.title}
 				/>
@@ -82,12 +92,12 @@
 		</div>
 		<div class="flex lg:w-1/2 flex-grow flex-col justify-between">
 			<div
-				class="flex flex-col gap-y-4 py-2 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
+				class="flex relative flex-col gap-y-4 py-2 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
 			>
 				{#if $currentTrack}
 					<span>{$currentTrack?.track.performer.name || ''}</span>
 
-					<span class="font-semibold py-4 lg:py-8 bg-yellow-800 leading-[1.15em] px-4 lg:px-8"
+					<span class="font-semibold py-4 lg:py-8 bg-amber-900 leading-[1.15em] px-4 lg:px-8"
 						>{$currentTrack?.track.title || ''}</span
 					>
 					<span class="text-4xl lg:text-5xl">
@@ -104,10 +114,44 @@
 						</span>
 					</span>
 				{/if}
+
+				{#if $showList}
+					<div
+						on:click|stopPropagation={() => {}}
+						on:keyup|stopPropagation={() => {}}
+						role="menu"
+						tabindex="0"
+						bind:this={panel}
+						transition:fly={{ duration: 300, easing: quintOut, x: '100%' }}
+						class="fixed lg:absolute p-8 flex flex-col backdrop-blur-sm bg-opacity-90 w-full lg:w-4/5 text-left h-5/6 lg:h-full top-0 right-0 bg-amber-950 max-h-[100dvh]"
+					>
+						<div class="flex flex-row gap-x-8 justify-between text-center mb-4 text-4xl">
+							<p>{$currentTrack?.track.performer.name}</p>
+							<p class="font-bold">{$currentTrack?.album.title}</p>
+							<p>{new Date($currentTrack.album.release_date_original).getFullYear()}</p>
+						</div>
+						<ul class="text-3xl leading-tight overflow-y-scroll">
+							{#each $currentTrackList as track}
+								<li
+									class:opacity-60={track.status === 'Played'}
+									class:text-amber-500={track.status === 'Playing'}
+								>
+									<button
+										on:click|stopPropagation={() => controls.skipTo(track.index)}
+										class="grid grid-flow-col-dense gap-x-4"
+									>
+										<span>{(track.index + 1).toString().padStart(2, '0')}</span>
+										<span>{track.track.title}</span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 			</div>
 
 			<div class="flex flex-row gap-x-4 mt-8 lg:mt-0 px-4 lg:px-12 items-end justify-between">
-				<Button onClick={toggleList}>List</Button>
+				<Button onClick={toggleList}>{$showList ? 'Close' : 'List'}</Button>
 				<div class="flex flex-row justify-end gap-x-4 flex-grow">
 					<Button onClick={() => controls?.previous()}>Previous</Button>
 					<Button onClick={() => controls?.playPause()}>
@@ -124,34 +168,13 @@
 	</div>
 </div>
 
-{#if $showList}
-	<div
-		transition:slide={{ duration: 300, easing: quintOut, axis: 'x' }}
-		class="fixed top-0 right-0 bg-amber-950 h-[100dvh]"
-	>
-		<ul class="text-2xl py-8 px-12 leading-tight">
-			{#each $currentTrackList as track}
-				<li
-					class="whitespace-nowrap"
-					class:opacity-60={track.status === 'Played'}
-					class:text-amber-500={track.status === 'Playing'}
-				>
-					{track.index + 1}
-					{track.track.title}
-				</li>
-			{/each}
-		</ul>
-	</div>
-{/if}
-
-{#if $isBuffering}
-	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
-		<h1 class="font-semi text-4xl">BUFFERING</h1>
-	</div>
-{/if}
-
-{#if !$connected}
-	<div class="fixed top-8 right-8 z-10 bg-amber-800 flex px-2 items-center justify-center">
-		<h1 class="font-semi text-4xl">DISCONNECTED</h1>
+{#if $isBuffering || !$connected}
+	<div class="fixed top-8 right-8 z-10">
+		{#if $isBuffering}
+			<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">BUFFERING</h1>
+		{/if}
+		{#if !$connected}
+			<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">DISCONNECTED</h1>
+		{/if}
 	</div>
 {/if}

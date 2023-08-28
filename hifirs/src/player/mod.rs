@@ -369,9 +369,9 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
         if let Some(track_url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
-            ready(true).await?;
+            ready(false).await?;
             PLAYBIN.set_property("uri", Some(track_url.url.clone()));
-            set_player_state(target_status.into(), true).await?;
+            set_player_state(target_status.into(), false).await?;
 
             BROADCAST_CHANNELS
                 .tx

@@ -82,4 +82,8 @@ export class WS {
   close() {
     this.ws.close()
   }
+
+  skipTo(num) {
+    this.ws.send(JSON.stringify({ skipTo: { num } }))
+  }
 }

@@ -1,5 +1,4 @@
 use crate::{
-    player,
     sql::db::Database,
     state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
@@ -283,10 +282,6 @@ impl PlayerState {
         index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<TrackListTrack> {
-        if player::is_buffering() {
-            return None;
-        }
-
         let next_track_index = if let Some(i) = index {
             if i <= self.tracklist.total() {
                 Some(i)
