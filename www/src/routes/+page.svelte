@@ -26,7 +26,7 @@
 		controls = new WS(dev);
 
 		const onFocus = () => {
-			if (!controls.connected()) {
+			if (!$connected) {
 				controls.connect();
 			}
 		};
@@ -127,11 +127,9 @@
 						class="fixed h-[100dvh] md:!pb-0 md:h-full md:absolute z-10 flex flex-col backdrop-blur-sm bg-opacity-90 w-full text-left top-0 right-0 bg-amber-950"
 					>
 						<div
-							class="flex flex-row gap-x-8 py-1 px-2 justify-between text-center text-xl xl:text-4xl"
+							class="flex flex-row gap-x-8 py-1 px-2 justify-center items-center text-center text-xl xl:text-4xl"
 						>
-							<p>{$currentTrack?.track.performer.name}</p>
 							<p class="font-bold">{$entityTitle}</p>
-							<p>{new Date($currentTrack?.album?.release_date_original).getFullYear()}</p>
 						</div>
 						<ul class="text-2xl xl:text-3xl px-2 leading-tight overflow-y-scroll">
 							{#each $queue as track}
@@ -140,11 +138,11 @@
 									class:text-amber-500={track.status === 'Playing'}
 								>
 									<button
-										on:click|stopPropagation={() => controls.skipTo(track.index)}
+										on:click|stopPropagation={() => controls.skipTo(track.number)}
 										class="grid grid-flow-col-dense gap-x-4"
 									>
-										<span>{(track.index + 1).toString().padStart(2, '0')}</span>
-										<span>{track.track.title}</span>
+										<span>{track.number.toString().padStart(2, '0')}</span>
+										<span>{track.title}</span>
 									</button>
 								</li>
 							{/each}

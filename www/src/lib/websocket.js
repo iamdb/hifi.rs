@@ -65,14 +65,6 @@ export class WS {
     this.connect();
   }
 
-  connected() {
-    this.ws.readyState == this.ws.OPEN
-  }
-
-  connecting() {
-    this.ws.readyState == this.ws.CONNECTING
-  }
-
   connect() {
     this.ws = new WebSocket(`ws://${this.host}/ws`);
     this.ws.onopen = () => {
