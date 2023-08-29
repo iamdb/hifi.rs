@@ -97,13 +97,14 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            let first_track = tracklist.queue.front_mut().unwrap();
-
-            self.attach_track_url(first_track).await;
-            self.set_current_track(first_track.clone());
-            self.set_target_status(GstState::Playing);
-
-            (Some(first_track.clone()), Some(tracklist))
+            if let Some(first_track) = tracklist.queue.front_mut() {
+                self.attach_track_url(first_track).await;
+                self.set_current_track(first_track.clone());
+                self.set_target_status(GstState::Playing);
+                (Some(first_track.clone()), Some(tracklist))
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
         }
@@ -208,7 +209,7 @@ impl PlayerState {
         self.tracklist.get_playlist()
     }
 
-    pub fn current_track_index(&self) -> Option<u8> {
+    pub fn current_track_index(&self) -> Option<usize> {
         self.current_track.as_ref().map(|track| track.number)
     }
 
@@ -221,7 +222,7 @@ impl PlayerState {
         self.tracklist.clone()
     }
 
-    pub fn track_index(&self, track_id: usize) -> Option<u8> {
+    pub fn track_index(&self, track_id: usize) -> Option<usize> {
         if let Some(track) = self.tracklist.find_track(track_id) {
             Some(track.number)
         } else {
@@ -248,7 +249,7 @@ impl PlayerState {
             debug!("attaching url information to track");
             track.track_url = Some(track_url.url);
             track.sampling_rate = track_url.sampling_rate as f32;
-            track.bit_depth = track_url.bit_depth as u8;
+            track.bit_depth = track_url.bit_depth as usize;
         }
     }
 
@@ -260,7 +261,7 @@ impl PlayerState {
                 .await
             {
                 current_track.track_url = Some(track_url.url);
-                current_track.bit_depth = track_url.bit_depth as u8;
+                current_track.bit_depth = track_url.bit_depth as usize;
                 current_track.sampling_rate = track_url.sampling_rate as f32;
             }
         }
@@ -286,11 +287,11 @@ impl PlayerState {
 
     pub async fn skip_track(
         &mut self,
-        index: Option<u8>,
+        index: Option<usize>,
         direction: SkipDirection,
     ) -> Option<Track> {
         let next_track_index = if let Some(i) = index {
-            if i <= self.tracklist.total() as u8 {
+            if i <= self.tracklist.total() {
                 Some(i)
             } else {
                 None
@@ -298,7 +299,7 @@ impl PlayerState {
         } else if let Some(current_track_index) = self.current_track_index() {
             match direction {
                 SkipDirection::Forward => {
-                    if current_track_index < self.tracklist.total() as u8 {
+                    if current_track_index < self.tracklist.total() {
                         Some(current_track_index + 1)
                     } else {
                         None
@@ -330,7 +331,7 @@ impl PlayerState {
                         if let Ok(track_url) = self.client.track_url(t.id as i32, None, None).await
                         {
                             t.track_url = Some(track_url.url);
-                            t.bit_depth = track_url.bit_depth as u8;
+                            t.bit_depth = track_url.bit_depth as usize;
                             t.sampling_rate = track_url.sampling_rate as f32;
                         }
 
@@ -425,7 +426,7 @@ impl PlayerState {
                         self.set_position(position.into());
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as u8),
+                            Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;
@@ -455,7 +456,7 @@ impl PlayerState {
                         self.set_position(position.into());
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as u8),
+                            Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;
@@ -487,7 +488,7 @@ impl PlayerState {
                         self.set_position(position.into());
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as u8),
+                            Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;

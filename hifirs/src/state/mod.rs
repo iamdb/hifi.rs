@@ -243,7 +243,7 @@ impl TrackListValue {
     }
 
     #[instrument(skip(self))]
-    pub fn find_track_by_index(&self, index: u8) -> Option<Track> {
+    pub fn find_track_by_index(&self, index: usize) -> Option<Track> {
         self.queue.iter().find(|t| t.number == index).cloned()
     }
 

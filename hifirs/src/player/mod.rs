@@ -343,7 +343,7 @@ pub async fn jump_backward() -> Result<()> {
 }
 /// Skip to the next, previous or specific track in the playlist.
 #[instrument]
-pub async fn skip(direction: SkipDirection, num: Option<u8>) -> Result<()> {
+pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
     // Typical previous skip functionality where if,
     // the track is greater than 1 second into playing,
     // then it goes to the beginning. If triggered again
@@ -394,7 +394,7 @@ pub async fn skip(direction: SkipDirection, num: Option<u8>) -> Result<()> {
 /// Skip to a specific track in the current playlist
 /// by its index in the list.
 #[instrument]
-pub async fn skip_to(index: u8) -> Result<()> {
+pub async fn skip_to(index: usize) -> Result<()> {
     let state = STATE.get().unwrap().read().await;
 
     if let Some(current_index) = state.current_track_index() {

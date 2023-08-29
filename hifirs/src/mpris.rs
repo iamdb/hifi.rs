@@ -177,9 +177,9 @@ pub async fn receive_notifications(conn: Connection) {
 
                         iface.can_previous = track.number != 0;
 
-                        iface.can_next = !(iface.total_tracks != 0 && track.number as usize == iface.total_tracks - 1);
+                        iface.can_next = !(iface.total_tracks != 0 && track.number == iface.total_tracks - 1);
 
-                        iface.total_tracks = track.number as usize;
+                        iface.total_tracks = track.number;
                         iface.current_track = Some(track);
 
                         iface
@@ -412,7 +412,7 @@ fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value
     );
     meta.insert(
         "xesam:trackNumber",
-        zvariant::Value::new(playlist_track.number),
+        zvariant::Value::new(playlist_track.number as i32),
     );
 
     meta.insert(

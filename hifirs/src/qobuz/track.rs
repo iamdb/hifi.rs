@@ -20,15 +20,15 @@ pub enum TrackStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub id: usize,
-    pub number: u8,
+    pub number: usize,
     pub title: String,
     pub album: Option<Album>,
     pub artist_name: Option<String>,
-    pub duration_seconds: u8,
+    pub duration_seconds: usize,
     pub explicit: bool,
     pub hires_available: bool,
     pub sampling_rate: f32,
-    pub bit_depth: u8,
+    pub bit_depth: usize,
     pub status: TrackStatus,
     pub track_url: Option<String>,
     pub available: bool,
@@ -57,11 +57,11 @@ impl From<QobuzTrack> for Track {
 
         Self {
             id: value.id as usize,
-            number: value.track_number as u8,
+            number: value.track_number as usize,
             title: value.title,
             album,
             artist_name,
-            duration_seconds: value.duration as u8,
+            duration_seconds: value.duration as usize,
             explicit: value.parental_warning,
             hires_available: value.hires_streamable,
             sampling_rate: 0.,
@@ -119,7 +119,7 @@ impl CursiveFormat for Track {
         let num = if let Some(index) = index {
             index + 1
         } else {
-            self.number as usize
+            self.number
         };
 
         let mut item = StyledString::styled(format!("{:02} ", num), style);
