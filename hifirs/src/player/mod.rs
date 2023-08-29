@@ -4,6 +4,7 @@ use crate::{
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
     },
+    qobuz::track::Track,
     sql::db::Database,
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
@@ -18,7 +19,7 @@ use gst::{
     Structure,
 };
 use gstreamer as gst;
-use hifirs_qobuz_api::client::{self, api::Client, track::TrackListTrack, UrlType};
+use hifirs_qobuz_api::client::{self, api::Client, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
     str::FromStr,
@@ -280,7 +281,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
                 .await?;
 
             if let Some(url) = track.track_url {
-                PLAYBIN.set_property("uri", url.url);
+                PLAYBIN.set_property("uri", url);
 
                 ready(true).await?;
                 pause(true).await?;
@@ -342,7 +343,7 @@ pub async fn jump_backward() -> Result<()> {
 }
 /// Skip to the next, previous or specific track in the playlist.
 #[instrument]
-pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
+pub async fn skip(direction: SkipDirection, num: Option<u8>) -> Result<()> {
     // Typical previous skip functionality where if,
     // the track is greater than 1 second into playing,
     // then it goes to the beginning. If triggered again
@@ -366,11 +367,11 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
         drop(state);
 
-        if let Some(track_url) = &next_track_to_play.track_url {
+        if let Some(url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
             ready(false).await?;
-            PLAYBIN.set_property("uri", Some(track_url.url.clone()));
+            PLAYBIN.set_property("uri", Some(url.clone()));
             set_player_state(target_status.into(), false).await?;
 
             BROADCAST_CHANNELS
@@ -393,7 +394,7 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 /// Skip to a specific track in the current playlist
 /// by its index in the list.
 #[instrument]
-pub async fn skip_to(index: usize) -> Result<()> {
+pub async fn skip_to(index: u8) -> Result<()> {
     let state = STATE.get().unwrap().read().await;
 
     if let Some(current_index) = state.current_track_index() {
@@ -441,7 +442,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         .await
     {
         if let Some(track_url) = &track_list_track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url.url.as_str()));
+            PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
             if !is_playing() {
                 play(false).await?;
@@ -479,7 +480,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
         .await
     {
         if let Some(track_url) = &track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url.url.clone()));
+            PLAYBIN.set_property("uri", Some(track_url));
 
             if !is_playing() {
                 play(false).await?;
@@ -543,7 +544,7 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
         .await
     {
         if let Some(t) = &first_track.track_url {
-            PLAYBIN.set_property("uri", Some(t.url.as_str()));
+            PLAYBIN.set_property("uri", Some(t.as_str()));
 
             if !is_playing() {
                 play(false).await?;
@@ -578,7 +579,7 @@ async fn prep_next_track() -> Result<()> {
 
         debug!("received new track, adding to player");
         if let Some(next_playlist_track_url) = &next_track.track_url {
-            PLAYBIN.set_property("uri", Some(next_playlist_track_url.url.clone()));
+            PLAYBIN.set_property("uri", Some(next_playlist_track_url.clone()));
         }
     } else {
         debug!("no more tracks left");
@@ -598,7 +599,7 @@ pub async fn current_tracklist() -> TrackListValue {
 }
 
 #[instrument]
-pub async fn current_track() -> Option<TrackListTrack> {
+pub async fn current_track() -> Option<Track> {
     STATE.get().unwrap().read().await.current_track()
 }
 

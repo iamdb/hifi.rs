@@ -1,6 +1,5 @@
 use std::{
     rc::Rc,
-    str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -9,6 +8,7 @@ use std::{
 
 use crate::{
     player::{self, controls::Controls, notification::Notification},
+    qobuz::{album::Album, track::Track},
     state::TrackListType,
 };
 use cursive::{
@@ -173,7 +173,7 @@ impl CursiveUI {
 
         track_list.set_on_submit(move |_s, item| {
             let i = item.to_owned();
-            tokio::spawn(async move { CONTROLS.skip_to(i).await });
+            tokio::spawn(async move { CONTROLS.skip_to(i as u8).await });
         });
 
         let mut layout = LinearLayout::new(Orientation::Vertical).child(
@@ -527,7 +527,9 @@ fn load_search_results(item: &str, s: &mut Cursive) {
             match item {
                 "Albums" => {
                     for a in &data.albums.items {
-                        let id = if a.streamable {
+                        let a: Album = a.clone().into();
+
+                        let id = if a.available {
                             a.id.clone()
                         } else {
                             UNSTREAMABLE.to_string()
@@ -554,7 +556,9 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                 }
                 "Tracks" => {
                     for t in &data.tracks.items {
-                        let id = if t.streamable {
+                        let t: Track = t.clone().into();
+
+                        let id = if t.available {
                             t.id.to_string()
                         } else {
                             UNSTREAMABLE.to_string()
@@ -607,12 +611,14 @@ fn submit_playlist(_s: &mut Cursive, item: i64) -> LinearLayout {
 
             for (i, t) in tracks.items.iter().enumerate() {
                 let mut row = StyledString::plain(format!("{:02} ", i));
+                let t: Track = t.clone().into();
+
                 row.append(t.list_item());
 
-                let track_id = if t.streamable { t.id } else { -1 };
+                let track_id = if t.available { t.id as i32 } else { -1 };
 
                 let value = if let Some(album) = &t.album {
-                    let album_id = if album.streamable {
+                    let album_id = if album.available {
                         album.id.clone()
                     } else {
                         UNSTREAMABLE.to_string()
@@ -658,7 +664,9 @@ fn submit_artist(s: &mut Cursive, item: i32) {
             let mut tree = cursive::menu::Tree::new();
 
             for a in albums.items {
-                if !a.streamable {
+                let a: Album = a.into();
+
+                if !a.available {
                     continue;
                 }
 
@@ -798,24 +806,20 @@ pub async fn receive_notifications() {
                     Notification::CurrentTrack {track} => {
                         SINK.get().unwrap().send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
-                                if track.album.is_some() {
-                                    track_num.set_content(format!("{:03}", track.track.track_number));
-                                } else {
-                                    track_num.set_content(format!("{:03}", track.index + 1));
-                                }
-                                track_title.set_content(track.track.title.trim());
-                                progress.set_max(track.track.duration as usize);
+                                track_num.set_content(format!("{:03}", track.number));
+                                track_title.set_content(track.title.trim());
+                                progress.set_max(track.duration_seconds as usize);
                             }
 
-                            if let Some(performer) = track.track.performer {
+                            if let Some(artist_name) = track.artist_name {
                                 s.call_on_name("artist_name", |view: &mut TextView| {
-                                    view.set_content(performer.name);
+                                    view.set_content(artist_name);
                                 });
                             }
 
-                            if let (Some(track_url), Some(mut bit_depth), Some(mut sample_rate)) = (track.track_url, s.find_name::<TextView>("bit_depth"), s.find_name::<TextView>("sample_rate")) {
-                                bit_depth.set_content(format!("{} bits", track_url.bit_depth));
-                                sample_rate.set_content(format!("{} kHz", track_url.sampling_rate));
+                            if let (Some(mut bit_depth), Some(mut sample_rate)) = (s.find_name::<TextView>("bit_depth"), s.find_name::<TextView>("sample_rate")) {
+                                bit_depth.set_content(format!("{} bits", track.bit_depth));
+                                sample_rate.set_content(format!("{} kHz", track.sampling_rate));
                             }
                         })).expect("failed to send update");
                     }
@@ -827,24 +831,21 @@ pub async fn receive_notifications() {
                                         list_view.get_inner_mut().clear();
 
                                         list.unplayed_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track.track_list_item(false, None), i.index);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(false, None), i.number as usize);
                                         });
 
                                         list.played_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track.track_list_item(true, None), i.index);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(true, None), i.number as usize);
                                         });
                                     }
                                     if let (Some(album), Some(mut entity_title), Some(mut total_tracks)) = (list.get_album(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
-                                        let year = chrono::NaiveDate::from_str(&album.release_date_original)
-                                            .expect("failed to parse date")
-                                            .format("%Y");
 
                                         let mut title = StyledString::plain(album.title.clone());
                                         title.append_plain(" ");
-                                        title.append_styled(format!("({year})"), Effect::Dim);
+                                        title.append_styled(format!("({})", album.release_year), Effect::Dim);
 
                                         entity_title.set_content(title);
-                                        total_tracks.set_content(format!("{:03}", album.tracks_count));
+                                        total_tracks.set_content(format!("{:03}", album.total_tracks));
                                     }
                                 })).expect("failed to send update");
                             }
@@ -854,15 +855,15 @@ pub async fn receive_notifications() {
                                         list_view.get_inner_mut().clear();
 
                                         list.unplayed_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track.track_list_item(false, Some(i.index)), i.index);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(false, Some(i.number as usize)), i.number as usize);
                                         });
 
                                         list.played_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track.track_list_item(true, Some(i.index)), i.index);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(true, Some(i.number as usize)), i.number as usize);
                                         });
                                     }
                                     if let (Some(playlist), Some(mut entity_title), Some(mut total_tracks)) = (list.get_playlist(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
-                                        entity_title.set_content(playlist.name.clone());
+                                        entity_title.set_content(playlist.title.clone());
                                         total_tracks.set_content(format!("{:03}", list.len()));
                                     }
                                 })).expect("failed to send update");

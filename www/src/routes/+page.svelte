@@ -100,10 +100,10 @@
 				class="flex relative flex-col gap-y-4 py-2 flex-grow flex-shrink justify-evenly text-center text-4xl xl:text-6xl"
 			>
 				{#if $currentTrack}
-					<span>{$currentTrack?.track.performer.name || ''}</span>
+					<span>{$currentTrack?.artistName || ''}</span>
 
 					<span class="font-semibold py-4 md:py-8 bg-amber-900 leading-[1.15em] px-4 md:px-8"
-						>{$currentTrack?.track.title || ''}</span
+						>{$currentTrack?.title || ''}</span
 					>
 					<span class="text-4xl md:text-5xl">
 						<span>

@@ -1,9 +1,7 @@
-use std::collections::VecDeque;
-
 use crate::client::{
     api::Client,
     artist::{Artist, OtherArtists},
-    track::{TrackListTrack, TrackStatus, Tracks},
+    track::Tracks,
     Composer, Image,
 };
 use serde::{Deserialize, Serialize};
@@ -66,32 +64,6 @@ pub struct Album {
 }
 
 impl Album {
-    pub fn to_tracklist(&self) -> Option<VecDeque<TrackListTrack>> {
-        self.tracks.as_ref().map(|t| {
-            t.items
-                .iter()
-                .enumerate()
-                .filter_map(|(i, t)| {
-                    if t.streamable {
-                        let mut track = TrackListTrack::new(
-                            t.clone(),
-                            Some(i),
-                            Some(self.tracks_count as usize),
-                            Some(self.clone()),
-                        );
-
-                        if i == 0 {
-                            track.status = TrackStatus::Playing;
-                        }
-
-                        Some(track)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<VecDeque<TrackListTrack>>()
-        })
-    }
     pub async fn attach_tracks(&mut self, client: Client) {
         debug!("attaching tracks to album");
         if let Ok(album) = client.album(&self.id).await {

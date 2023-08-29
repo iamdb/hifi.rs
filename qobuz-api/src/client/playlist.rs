@@ -1,9 +1,4 @@
-use std::collections::VecDeque;
-
-use crate::client::{
-    track::{TrackListTrack, TrackStatus, Tracks},
-    User,
-};
+use crate::client::{track::Tracks, User};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,28 +72,6 @@ impl Playlist {
             tracks.items.reverse();
         }
     }
-
-    pub fn to_tracklist(&mut self) -> Option<VecDeque<TrackListTrack>> {
-        self.tracks.as_ref().map(|tracks| {
-            tracks
-                .items
-                .iter()
-                .cloned()
-                .filter(|t| t.streamable)
-                .enumerate()
-                .map(|(i, t)| {
-                    let mut track =
-                        TrackListTrack::new(t, Some(i), Some(tracks.total as usize), None);
-
-                    if i == 0 {
-                        track.status = TrackStatus::Playing;
-                    }
-
-                    track
-                })
-                .collect::<VecDeque<TrackListTrack>>()
-        })
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,5 +115,3 @@ impl From<Box<Playlist>> for Vec<Vec<String>> {
         vec![playlist.into()]
     }
 }
-
-pub type TrackListTracks = Vec<TrackListTrack>;

@@ -1,10 +1,10 @@
+use crate::qobuz::track::Track;
 use crate::{
     player::{self, controls::Controls, notification::Notification},
     state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::track::TrackListTrack;
 use std::collections::HashMap;
 use tokio::select;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
@@ -164,7 +164,7 @@ pub async fn receive_notifications(conn: Connection) {
 
                             list_iface.track_list = list;
 
-                            MprisTrackList::track_list_replaced(list_ref.signal_context(), tracks, current.track.title).await.expect("failed to send track list replaced signal");
+                            MprisTrackList::track_list_replaced(list_ref.signal_context(), tracks, current.title).await.expect("failed to send track list replaced signal");
                         }
                     },
                     Notification::CurrentTrack { track } => {
@@ -175,11 +175,11 @@ pub async fn receive_notifications(conn: Connection) {
 
                         let mut iface = iface_ref.get_mut().await;
 
-                        iface.can_previous = track.index != 0;
+                        iface.can_previous = track.number != 0;
 
-                        iface.can_next = !(iface.total_tracks != 0 && track.index == iface.total_tracks - 1);
+                        iface.can_next = !(iface.total_tracks != 0 && track.number as usize == iface.total_tracks - 1);
 
-                        iface.total_tracks = track.total;
+                        iface.total_tracks = track.number as usize;
                         iface.current_track = Some(track);
 
                         iface
@@ -239,7 +239,7 @@ pub struct MprisPlayer {
     status: StatusValue,
     position: ClockValue,
     position_ts: DateTime<Local>,
-    current_track: Option<TrackListTrack>,
+    current_track: Option<Track>,
     total_tracks: usize,
     can_play: bool,
     can_pause: bool,
@@ -363,7 +363,7 @@ impl MprisTrackList {
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
-                if tracks.contains(&i.track.id.to_string()) {
+                if tracks.contains(&i.id.to_string()) {
                     Some(track_to_meta(i.clone()))
                 } else {
                     None
@@ -387,7 +387,7 @@ impl MprisTrackList {
         self.track_list
             .unplayed_tracks()
             .iter()
-            .map(|i| i.track.id.to_string())
+            .map(|i| i.id.to_string())
             .collect::<Vec<String>>()
     }
     #[dbus_interface(property, name = "CanEditTracks")]
@@ -396,60 +396,52 @@ impl MprisTrackList {
     }
 }
 
-fn track_to_meta(
-    playlist_track: TrackListTrack,
-) -> HashMap<&'static str, zvariant::Value<'static>> {
+fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value<'static>> {
     let mut meta = HashMap::new();
 
     meta.insert(
         "mpris:trackid",
         zvariant::Value::new(format!(
             "/org/hifirs/Player/TrackList/{}",
-            playlist_track.track.id
+            playlist_track.id
         )),
     );
     meta.insert(
         "xesam:title",
-        zvariant::Value::new(playlist_track.track.title.trim().to_string()),
+        zvariant::Value::new(playlist_track.title.trim().to_string()),
     );
     meta.insert(
         "xesam:trackNumber",
-        zvariant::Value::new(playlist_track.track.track_number),
+        zvariant::Value::new(playlist_track.number),
     );
 
     meta.insert(
         "mpris:length",
         zvariant::Value::new(
-            ClockTime::from_seconds(playlist_track.track.duration as u64).useconds() as i64,
+            ClockTime::from_seconds(playlist_track.duration_seconds as u64).useconds() as i64,
         ),
     );
 
-    if let Some(artist) = playlist_track.track.performer {
+    if let Some(artist) = playlist_track.artist_name {
         meta.insert(
             "xesam:artist",
-            zvariant::Value::new(artist.name.trim().to_string()),
+            zvariant::Value::new(artist.trim().to_string()),
         );
     }
 
-    let album = if let Some(album) = playlist_track.album {
-        Some(album)
-    } else {
-        playlist_track.track.album
-    };
-
-    if let Some(album) = album {
-        meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
+    if let Some(album) = playlist_track.album {
+        meta.insert("mpris:artUrl", zvariant::Value::new(album.cover_art));
         meta.insert(
             "xesam:album",
             zvariant::Value::new(album.title.trim().to_string()),
         );
         meta.insert(
             "xesam:albumArtist",
-            zvariant::Value::new(album.artist.name.trim().to_string()),
+            zvariant::Value::new(album.artist_name.trim().to_string()),
         );
         meta.insert(
             "xesam:artist",
-            zvariant::Value::new(album.artist.name.trim().to_string()),
+            zvariant::Value::new(album.artist_name.trim().to_string()),
         );
     }
 

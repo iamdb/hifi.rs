@@ -12,7 +12,7 @@ pub enum Action {
     Previous,
     Stop,
     Quit,
-    SkipTo { num: usize },
+    SkipTo { num: u8 },
     SkipToById { track_id: usize },
     JumpForward,
     JumpBackward,
@@ -66,7 +66,7 @@ impl Controls {
     pub async fn previous(&self) {
         action!(self, Action::Previous);
     }
-    pub async fn skip_to(&self, num: usize) {
+    pub async fn skip_to(&self, num: u8) {
         action!(self, Action::SkipTo { num });
     }
     pub async fn skip_to_by_id(&self, track_id: usize) {

@@ -13,12 +13,13 @@ export const queue = derived(currentTrackList, (v) => {
 })
 
 export const coverImage = derived(currentTrackList, (v) => {
+  console.log(v)
   if (v) {
     switch (v.list_type) {
       case "Album":
-        return [v?.album?.image.large];
+        return [v?.album?.coverArt];
       case "Playlist":
-        return v?.playlist?.images300 || [];
+        return [v?.playlist?.coverArt];
     }
   }
 
@@ -88,6 +89,7 @@ export class WS {
 
     this.ws.onmessage = (message) => {
       const json = JSON.parse(message.data);
+      console.log(json)
 
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);

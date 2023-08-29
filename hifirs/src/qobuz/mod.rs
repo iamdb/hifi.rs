@@ -16,6 +16,7 @@ pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;
+pub mod playlist;
 pub mod track;
 
 pub async fn make_client(
