@@ -83,7 +83,7 @@ The TUI has full mouse support.
 
 ## Web UI and WebSocket API
 
-<img width="50%" style="margin: 0 auto; max-height: 300px;" src="hifi-rs-webui.png" alt="web ui screenshot" />
+<img height="300" src="hifi-rs-webui.png" alt="web ui screenshot" />
 
 The player can start an embedded web interface along with a websocket API. As this is a potential attack vector, the
 server is disabled by default and must be started with the `--web` argument. It also listens on `0.0.0.0:9888` by default,
