@@ -1,12 +1,55 @@
-import { writable } from 'svelte/store';
+import { derived, writable } from 'svelte/store';
 
 export const isBuffering = writable(false);
-export const position = writable(0);
-export const duration = writable(0);
+const position = writable(0);
+const duration = writable(0);
 export const currentStatus = writable('Stopped');
 export const connected = writable(false);
 export const currentTrack = writable(null);
-export const currentTrackList = writable([]);
+const currentTrackList = writable(null);
+
+export const queue = derived(currentTrackList, (v) => {
+  return v?.queue || []
+})
+
+export const coverImage = derived(currentTrackList, (v) => {
+  if (v) {
+    switch (v.list_type) {
+      case "Album":
+        return [v?.album?.image.large];
+      case "Playlist":
+        return v?.playlist?.images300 || [];
+    }
+  }
+
+  return []
+})
+
+
+export const entityTitle = derived(currentTrackList, (v) => {
+  if (v) {
+    switch (v.list_type) {
+      case "Album":
+        return v?.album?.title
+      case "Playlist":
+        return v?.playlist?.title;
+    }
+  }
+})
+
+export const positionString = derived(position, (p) => {
+  const positionMinutes = Math.floor(p / 1000 / 1000 / 1000 / 60);
+  const positionSeconds = Math.floor(p / 1000 / 1000 / 1000) - positionMinutes * 60;
+
+  return `${positionMinutes.toString(10).padStart(2, 0)}:${positionSeconds.toString(10).padStart(2, 0)}`
+})
+
+export const durationString = derived(duration, (d) => {
+  const durationMinutes = Math.floor(d / 1000 / 1000 / 1000 / 60);
+  const durationSeconds = Math.floor(d / 1000 / 1000 / 1000) - durationMinutes * 60;
+
+  return `${durationMinutes.toString(10).padStart(2, 0)}:${durationSeconds.toString(10).padStart(2, 0)}`
+})
 
 export class WS {
   constructor(dev) {
@@ -57,7 +100,7 @@ export class WS {
       } else if (Object.hasOwn(json, 'currentTrack')) {
         currentTrack.set(json.currentTrack.track);
       } else if (Object.hasOwn(json, 'currentTrackList')) {
-        currentTrackList.set(json.currentTrackList.list.queue);
+        currentTrackList.set(json.currentTrackList?.list);
       }
     };
 

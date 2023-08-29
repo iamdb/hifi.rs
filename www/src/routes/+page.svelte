@@ -1,26 +1,22 @@
 <script>
-	import { afterUpdate, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import {
 		WS,
 		currentTrack,
-		currentTrackList,
 		isBuffering,
 		currentStatus,
-		position,
-		duration,
-		connected
+		connected,
+		queue,
+		coverImage,
+		entityTitle,
+		positionString,
+		durationString
 	} from '$lib/websocket';
 	import Button from '../lib/components/Button.svelte';
 	import { writable } from 'svelte/store';
 	import { dev } from '$app/environment';
-
-	$: positionMinutes = Math.floor($position / 1000 / 1000 / 1000 / 60);
-	$: positionSeconds = Math.floor($position / 1000 / 1000 / 1000) - positionMinutes * 60;
-
-	$: durationMinutes = Math.floor($duration / 1000 / 1000 / 1000 / 60);
-	$: durationSeconds = Math.floor($duration / 1000 / 1000 / 1000) - durationMinutes * 60;
 
 	let controls;
 
@@ -69,25 +65,34 @@
 <div class="flex flex-col justify-center h-[100dvh] overflow-x-hidden">
 	<div class="flex flex-col h-[100dvh] md:h-auto pb-4 sm:py-4 md:py-0 justify-between md:flex-row">
 		<div
-			class="w-full md:w-1/2 md:aspect-square relative bg-amber-900 p-4 lg:p-8 flex-shrink-0 mx-auto flex items-center justify-center"
+			class="w-full md:w-1/2 md:aspect-square relative bg-amber-900 p-2 2xl:p-8 flex-shrink-0 mx-auto flex items-center justify-center"
 		>
 			<div
-				class="w-full h-full p-4 md:p-8 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+				class="w-full h-full flex flex-row flex-wrap items-center justify-center p-2 overflow-hidden 2xl:p-8 mix-blend-soft-light opacity-75 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
 			>
-				<img
-					class="block w-full h-full max-w-full object-cover"
-					src={$currentTrack?.album.image.large}
-					alt={$currentTrack?.album.title}
-				/>
+				{#each $coverImage as image}
+					<img
+						class:w-full={$coverImage.length === 1}
+						class:w-[50%]={$coverImage.length >= 2}
+						class="block max-w-full object-cover"
+						src={image}
+						alt={$entityTitle}
+					/>
+				{/each}
 			</div>
 			<div
-				class="w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 backdrop-blur-sm flex flex-col items-center justify-center"
+				class="w-full h-full backdrop-hue-rotate-30 backdrop-contrast-75 overflow-hidden backdrop-blur-sm flex flex-row flex-wrap items-center justify-center"
 			>
-				<img
-					class="w-full md:w-auto block max-w-full relative z-10"
-					src={$currentTrack?.album.image.large}
-					alt={$currentTrack?.album.title}
-				/>
+				{#each $coverImage as image}
+					<img
+						class:md:w-auto={$coverImage.length === 1}
+						class:w-full={$coverImage.length === 1}
+						class:w-[50%]={$coverImage.length >= 2}
+						class="block max-w-full relative z-10"
+						src={image}
+						alt={$entityTitle}
+					/>
+				{/each}
 			</div>
 		</div>
 		<div class="flex md:w-1/2 flex-grow flex-col justify-between">
@@ -102,15 +107,11 @@
 					>
 					<span class="text-4xl md:text-5xl">
 						<span>
-							{positionMinutes.toString(10).padStart(2, '0')}:{positionSeconds
-								.toString(10)
-								.padStart(2, '0')}
+							{$positionString}
 						</span>
 						<span>&nbsp;|&nbsp;</span>
 						<span>
-							{durationMinutes.toString(10).padStart(2, '0')}:{durationSeconds
-								.toString(10)
-								.padStart(2, '0')}
+							{$durationString}
 						</span>
 					</span>
 				{/if}
@@ -129,11 +130,11 @@
 							class="flex flex-row gap-x-8 py-1 px-2 justify-between text-center text-xl xl:text-4xl"
 						>
 							<p>{$currentTrack?.track.performer.name}</p>
-							<p class="font-bold">{$currentTrack?.album.title}</p>
-							<p>{new Date($currentTrack.album.release_date_original).getFullYear()}</p>
+							<p class="font-bold">{$entityTitle}</p>
+							<p>{new Date($currentTrack?.album?.release_date_original).getFullYear()}</p>
 						</div>
 						<ul class="text-2xl xl:text-3xl px-2 leading-tight overflow-y-scroll">
-							{#each $currentTrackList as track}
+							{#each $queue as track}
 								<li
 									class:opacity-60={track.status === 'Played'}
 									class:text-amber-500={track.status === 'Playing'}
@@ -185,6 +186,10 @@
 		{/if}
 	</div>
 {/if}
+
+<!-- <div class="absolute top-0 right-0"> -->
+<!-- 	<Button onClick={() => document.body.requestFullscreen()}>FS</Button> -->
+<!-- </div> -->
 
 <style lang="postcss">
 	.fixed-button {
