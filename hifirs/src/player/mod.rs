@@ -757,8 +757,6 @@ pub async fn player_loop() -> Result<()> {
                             state.set_target_status(GstState::Paused);
                             drop(state);
 
-                            pause(true).await?;
-
                             skip(SkipDirection::Backward, Some(0)).await?;
                         }
                     },

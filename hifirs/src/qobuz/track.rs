@@ -33,6 +33,7 @@ pub struct Track {
     #[serde(skip)]
     pub track_url: Option<String>,
     pub available: bool,
+    pub cover_art: Option<String>,
 }
 
 impl From<QobuzTrack> for Track {
@@ -49,6 +50,8 @@ impl From<QobuzTrack> for Track {
         } else {
             value.album.as_ref().map(|a| a.artist.name.clone())
         };
+
+        let cover_art = value.album.as_ref().map(|a| a.image.large.clone());
 
         let status = if value.streamable {
             TrackStatus::Unplayed
@@ -70,6 +73,7 @@ impl From<QobuzTrack> for Track {
             status,
             track_url: None,
             available: value.streamable,
+            cover_art,
         }
     }
 }

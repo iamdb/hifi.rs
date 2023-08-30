@@ -352,7 +352,7 @@ impl PlayerState {
     }
 
     pub async fn search_all(&self, query: &str) -> Option<SearchAllResults> {
-        match self.client.search_all(query.to_string(), 500).await {
+        match self.client.search_all(query.to_string(), 100).await {
             Ok(results) => Some(results),
             Err(_) => None,
         }

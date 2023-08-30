@@ -1,25 +1,33 @@
 import { derived, writable } from 'svelte/store';
 
-export const isBuffering = writable(false);
-const position = writable(0);
-const duration = writable(0);
 export const currentStatus = writable('Stopped');
 export const connected = writable(false);
 export const currentTrack = writable(null);
+export const isBuffering = writable(false);
+export const searchResults = writable({
+  albums: { items: [] },
+  artists: { items: [] },
+  playlists: { items: [] },
+  tracks: { items: [] },
+});
+
+const position = writable(0);
+const duration = writable(0);
 const currentTrackList = writable(null);
 
 export const queue = derived(currentTrackList, (v) => {
   return v?.queue || []
 })
 
-export const coverImage = derived(currentTrackList, (v) => {
-  console.log(v)
-  if (v) {
-    switch (v.list_type) {
+export const coverImage = derived([currentTrackList, currentTrack], ([tl, c]) => {
+  if (tl) {
+    switch (tl.list_type) {
       case "Album":
-        return v?.album?.coverArt;
+        return tl?.album?.coverArt;
       case "Playlist":
-        return v?.playlist?.coverArt;
+        return tl?.playlist?.coverArt;
+      case "Track":
+        return c?.album?.coverArt
     }
   }
 
@@ -27,13 +35,15 @@ export const coverImage = derived(currentTrackList, (v) => {
 })
 
 
-export const entityTitle = derived(currentTrackList, (v) => {
-  if (v) {
-    switch (v.list_type) {
+export const entityTitle = derived([currentTrackList, currentTrack], ([tl, c]) => {
+  if (tl) {
+    switch (tl.list_type) {
       case "Album":
-        return v?.album?.title
+        return tl?.album?.title
       case "Playlist":
-        return v?.playlist?.title;
+        return tl?.playlist?.title;
+      case "Track":
+        return c?.album?.title;
     }
   }
 })
@@ -95,6 +105,8 @@ export class WS {
         currentTrack.set(json.currentTrack.track);
       } else if (Object.hasOwn(json, 'currentTrackList')) {
         currentTrackList.set(json.currentTrackList?.list);
+      } else if (Object.hasOwn(json, 'searchResults')) {
+        searchResults.set(json.searchResults?.results);
       }
     };
 
@@ -121,5 +133,17 @@ export class WS {
 
   skipTo(num) {
     this.ws.send(JSON.stringify({ skipTo: { num } }))
+  }
+
+  playAlbum(album_id) {
+    this.ws.send(JSON.stringify({ playAlbum: { album_id } }))
+  }
+
+  playTrack(track_id) {
+    this.ws.send(JSON.stringify({ playTrack: { track_id } }))
+  }
+
+  playPlaylist(playlist_id) {
+    this.ws.send(JSON.stringify({ playPlaylist: { playlist_id } }))
   }
 }

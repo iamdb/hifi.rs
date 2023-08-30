@@ -4,7 +4,7 @@
 
 <span>{$currentTrack?.artistName || ''}</span>
 
-<span class="font-semibold py-4 md:py-8 bg-amber-900 leading-[1.15em] px-4 md:px-8">
+<span class="font-semibold py-2 md:py-4 xl:py-8 bg-amber-900 leading-[1.15em] px-2 md:px-4 xl:px-8">
 	{$currentTrack?.title || ''}
 	{#if $currentTrack.explicit}
 		<svg
