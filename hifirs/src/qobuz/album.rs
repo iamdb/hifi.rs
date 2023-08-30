@@ -16,7 +16,7 @@ pub struct Album {
     pub release_year: usize,
     pub hires_available: bool,
     pub explicit: bool,
-    pub total_tracks: u8,
+    pub total_tracks: usize,
     pub tracks: VecDeque<Track>,
     pub available: bool,
     pub cover_art: String,
@@ -42,7 +42,7 @@ impl From<QobuzAlbum> for Album {
             id: value.id,
             title: value.title,
             artist_name: value.artist.name,
-            total_tracks: value.tracks_count as u8,
+            total_tracks: value.tracks_count as usize,
             release_year: year
                 .to_string()
                 .parse::<usize>()

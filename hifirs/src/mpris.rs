@@ -175,11 +175,14 @@ pub async fn receive_notifications(conn: Connection) {
 
                         let mut iface = iface_ref.get_mut().await;
 
-                        iface.can_previous = track.number != 0;
+                        iface.can_previous = track.position != 0;
 
-                        iface.can_next = !(iface.total_tracks != 0 && track.number == iface.total_tracks - 1);
+                        iface.can_next = !(iface.total_tracks != 0 && track.position == iface.total_tracks - 1);
 
-                        iface.total_tracks = track.number;
+                        if let Some(album) = &track.album {
+                            iface.total_tracks = album.total_tracks;
+                        }
+
                         iface.current_track = Some(track);
 
                         iface
@@ -412,7 +415,7 @@ fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value
     );
     meta.insert(
         "xesam:trackNumber",
-        zvariant::Value::new(playlist_track.number as i32),
+        zvariant::Value::new(playlist_track.position as i32),
     );
 
     meta.insert(

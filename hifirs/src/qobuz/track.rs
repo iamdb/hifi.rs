@@ -34,6 +34,7 @@ pub struct Track {
     pub track_url: Option<String>,
     pub available: bool,
     pub cover_art: Option<String>,
+    pub position: usize,
 }
 
 impl From<QobuzTrack> for Track {
@@ -73,6 +74,7 @@ impl From<QobuzTrack> for Track {
             status,
             track_url: None,
             available: value.streamable,
+            position: value.position.unwrap_or(value.track_number as usize),
             cover_art,
         }
     }
@@ -111,7 +113,7 @@ impl CursiveFormat for Track {
 
         title
     }
-    fn track_list_item(&self, inactive: bool, index: Option<usize>) -> StyledString {
+    fn track_list_item(&self, inactive: bool) -> StyledString {
         let mut style = Style::none();
 
         if inactive || !self.available {
@@ -121,13 +123,7 @@ impl CursiveFormat for Track {
                 .combine(Effect::Strikethrough);
         }
 
-        let num = if let Some(index) = index {
-            index + 1
-        } else {
-            self.number
-        };
-
-        let mut item = StyledString::styled(format!("{:02} ", num), style);
+        let mut item = StyledString::styled(format!("{:02} ", self.position), style);
         item.append_styled(self.title.trim(), style.combine(Effect::Simple));
         item.append_plain(" ");
 

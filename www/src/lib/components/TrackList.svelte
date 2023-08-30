@@ -47,7 +47,7 @@
 									on:click|stopPropagation={() => controls.skipTo(track.number)}
 									class="grid grid-flow-col-dense gap-x-4"
 								>
-									<span>{track.number.toString().padStart(2, '0')}</span>
+									<span>{track.position.toString().padStart(2, '0')}</span>
 									<span>{track.title}</span>
 								</button>
 							</li>

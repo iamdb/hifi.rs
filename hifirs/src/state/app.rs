@@ -57,11 +57,7 @@ impl From<PlayerState> for SavedState {
                     .expect("failed to get playlist id")
                     .id
                     .to_string(),
-                TrackListType::Track => state
-                    .current_track
-                    .expect("failed to get current_track id")
-                    .id
-                    .to_string(),
+                TrackListType::Track => current_track.id.to_string(),
                 TrackListType::Unknown => "".to_string(),
             };
 
@@ -85,15 +81,12 @@ impl PlayerState {
         album_id: String,
     ) -> (Option<Track>, Option<TrackListValue>) {
         if let Ok(album) = self.client.album(album_id.as_str()).await {
-            // if album.tracks.is_empty() {
-            //     album.attach_tracks(self.client.clone()).await;
-            // }
-
             let album: Album = album.into();
 
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
+            tracklist.set_track_status(1, TrackStatus::Playing);
 
             self.replace_list(tracklist.clone());
 
@@ -101,6 +94,7 @@ impl PlayerState {
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
+
                 (Some(first_track.clone()), Some(tracklist))
             } else {
                 (None, None)
@@ -139,9 +133,9 @@ impl PlayerState {
             let playlist: Playlist = playlist.into();
 
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
-
             tracklist.set_playlist(playlist);
             tracklist.set_list_type(TrackListType::Playlist);
+            tracklist.set_track_status(1, TrackStatus::Playing);
 
             self.replace_list(tracklist.clone());
 
@@ -210,7 +204,7 @@ impl PlayerState {
     }
 
     pub fn current_track_index(&self) -> Option<usize> {
-        self.current_track.as_ref().map(|track| track.number)
+        self.current_track.as_ref().map(|track| track.position)
     }
 
     pub fn replace_list(&mut self, tracklist: TrackListValue) {
@@ -224,14 +218,14 @@ impl PlayerState {
 
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         if let Some(track) = self.tracklist.find_track(track_id) {
-            Some(track.number)
+            Some(track.position)
         } else {
             None
         }
     }
 
-    pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
-        self.tracklist.set_track_status(track_id, status);
+    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
+        self.tracklist.set_track_status(position, status);
     }
 
     pub fn target_status(&self) -> StatusValue {
@@ -321,7 +315,7 @@ impl PlayerState {
             let mut current_track = None;
 
             for t in self.tracklist.queue.iter_mut() {
-                match t.number.cmp(&index) {
+                match t.position.cmp(&index) {
                     std::cmp::Ordering::Less => {
                         t.status = TrackStatus::Played;
                     }

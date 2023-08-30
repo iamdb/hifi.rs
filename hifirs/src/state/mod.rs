@@ -187,7 +187,7 @@ impl TrackListValue {
 
     pub fn total(&self) -> usize {
         if let Some(album) = &self.album {
-            album.total_tracks as usize
+            album.total_tracks
         } else if let Some(list) = &self.playlist {
             list.tracks_count
         } else {
@@ -244,12 +244,12 @@ impl TrackListValue {
 
     #[instrument(skip(self))]
     pub fn find_track_by_index(&self, index: usize) -> Option<Track> {
-        self.queue.iter().find(|t| t.number == index).cloned()
+        self.queue.iter().find(|t| t.position == index).cloned()
     }
 
     #[instrument(skip(self))]
-    pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
-        if let Some(track) = self.queue.iter_mut().find(|t| t.id == track_id) {
+    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
+        if let Some(track) = self.queue.iter_mut().find(|t| t.position == position) {
             track.status = status;
         }
     }

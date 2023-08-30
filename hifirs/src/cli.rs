@@ -193,7 +193,10 @@ async fn setup_player(
 
     if resume {
         tokio::spawn(async move {
-            player::resume(false).await.expect("failed to resume");
+            match player::resume(false).await {
+                Ok(_) => debug!("resume success"),
+                Err(error) => debug!("resume error {error}"),
+            }
         });
     }
 

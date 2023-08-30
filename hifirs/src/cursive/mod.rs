@@ -806,7 +806,7 @@ pub async fn receive_notifications() {
                     Notification::CurrentTrack {track} => {
                         SINK.get().unwrap().send(Box::new(move |s| {
                             if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (s.find_name::<TextView>("current_track_number"), s.find_name::<TextView>("current_track_title"), s.find_name::<ProgressBar>("progress")) {
-                                track_num.set_content(format!("{:03}", track.number));
+                                track_num.set_content(format!("{:03}", track.position));
                                 track_title.set_content(track.title.trim());
                                 progress.set_max(track.duration_seconds);
                             }
@@ -831,15 +831,14 @@ pub async fn receive_notifications() {
                                         list_view.get_inner_mut().clear();
 
                                         list.unplayed_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track_list_item(false, None), i.number);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(false), i.position);
                                         });
 
                                         list.played_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track_list_item(true, None), i.number);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(true), i.position);
                                         });
                                     }
                                     if let (Some(album), Some(mut entity_title), Some(mut total_tracks)) = (list.get_album(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
-
                                         let mut title = StyledString::plain(album.title.clone());
                                         title.append_plain(" ");
                                         title.append_styled(format!("({})", album.release_year), Effect::Dim);
@@ -855,11 +854,11 @@ pub async fn receive_notifications() {
                                         list_view.get_inner_mut().clear();
 
                                         list.unplayed_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track_list_item(false, Some(i.number)), i.number);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(false), i.position);
                                         });
 
                                         list.played_tracks().iter().for_each(|i| {
-                                            list_view.get_inner_mut().add_item(i.track_list_item(true, Some(i.number)), i.number);
+                                            list_view.get_inner_mut().add_item(i.track_list_item(true), i.position);
                                         });
                                     }
                                     if let (Some(playlist), Some(mut entity_title), Some(mut total_tracks)) = (list.get_playlist(), s.find_name::<TextView>("entity_title"), s.find_name::<TextView>("total_tracks")) {
@@ -878,7 +877,7 @@ pub async fn receive_notifications() {
                                         entity_title.set_content(album.title.trim());
                                     }
                                     if let Some(mut total_tracks) = s.find_name::<TextView>("total_tracks") {
-                                        total_tracks.set_content("000");
+                                        total_tracks.set_content("001");
                                     }
                                 })).expect("failed to send update");
                             }
@@ -931,7 +930,7 @@ pub async fn receive_notifications() {
 
 pub trait CursiveFormat {
     fn list_item(&self) -> StyledString;
-    fn track_list_item(&self, _inactive: bool, _index: Option<usize>) -> StyledString {
+    fn track_list_item(&self, _inactive: bool) -> StyledString {
         StyledString::new()
     }
 }
