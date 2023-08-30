@@ -5,7 +5,7 @@ use crate::mpris;
 use crate::{
     cursive::{self, CursiveUI},
     player::{self},
-    qobuz::{self, SearchResults},
+    qobuz::{self},
     sql::db::{self, Database},
     websocket,
 };
@@ -324,8 +324,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                let results =
-                    SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
+                let results = client.search_albums(query.clone(), limit).await?;
 
                 output!(results, output_format);
 
@@ -337,8 +336,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                let results =
-                    SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
+                let results = client.search_artists(query.clone(), limit).await?;
 
                 output!(results, output_format);
 

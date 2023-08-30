@@ -30,6 +30,7 @@ pub struct Track {
     pub sampling_rate: f32,
     pub bit_depth: usize,
     pub status: TrackStatus,
+    #[serde(skip)]
     pub track_url: Option<String>,
     pub available: bool,
 }

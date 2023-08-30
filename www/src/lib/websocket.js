@@ -17,9 +17,9 @@ export const coverImage = derived(currentTrackList, (v) => {
   if (v) {
     switch (v.list_type) {
       case "Album":
-        return [v?.album?.coverArt];
+        return v?.album?.coverArt;
       case "Playlist":
-        return [v?.playlist?.coverArt];
+        return v?.playlist?.coverArt;
     }
   }
 

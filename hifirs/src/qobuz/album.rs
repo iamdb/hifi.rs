@@ -60,7 +60,7 @@ impl CursiveFormat for Album {
     fn list_item(&self) -> StyledString {
         let mut style = Style::none();
 
-        if !self.hires_available {
+        if !self.available {
             style = style.combine(Effect::Dim).combine(Effect::Strikethrough);
         }
 

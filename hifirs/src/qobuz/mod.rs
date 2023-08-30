@@ -1,11 +1,7 @@
 use crate::sql::db::Database;
-use enum_as_inner::EnumAsInner;
 use hifirs_qobuz_api::{
     client::{
-        album::{Album, AlbumSearchResults},
         api::{self, Client},
-        artist::{Artist, ArtistSearchResults},
-        playlist::{Playlist, UserPlaylistsResult},
         AudioQuality,
     },
     Credentials,
@@ -142,45 +138,4 @@ pub struct TrackURL {
 pub struct User {
     pub id: i64,
     pub login: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, EnumAsInner)]
-pub enum SearchResults {
-    Albums(AlbumSearchResults),
-    Artists(ArtistSearchResults),
-    UserPlaylists(UserPlaylistsResult),
-    Playlist(Box<Playlist>),
-    Album(Box<Album>),
-    Artist(Artist),
-}
-
-impl From<SearchResults> for Vec<Vec<String>> {
-    fn from(results: SearchResults) -> Self {
-        match results {
-            SearchResults::Albums(r) => r.into(),
-            SearchResults::Artists(r) => r.into(),
-            SearchResults::UserPlaylists(r) => r.into(),
-            SearchResults::Playlist(r) => r.into(),
-            SearchResults::Album(r) => r.into(),
-            SearchResults::Artist(r) => r.into(),
-        }
-    }
-}
-
-impl From<AlbumSearchResults> for SearchResults {
-    fn from(results: AlbumSearchResults) -> Self {
-        SearchResults::Albums(results)
-    }
-}
-
-impl From<Box<Album>> for SearchResults {
-    fn from(album: Box<Album>) -> Self {
-        Self::Album(album)
-    }
-}
-
-impl From<SearchResults> for Album {
-    fn from(results: SearchResults) -> Self {
-        results.into()
-    }
 }
