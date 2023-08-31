@@ -11,6 +11,8 @@ use axum::{
 use futures::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
 use mime_guess::{mime::HTML, MimeGuess};
+use serde_json::{json, Value};
+use tokio::select;
 
 use crate::player::{self, controls::Action, notification::Notification};
 
@@ -79,6 +81,7 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 async fn handle_connection(socket: WebSocket) {
     debug!("new websocket connection");
     let (mut sender, mut receiver) = socket.split();
+    let (rt_sender, rt_receiver) = flume::unbounded::<Value>();
 
     let mut send_task = tokio::spawn(async move {
         debug!("spawning send task");
@@ -114,13 +117,26 @@ async fn handle_connection(socket: WebSocket) {
             sender.send(Message::Text(s)).await.expect("error");
         }
 
+        let mut rt_stream = rt_receiver.stream();
+
         loop {
-            if let Ok(message) = broadcast_receiver.recv().await {
-                let json = serde_json::to_string(&message).expect("error making json");
-                match sender.send(Message::Text(json)).await {
-                    Ok(()) => {}
-                    Err(error) => {
-                        debug!(?error)
+            select! {
+                Some(message) = broadcast_receiver.next() => {
+                    let json = serde_json::to_string(&message).expect("error making json");
+                    match sender.send(Message::Text(json)).await {
+                        Ok(()) => {}
+                        Err(error) => {
+                            debug!(?error)
+                        }
+                    }
+                }
+                Some(response) = rt_stream.next() => {
+                    let json = serde_json::to_string(&response).expect("error making json");
+                    match sender.send(Message::Text(json)).await {
+                        Ok(()) => {}
+                        Err(error) => {
+                            debug!(?error)
+                        }
                     }
                 }
             }
@@ -162,7 +178,42 @@ async fn handle_connection(socket: WebSocket) {
                                     controls.play_playlist(playlist_id).await
                                 }
                                 Action::Search { query } => {
-                                    controls.search(query).await;
+                                    let results = player::search(&query).await;
+                                    match rt_sender
+                                        .send_async(
+                                            json!({ "searchResults": { "results": results }}),
+                                        )
+                                        .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(error) => {
+                                            debug!("error sending response {}", error)
+                                        }
+                                    }
+                                }
+                                Action::FetchArtistAlbums { artist_id } => {
+                                    let results = player::artist_albums(artist_id).await;
+                                    match rt_sender
+                                        .send_async(
+                                            json!({ "artistAlbums": { "id": artist_id, "albums": results }}),
+                                        )
+                                        .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(error) => debug!("error sending response {}", error),
+                                    }
+                                }
+                                Action::FetchPlaylistTracks { playlist_id } => {
+                                    let results = player::playlist_tracks(playlist_id).await;
+                                    match rt_sender
+                                        .send_async(
+                                            json!({ "playlistTracks": { "id": playlist_id, "tracks": results } })
+                                        )
+                                        .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(error) => debug!("error sending response {}", error),
+                                    }
                                 }
                             }
                         };

@@ -1,6 +1,7 @@
 use crate::{
     cursive::CursiveFormat,
     qobuz::{album::Album, Artist},
+    state::TrackListType,
 };
 use cursive::{
     theme::{Effect, Style},
@@ -38,6 +39,7 @@ pub struct Track {
     pub available: bool,
     pub cover_art: Option<String>,
     pub position: usize,
+    pub media_number: usize,
 }
 
 impl From<QobuzTrack> for Track {
@@ -82,6 +84,7 @@ impl From<QobuzTrack> for Track {
             available: value.streamable,
             position: value.position.unwrap_or(value.track_number as usize),
             cover_art,
+            media_number: value.media_number as usize,
         }
     }
 }
@@ -119,7 +122,7 @@ impl CursiveFormat for Track {
 
         title
     }
-    fn track_list_item(&self, inactive: bool) -> StyledString {
+    fn track_list_item(&self, list_type: &TrackListType, inactive: bool) -> StyledString {
         let mut style = Style::none();
 
         if inactive || !self.available {
@@ -129,7 +132,14 @@ impl CursiveFormat for Track {
                 .combine(Effect::Strikethrough);
         }
 
-        let mut item = StyledString::styled(format!("{:02} ", self.position), style);
+        let num = match list_type {
+            TrackListType::Album => self.number,
+            TrackListType::Playlist => self.position,
+            TrackListType::Track => self.number,
+            TrackListType::Unknown => self.position,
+        };
+
+        let mut item = StyledString::styled(format!("{:02} ", num), style);
         item.append_styled(self.title.trim(), style.combine(Effect::Simple));
         item.append_plain(" ");
 

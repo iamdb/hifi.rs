@@ -21,6 +21,8 @@ pub enum Action {
     PlayUri { uri: String },
     PlayPlaylist { playlist_id: i64 },
     Search { query: String },
+    FetchArtistAlbums { artist_id: i32 },
+    FetchPlaylistTracks { playlist_id: i32 },
 }
 
 /// Provides controls for other modules to send commands
@@ -33,7 +35,7 @@ pub struct Controls {
 
 impl Controls {
     pub fn new() -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(10);
+        let (action_tx, action_rx) = flume::unbounded::<Action>();
 
         Controls {
             action_rx,
@@ -90,9 +92,6 @@ impl Controls {
     }
     pub async fn play_playlist(&self, playlist_id: i64) {
         action!(self, Action::PlayPlaylist { playlist_id })
-    }
-    pub async fn search(&self, query: String) {
-        action!(self, Action::Search { query })
     }
 }
 

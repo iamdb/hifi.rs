@@ -35,7 +35,14 @@ impl From<QobuzAlbum> for Album {
             tracks
                 .items
                 .iter()
-                .map(|t| t.clone().into())
+                .enumerate()
+                .map(|(i, t)| {
+                    let mut track: Track = t.clone().into();
+
+                    track.position = i + 1;
+
+                    track
+                })
                 .collect::<VecDeque<Track>>()
         } else {
             VecDeque::new()

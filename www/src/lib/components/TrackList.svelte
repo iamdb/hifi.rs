@@ -1,7 +1,7 @@
 <script>
 	import { fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { queue, entityTitle, searchResults } from '$lib/websocket';
+	import { queue, entityTitle, searchResults, listType } from '$lib/websocket';
 	import { writable } from 'svelte/store';
 
 	export let showList, navHeight, controls;
@@ -58,7 +58,11 @@
 									on:click|stopPropagation={() => controls.skipTo(track.position)}
 									class="grid grid-flow-col-dense gap-x-4"
 								>
-									<span>{track.position.toString().padStart(2, '0')}</span>
+									{#if $listType === 'Album' || $listType === 'Track'}
+										<span>{track.number.toString().padStart(2, '0')}</span>
+									{:else if $listType === 'Playlist'}
+										<span>{track.position.toString().padStart(2, '0')}</span>
+									{/if}
 									<span>{track.title}</span>
 								</button>
 							</li>

@@ -43,10 +43,8 @@ pub struct SavedState {
 
 impl From<PlayerState> for SavedState {
     fn from(state: PlayerState) -> Self {
-        if let (Some(current_track), Some(playback_track_index)) =
-            (state.current_track(), state.current_track_index())
-        {
-            let playback_track_index = playback_track_index as i64;
+        if let Some(current_track) = state.current_track() {
+            let playback_track_index = current_track.position as i64;
             let playback_track_id = current_track.id as i64;
             let playback_position = state.position().inner_clocktime().mseconds() as i64;
             let playback_entity_type = state.list_type();
@@ -133,6 +131,7 @@ impl PlayerState {
             let playlist: Playlist = playlist.into();
 
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
+
             tracklist.set_playlist(playlist);
             tracklist.set_list_type(TrackListType::Playlist);
             tracklist.set_track_status(1, TrackStatus::Playing);
@@ -203,10 +202,6 @@ impl PlayerState {
         self.tracklist.get_playlist()
     }
 
-    pub fn current_track_index(&self) -> Option<usize> {
-        self.current_track.as_ref().map(|track| track.position)
-    }
-
     pub fn replace_list(&mut self, tracklist: TrackListValue) {
         debug!("replacing tracklist");
         self.tracklist = tracklist;
@@ -247,23 +242,12 @@ impl PlayerState {
         }
     }
 
-    pub async fn attach_track_url_current(&mut self) {
-        if let Some(current_track) = self.current_track.as_mut() {
-            if let Ok(track_url) = self
-                .client
-                .track_url(current_track.id as i32, None, None)
-                .await
-            {
-                current_track.track_url = Some(track_url.url);
-                current_track.bit_depth = track_url.bit_depth as usize;
-                current_track.sampling_rate = track_url.sampling_rate as f32;
-            }
-        }
-    }
-
     pub async fn next_track_url(&self) -> Option<String> {
-        if let Some(current_index) = self.current_track_index() {
-            if let Some(next_track) = self.tracklist.find_track_by_index(current_index + 1) {
+        if let Some(current_track) = self.current_track() {
+            if let Some(next_track) = self
+                .tracklist
+                .find_track_by_index(current_track.position + 1)
+            {
                 if let Ok(track_url) = self
                     .client
                     .track_url(next_track.id as i32, None, None)
@@ -290,7 +274,9 @@ impl PlayerState {
             } else {
                 None
             }
-        } else if let Some(current_track_index) = self.current_track_index() {
+        } else if let Some(current_track) = self.current_track() {
+            let current_track_index = current_track.position;
+
             match direction {
                 SkipDirection::Forward => {
                     if current_track_index < self.tracklist.total() {
@@ -320,17 +306,17 @@ impl PlayerState {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
-                        t.status = TrackStatus::Playing;
-
                         if let Ok(track_url) = self.client.track_url(t.id as i32, None, None).await
                         {
+                            t.status = TrackStatus::Playing;
                             t.track_url = Some(track_url.url);
                             t.bit_depth = track_url.bit_depth as usize;
                             t.sampling_rate = track_url.sampling_rate as f32;
+                            self.current_track = Some(t.clone());
+                            current_track = Some(t.clone());
+                        } else {
+                            t.status = TrackStatus::Unplayable;
                         }
-
-                        self.current_track = Some(t.clone());
-                        current_track = Some(t.clone());
                     }
                     std::cmp::Ordering::Greater => {
                         t.status = TrackStatus::Unplayed;
@@ -352,9 +338,38 @@ impl PlayerState {
         }
     }
 
-    pub fn reset_player(&mut self) {
-        self.target_status = GstState::Paused.into();
-        self.position = ClockValue::default();
+    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Vec<Album> {
+        match self.client.artist(artist_id, None).await {
+            Ok(results) => {
+                if let Some(albums) = results.albums {
+                    albums
+                        .items
+                        .into_iter()
+                        .map(|a| a.into())
+                        .collect::<Vec<Album>>()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Vec<Track> {
+        match self.client.playlist(playlist_id).await {
+            Ok(results) => {
+                if let Some(tracks) = results.tracks {
+                    tracks
+                        .items
+                        .into_iter()
+                        .map(|t| t.into())
+                        .collect::<Vec<Track>>()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {

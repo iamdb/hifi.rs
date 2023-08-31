@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     player,
-    qobuz::{track::Track, SearchResults},
+    qobuz::track::Track,
     state::{ClockValue, StatusValue, TrackListValue},
 };
 
@@ -31,9 +31,6 @@ pub enum Notification {
     },
     CurrentTrack {
         track: Track,
-    },
-    SearchResults {
-        results: SearchResults,
     },
     Error {
         error: player::error::Error,

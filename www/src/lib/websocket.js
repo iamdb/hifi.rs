@@ -19,6 +19,14 @@ export const queue = derived(currentTrackList, (v) => {
   return v?.queue || []
 })
 
+export const numOfTracks = derived(queue, (q) => {
+  return q.length
+})
+
+export const listType = derived(currentTrackList, (v) => {
+  return v?.list_type
+})
+
 export const coverImage = derived([currentTrackList, currentTrack], ([tl, c]) => {
   if (tl) {
     switch (tl.list_type) {

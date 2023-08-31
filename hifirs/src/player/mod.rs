@@ -4,7 +4,8 @@ use crate::{
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
     },
-    qobuz::track::Track,
+    qobuz::SearchResults,
+    qobuz::{album::Album, track::Track},
     sql::db::Database,
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
@@ -397,8 +398,11 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 pub async fn skip_to(index: usize) -> Result<()> {
     let state = STATE.get().unwrap().read().await;
 
-    if let Some(current_index) = state.current_track_index() {
+    if let Some(current_track) = state.current_track() {
         drop(state);
+
+        let current_index = current_track.position;
+
         if index > current_index {
             debug!(
                 "skipping forward from track {} to track {}",
@@ -609,23 +613,38 @@ pub fn is_buffering() -> bool {
 }
 
 #[instrument]
-pub async fn search(query: &str) {
-    let results = STATE
+pub async fn search(query: &str) -> SearchResults {
+    STATE
         .get()
         .unwrap()
         .read()
         .await
         .search_all(query)
         .await
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into()
+}
 
-    BROADCAST_CHANNELS
-        .tx
-        .broadcast(Notification::SearchResults {
-            results: results.into(),
-        })
+#[instrument]
+pub async fn artist_albums(artist_id: i32) -> Vec<Album> {
+    STATE
+        .get()
+        .unwrap()
+        .read()
         .await
-        .expect("failed to send notification");
+        .fetch_artist_albums(artist_id)
+        .await
+}
+
+#[instrument]
+pub async fn playlist_tracks(artist_id: i32) -> Vec<Album> {
+    STATE
+        .get()
+        .unwrap()
+        .read()
+        .await
+        .fetch_artist_albums(artist_id)
+        .await
 }
 
 /// Inserts the most recent position into the state at a set interval.
@@ -718,37 +737,39 @@ pub async fn player_loop() -> Result<()> {
                     Action::JumpBackward => jump_backward().await?,
                     Action::JumpForward => jump_forward().await?,
                     Action::Next => {
-                        tokio::spawn(async { skip(SkipDirection::Forward,None).await });
+                        skip(SkipDirection::Forward,None).await?;
                     },
                     Action::Pause => pause(false).await?,
                     Action::Play => play(false).await?,
                     Action::PlayPause => play_pause().await?,
                     Action::Previous => {
-                        tokio::spawn(async { skip(SkipDirection::Backward,None).await });
+                        skip(SkipDirection::Backward,None).await?;
                     },
                     Action::Stop => stop(false).await?,
                     Action::PlayAlbum { album_id } => {
-                        tokio::spawn(async { play_album(album_id).await });
+                        play_album(album_id).await?;
                     },
                     Action::PlayTrack { track_id } => {
-                        tokio::spawn(async move { play_track(track_id).await });
+                        play_track(track_id).await?;
                     },
                     Action::PlayUri { uri } => {
-                        tokio::spawn(async { play_uri(uri).await });
+                        play_uri(uri).await?;
                     },
                     Action::PlayPlaylist { playlist_id } => {
-                        tokio::spawn(async move { play_playlist(playlist_id).await });
+                        play_playlist(playlist_id).await?;
                     },
                     Action::Quit => STATE.get().unwrap().read().await.quit(),
                     Action::SkipTo { num } => {
-                        tokio::spawn(async move { skip_to(num).await });
+                        skip_to(num).await?;
                     },
                     Action::SkipToById { track_id } => {
-                        tokio::spawn(async move { skip_to_by_id(track_id).await });
+                        skip_to_by_id(track_id).await?;
                     },
                     Action::Search { query } => {
-                        tokio::spawn(async move { search(&query).await });
+                       search(&query).await;
                     }
+                    Action::FetchArtistAlbums {artist_id: _} => {}
+                    Action::FetchPlaylistTracks{playlist_id: _} => {}
                 }
             }
             Some(msg) = messages.next() => {
@@ -762,7 +783,7 @@ pub async fn player_loop() -> Result<()> {
                             state.set_target_status(GstState::Paused);
                             drop(state);
 
-                            skip(SkipDirection::Backward, Some(0)).await?;
+                            skip(SkipDirection::Backward, Some(1)).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
