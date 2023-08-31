@@ -1,4 +1,7 @@
-use crate::{cursive::CursiveFormat, qobuz::album::Album};
+use crate::{
+    cursive::CursiveFormat,
+    qobuz::{album::Album, Artist},
+};
 use cursive::{
     theme::{Effect, Style},
     utils::markup::StyledString,
@@ -23,7 +26,7 @@ pub struct Track {
     pub number: usize,
     pub title: String,
     pub album: Option<Album>,
-    pub artist_name: Option<String>,
+    pub artist: Option<Artist>,
     pub duration_seconds: usize,
     pub explicit: bool,
     pub hires_available: bool,
@@ -46,10 +49,13 @@ impl From<QobuzTrack> for Track {
             None
         };
 
-        let artist_name = if let Some(p) = &value.performer {
-            Some(p.name.clone())
+        let artist = if let Some(p) = &value.performer {
+            Some(Artist {
+                id: p.id as usize,
+                name: p.name.clone(),
+            })
         } else {
-            value.album.as_ref().map(|a| a.artist.name.clone())
+            value.album.as_ref().map(|a| a.artist.clone().into())
         };
 
         let cover_art = value.album.as_ref().map(|a| a.image.large.clone());
@@ -65,7 +71,7 @@ impl From<QobuzTrack> for Track {
             number: value.track_number as usize,
             title: value.title,
             album,
-            artist_name,
+            artist,
             duration_seconds: value.duration as usize,
             explicit: value.parental_warning,
             hires_available: value.hires_streamable,
@@ -90,9 +96,9 @@ impl CursiveFormat for Track {
 
         let mut title = StyledString::styled(self.title.trim(), style.combine(Effect::Bold));
 
-        if let Some(artist) = &self.artist_name {
+        if let Some(artist) = &self.artist {
             title.append_styled(" by ", style);
-            title.append_styled(artist, style);
+            title.append_styled(&artist.name, style);
         }
 
         let duration = ClockTime::from_seconds(self.duration_seconds as u64)

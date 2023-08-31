@@ -1,9 +1,8 @@
-use hifirs_qobuz_api::client::search_results::SearchAllResults;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     player,
-    qobuz::track::Track,
+    qobuz::{track::Track, SearchResults},
     state::{ClockValue, StatusValue, TrackListValue},
 };
 
@@ -34,7 +33,7 @@ pub enum Notification {
         track: Track,
     },
     SearchResults {
-        results: SearchAllResults,
+        results: SearchResults,
     },
     Error {
         error: player::error::Error,

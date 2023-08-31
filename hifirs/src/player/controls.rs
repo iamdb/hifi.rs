@@ -20,6 +20,7 @@ pub enum Action {
     PlayTrack { track_id: i32 },
     PlayUri { uri: String },
     PlayPlaylist { playlist_id: i64 },
+    Search { query: String },
 }
 
 /// Provides controls for other modules to send commands
@@ -89,6 +90,9 @@ impl Controls {
     }
     pub async fn play_playlist(&self, playlist_id: i64) {
         action!(self, Action::PlayPlaylist { playlist_id })
+    }
+    pub async fn search(&self, query: String) {
+        action!(self, Action::Search { query })
     }
 }
 

@@ -621,7 +621,9 @@ pub async fn search(query: &str) {
 
     BROADCAST_CHANNELS
         .tx
-        .broadcast(Notification::SearchResults { results })
+        .broadcast(Notification::SearchResults {
+            results: results.into(),
+        })
         .await
         .expect("failed to send notification");
 }
@@ -743,6 +745,9 @@ pub async fn player_loop() -> Result<()> {
                     },
                     Action::SkipToById { track_id } => {
                         tokio::spawn(async move { skip_to_by_id(track_id).await });
+                    },
+                    Action::Search { query } => {
+                        tokio::spawn(async move { search(&query).await });
                     }
                 }
             }

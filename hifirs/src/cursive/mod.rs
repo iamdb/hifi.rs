@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     player::{self, controls::Controls, notification::Notification},
-    qobuz::{album::Album, track::Track},
+    qobuz::{album::Album, track::Track, SearchResults},
     state::TrackListType,
 };
 use cursive::{
@@ -28,7 +28,7 @@ use cursive::{
 };
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
+use hifirs_qobuz_api::client::api::Client;
 use once_cell::sync::{Lazy, OnceCell};
 use tokio::select;
 
@@ -523,12 +523,10 @@ fn load_search_results(item: &str, s: &mut Cursive) {
     if let Some(mut search_results) = s.find_name::<SelectView>("search_results") {
         search_results.clear();
 
-        if let Some(data) = s.user_data::<SearchAllResults>() {
+        if let Some(data) = s.user_data::<SearchResults>() {
             match item {
                 "Albums" => {
-                    for a in &data.albums.items {
-                        let a: Album = a.clone().into();
-
+                    for a in &data.albums {
                         let id = if a.available {
                             a.id.clone()
                         } else {
@@ -546,7 +544,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     });
                 }
                 "Artists" => {
-                    for a in &data.artists.items {
+                    for a in &data.artists {
                         search_results.add_item(a.name.clone(), a.id.to_string());
                     }
 
@@ -555,9 +553,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     });
                 }
                 "Tracks" => {
-                    for t in &data.tracks.items {
-                        let t: Track = t.clone().into();
-
+                    for t in &data.tracks {
                         let id = if t.available {
                             t.id.to_string()
                         } else {
@@ -577,8 +573,8 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     });
                 }
                 "Playlists" => {
-                    for p in &data.playlists.items {
-                        search_results.add_item(p.name.clone(), p.id.to_string())
+                    for p in &data.playlists {
+                        search_results.add_item(p.title.clone(), p.id.to_string())
                     }
 
                     search_results.set_on_submit(move |s: &mut Cursive, item: &String| {
@@ -811,9 +807,9 @@ pub async fn receive_notifications() {
                                 progress.set_max(track.duration_seconds);
                             }
 
-                            if let Some(artist_name) = track.artist_name {
+                            if let Some(artist) = track.artist {
                                 s.call_on_name("artist_name", |view: &mut TextView| {
-                                    view.set_content(artist_name);
+                                    view.set_content(artist.name);
                                 });
                             }
 

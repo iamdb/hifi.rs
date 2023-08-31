@@ -1,7 +1,12 @@
-use crate::sql::db::Database;
+use crate::{
+    qobuz::{album::Album, playlist::Playlist, track::Track},
+    sql::db::Database,
+};
 use hifirs_qobuz_api::{
     client::{
         api::{self, Client},
+        artist::Artist as QobuzArtist,
+        search_results::SearchAllResults,
         AudioQuality,
     },
     Credentials,
@@ -104,6 +109,65 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
     }
 
     Ok(client.clone())
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResults {
+    pub query: String,
+    pub albums: Vec<Album>,
+    pub tracks: Vec<Track>,
+    pub artists: Vec<Artist>,
+    pub playlists: Vec<Playlist>,
+}
+
+impl From<SearchAllResults> for SearchResults {
+    fn from(s: SearchAllResults) -> Self {
+        Self {
+            query: s.query,
+            albums: s
+                .albums
+                .items
+                .into_iter()
+                .map(|a| a.into())
+                .collect::<Vec<Album>>(),
+            tracks: s
+                .tracks
+                .items
+                .into_iter()
+                .map(|t| t.into())
+                .collect::<Vec<Track>>(),
+            artists: s
+                .artists
+                .items
+                .into_iter()
+                .map(|a| Artist {
+                    name: a.name,
+                    id: a.id as usize,
+                })
+                .collect::<Vec<Artist>>(),
+            playlists: s
+                .playlists
+                .items
+                .into_iter()
+                .map(|p| p.into())
+                .collect::<Vec<Playlist>>(),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Artist {
+    pub id: usize,
+    pub name: String,
+}
+
+impl From<QobuzArtist> for Artist {
+    fn from(a: QobuzArtist) -> Self {
+        Self {
+            id: a.id as usize,
+            name: a.name,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

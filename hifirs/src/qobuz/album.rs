@@ -1,4 +1,7 @@
-use crate::{cursive::CursiveFormat, qobuz::track::Track};
+use crate::{
+    cursive::CursiveFormat,
+    qobuz::{track::Track, Artist},
+};
 use cursive::{
     theme::{Effect, Style},
     utils::markup::StyledString,
@@ -12,7 +15,7 @@ use std::{collections::VecDeque, str::FromStr};
 pub struct Album {
     pub id: String,
     pub title: String,
-    pub artist_name: String,
+    pub artist: Artist,
     pub release_year: usize,
     pub hires_available: bool,
     pub explicit: bool,
@@ -41,7 +44,7 @@ impl From<QobuzAlbum> for Album {
         Self {
             id: value.id,
             title: value.title,
-            artist_name: value.artist.name,
+            artist: value.artist.into(),
             total_tracks: value.tracks_count as usize,
             release_year: year
                 .to_string()
@@ -67,7 +70,7 @@ impl CursiveFormat for Album {
         let mut title = StyledString::styled(self.title.clone(), style.combine(Effect::Bold));
 
         title.append_styled(" by ", style);
-        title.append_styled(self.artist_name.clone(), style);
+        title.append_styled(self.artist.name.clone(), style);
         title.append_styled(" ", style);
 
         title.append_styled(self.release_year.to_string(), style.combine(Effect::Dim));

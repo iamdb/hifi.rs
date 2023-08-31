@@ -161,6 +161,9 @@ async fn handle_connection(socket: WebSocket) {
                                 Action::PlayPlaylist { playlist_id } => {
                                     controls.play_playlist(playlist_id).await
                                 }
+                                Action::Search { query } => {
+                                    controls.search(query).await;
+                                }
                             }
                         };
                     }

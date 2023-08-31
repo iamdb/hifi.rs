@@ -425,10 +425,10 @@ fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value
         ),
     );
 
-    if let Some(artist) = playlist_track.artist_name {
+    if let Some(artist) = playlist_track.artist {
         meta.insert(
             "xesam:artist",
-            zvariant::Value::new(artist.trim().to_string()),
+            zvariant::Value::new(artist.name.trim().to_string()),
         );
     }
 
@@ -440,11 +440,11 @@ fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value
         );
         meta.insert(
             "xesam:albumArtist",
-            zvariant::Value::new(album.artist_name.trim().to_string()),
+            zvariant::Value::new(album.artist.name.trim().to_string()),
         );
         meta.insert(
             "xesam:artist",
-            zvariant::Value::new(album.artist_name.trim().to_string()),
+            zvariant::Value::new(album.artist.name.trim().to_string()),
         );
     }
 

@@ -5,10 +5,10 @@ export const connected = writable(false);
 export const currentTrack = writable(null);
 export const isBuffering = writable(false);
 export const searchResults = writable({
-  albums: { items: [] },
-  artists: { items: [] },
-  playlists: { items: [] },
-  tracks: { items: [] },
+  albums: [],
+  artists: [],
+  playlists: [],
+  tracks: [],
 });
 
 const position = writable(0);
@@ -145,5 +145,9 @@ export class WS {
 
   playPlaylist(playlist_id) {
     this.ws.send(JSON.stringify({ playPlaylist: { playlist_id } }))
+  }
+
+  search(query) {
+    this.ws.send(JSON.stringify({ search: { query } }))
   }
 }
