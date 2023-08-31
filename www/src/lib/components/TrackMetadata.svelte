@@ -28,7 +28,7 @@
 		<span class="text-2xl align-baseline">by</span>
 		{$currentTrack?.artist.name || ''}
 	</div>
-	<div class="text-4xl mt-4 xl:mt-8 flex flex-row items-center gap-x-8">
+	<div class="text-2xl xl:text-4xl mt-4 xl:mt-8 flex flex-row items-center gap-x-8">
 		<span class="font-bold bg-blue-950 px-2">{$currentTrack.number}</span>
 		<span class="text-2xl">of</span>
 		<span class="font-bold bg-blue-950 px-2">{$numOfTracks}</span>
@@ -81,7 +81,7 @@
 	{/if}
 </div>
 
-<div class="flex flex-col gap-y-2 max-w-xs mx-auto">
+<div class="flex flex-col gap-y-4 max-w-xs mx-auto">
 	<div class="text-4xl md:text-5xl grid grid-cols-3">
 		<span>
 			{$positionString}
