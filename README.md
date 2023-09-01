@@ -6,7 +6,7 @@ Powered by [Qobuz](https://www.qobuz.com). Requires a paid subscription. This do
 
 Qobuz only supports Linux through the browser and has no officially supported API. There are ways of accessing Qobuz in Linux outside of the browser through third-party applications like Squeezelite and Roon. These apps are great, but I wanted something simpler that just focused on being able to quickly find and play an album inside the console.
 
-![TUI Screenshot](/hifi-rs.png?raw=true "tui screenshot")
+![TUI Screenshot](/hifi-rs.png?raw=true)
 
 ## Player Features
 
@@ -83,10 +83,7 @@ The TUI has full mouse support.
 
 ## Web UI and WebSocket API
 
-<div style="display: flex; flex-direction: row; flex-wrap: wrap;">
-  <img src="/hifi-rs-webui-mobile.png?raw=true" alt="WebUI Mobile Screenshot" />
-  <img src="/hifi-rs-webui-desktop.png?raw=true" alt="WebUI Desktop Screenshot" />
-</div>
+!["WebUI Desktop Screenshot"](/hifi-rs-webui-desktop.png?raw=true)
 
 The player can start an embedded web interface along with a websocket API. As this is a potential attack vector, the
 server is disabled by default and must be started with the `--web` argument. It also listens on `0.0.0.0:9888` by default,
