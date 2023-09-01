@@ -42,12 +42,10 @@ jobs:
           profile: minimal
           toolchain: stable
           components: rustfmt, clippy
-      - name: Install cargo binstall
-        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
       - name: Install Cargo Plugins
-        run: cargo binstall --no-confirm cargo-make cargo-insta sqlx-cli
+        run: cargo install cargo-make cargo-insta sqlx-cli
       - name: Create db file
-        run: "touch /tmp/data.db && cd hifirs && sqlx database reset -y"
+        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
         env: 
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Run CI Flow
