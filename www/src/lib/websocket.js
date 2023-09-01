@@ -56,6 +56,13 @@ export const entityTitle = derived([currentTrackList, currentTrack], ([tl, c]) =
   }
 })
 
+export const secsToTimecode = (secs) => {
+  const minutes = Math.floor(secs / 60);
+  const seconds = Math.floor(secs - (minutes * 60));
+
+  return `${minutes.toString(10).padStart(2, 0)}:${seconds.toString(10).padStart(2, 0)}`
+}
+
 export const positionString = derived(position, (p) => {
   const positionMinutes = Math.floor(p / 1000 / 1000 / 1000 / 60);
   const positionSeconds = Math.floor(p / 1000 / 1000 / 1000) - positionMinutes * 60;
@@ -69,6 +76,9 @@ export const durationString = derived(duration, (d) => {
 
   return `${durationMinutes.toString(10).padStart(2, 0)}:${durationSeconds.toString(10).padStart(2, 0)}`
 })
+
+export const artistAlbums = writable({ "id": null, albums: [] });
+export const playlistTracks = writable({ "id": null, tracks: [] });
 
 export class WS {
   constructor(dev) {
@@ -114,7 +124,11 @@ export class WS {
       } else if (Object.hasOwn(json, 'currentTrackList')) {
         currentTrackList.set(json.currentTrackList?.list);
       } else if (Object.hasOwn(json, 'searchResults')) {
-        searchResults.set(json.searchResults?.results);
+        searchResults.set(json.searchResults.results);
+      } else if (Object.hasOwn(json, 'artistAlbums')) {
+        artistAlbums.set(json.artistAlbums);
+      } else if (Object.hasOwn(json, 'playlistTracks')) {
+        playlistTracks.set(json.playlistTracks);
       }
     };
 
@@ -157,5 +171,13 @@ export class WS {
 
   search(query) {
     this.ws.send(JSON.stringify({ search: { query } }))
+  }
+
+  fetchArtistAlbums(artist_id) {
+    this.ws.send(JSON.stringify({ fetchArtistAlbums: { artist_id } }))
+  }
+
+  fetchPlaylistTracks(playlist_id) {
+    this.ws.send(JSON.stringify({ fetchPlaylistTracks: { playlist_id } }))
   }
 }

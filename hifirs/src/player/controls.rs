@@ -22,7 +22,7 @@ pub enum Action {
     PlayPlaylist { playlist_id: i64 },
     Search { query: String },
     FetchArtistAlbums { artist_id: i32 },
-    FetchPlaylistTracks { playlist_id: i32 },
+    FetchPlaylistTracks { playlist_id: i64 },
 }
 
 /// Provides controls for other modules to send commands

@@ -23,7 +23,7 @@
 </script>
 
 <div class="flex flex-col items-center">
-	<div>{$entityTitle || ''}</div>
+	<div class="px-4">{$entityTitle || ''}</div>
 	<div class="text-4xl text-amber-600">
 		<span class="text-2xl align-baseline">by</span>
 		{$currentTrack?.artist.name || ''}

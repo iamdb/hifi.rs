@@ -637,13 +637,13 @@ pub async fn artist_albums(artist_id: i32) -> Vec<Album> {
 }
 
 #[instrument]
-pub async fn playlist_tracks(artist_id: i32) -> Vec<Album> {
+pub async fn playlist_tracks(playlist_id: i64) -> Vec<Track> {
     STATE
         .get()
         .unwrap()
         .read()
         .await
-        .fetch_artist_albums(artist_id)
+        .fetch_playlist_tracks(playlist_id)
         .await
 }
 
