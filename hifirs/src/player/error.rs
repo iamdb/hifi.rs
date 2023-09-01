@@ -1,9 +1,10 @@
 use gstreamer::{glib, traits::GstObjectExt, StateChangeError};
+use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
 use crate::player::notification::Notification;
 
-#[derive(Snafu, Debug, Clone)]
+#[derive(Snafu, Debug, Clone, Serialize, Deserialize)]
 pub enum Error {
     #[snafu(display("{message}"))]
     FailedToPlay {

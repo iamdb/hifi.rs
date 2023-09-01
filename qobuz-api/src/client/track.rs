@@ -1,4 +1,4 @@
-use crate::client::{album::Album, TrackURL};
+use crate::client::album::Album;
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 
@@ -63,75 +63,6 @@ impl Track {
             performer,
             duration,
         ]
-    }
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
-pub enum TrackStatus {
-    Played,
-    Playing,
-    #[default]
-    Unplayed,
-    Unplayable,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct TrackListTrack {
-    pub track: Track,
-    pub track_url: Option<TrackURL>,
-    pub album: Option<Album>,
-    pub index: usize,
-    pub total: usize,
-    pub status: TrackStatus,
-}
-
-impl TrackListTrack {
-    pub fn new(
-        track: Track,
-        index: Option<usize>,
-        total: Option<usize>,
-        album: Option<Album>,
-    ) -> Self {
-        let index = if let Some(index) = index { index } else { 0 };
-        let total = if let Some(total) = total { total } else { 1 };
-        let status = if track.streamable {
-            TrackStatus::Unplayed
-        } else {
-            TrackStatus::Unplayable
-        };
-
-        TrackListTrack {
-            index,
-            total,
-            track,
-            track_url: None,
-            album,
-            status,
-        }
-    }
-
-    pub fn columns(&self) -> Vec<String> {
-        let duration = ClockTime::from_seconds(self.track.duration as u64)
-            .to_string()
-            .as_str()[2..7]
-            .to_string();
-
-        let performer = if let Some(performer) = &self.track.performer {
-            performer.name.clone()
-        } else {
-            "".to_string()
-        };
-
-        vec![
-            self.track.track_number.to_string(),
-            self.track.title.clone(),
-            performer,
-            duration,
-        ]
-    }
-
-    pub fn set_track_url(&mut self, track_url: TrackURL) {
-        self.track_url = Some(track_url);
     }
 }
 

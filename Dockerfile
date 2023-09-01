@@ -1,3 +1,13 @@
+FROM node:18-bookworm as www
+
+RUN mkdir /app
+
+WORKDIR /app
+
+COPY www .
+
+RUN npm install && npm run build
+
 FROM rust:1-bookworm as build
 
 RUN apt-get update && apt-get install -y curl libgstreamer1.0-dev
@@ -11,6 +21,8 @@ RUN cargo binstall --no-confirm sqlx-cli
 WORKDIR /app
 
 COPY . .
+
+COPY --from=www /app/build /app/www/build
 
 RUN touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y
 

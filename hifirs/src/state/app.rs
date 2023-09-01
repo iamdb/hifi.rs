@@ -1,15 +1,15 @@
 use crate::{
+    qobuz::{
+        album::Album,
+        playlist::Playlist,
+        track::{Track, TrackStatus},
+    },
     sql::db::Database,
-    state::{ActiveScreen, ClockValue, FloatValue, StatusValue, TrackListType, TrackListValue},
+    state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::{
-    album::Album,
-    api::Client,
-    playlist::Playlist,
-    track::{TrackListTrack, TrackStatus},
-};
+use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
@@ -20,17 +20,12 @@ use tokio::sync::{
 pub struct PlayerState {
     db: Database,
     client: Client,
-    current_track: Option<TrackListTrack>,
+    current_track: Option<Track>,
     tracklist: TrackListValue,
-    current_progress: FloatValue,
-    duration: ClockValue,
     position: ClockValue,
     status: StatusValue,
-    is_buffering: bool,
-    is_live: bool,
     resume: bool,
     target_status: StatusValue,
-    active_screen: ActiveScreen,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -48,11 +43,9 @@ pub struct SavedState {
 
 impl From<PlayerState> for SavedState {
     fn from(state: PlayerState) -> Self {
-        if let (Some(current_track), Some(playback_track_index)) =
-            (state.current_track(), state.current_track_index())
-        {
-            let playback_track_index = playback_track_index as i64;
-            let playback_track_id = current_track.track.id as i64;
+        if let Some(current_track) = state.current_track() {
+            let playback_track_index = current_track.position as i64;
+            let playback_track_id = current_track.id as i64;
             let playback_position = state.position().inner_clocktime().mseconds() as i64;
             let playback_entity_type = state.list_type();
             let playback_entity_id = match playback_entity_type {
@@ -62,12 +55,7 @@ impl From<PlayerState> for SavedState {
                     .expect("failed to get playlist id")
                     .id
                     .to_string(),
-                TrackListType::Track => state
-                    .current_track
-                    .expect("failed to get current_track id")
-                    .track
-                    .id
-                    .to_string(),
+                TrackListType::Track => current_track.id.to_string(),
                 TrackListType::Unknown => "".to_string(),
             };
 
@@ -89,35 +77,33 @@ impl PlayerState {
     pub async fn play_album(
         &mut self,
         album_id: String,
-    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
-        if let Ok(mut album) = self.client.album(album_id.as_str()).await {
-            if album.tracks.is_none() {
-                album.attach_tracks(self.client.clone()).await;
-            }
+    ) -> (Option<Track>, Option<TrackListValue>) {
+        if let Ok(album) = self.client.album(album_id.as_str()).await {
+            let album: Album = album.into();
 
-            let mut tracklist = TrackListValue::new(album.to_tracklist());
-            tracklist.set_album(album.clone());
+            let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
+            tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
+            tracklist.set_track_status(1, TrackStatus::Playing);
 
             self.replace_list(tracklist.clone());
 
-            let first_track = tracklist.queue.front_mut().unwrap();
+            if let Some(first_track) = tracklist.queue.front_mut() {
+                self.attach_track_url(first_track).await;
+                self.set_current_track(first_track.clone());
+                self.set_target_status(GstState::Playing);
 
-            self.attach_track_url(first_track).await;
-            self.set_current_track(first_track.clone());
-            self.set_target_status(GstState::Playing);
-
-            (Some(first_track.clone()), Some(tracklist))
+                (Some(first_track.clone()), Some(tracklist))
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
         }
     }
-    pub async fn play_track(
-        &mut self,
-        track_id: i32,
-    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
+    pub async fn play_track(&mut self, track_id: i32) -> (Option<Track>, Option<TrackListValue>) {
         if let Ok(new_track) = self.client.track(track_id).await {
-            let mut track = TrackListTrack::new(new_track, Some(0), Some(1), None);
+            let mut track: Track = new_track.into();
             track.status = TrackStatus::Playing;
 
             let mut queue = VecDeque::new();
@@ -140,11 +126,15 @@ impl PlayerState {
     pub async fn play_playlist(
         &mut self,
         playlist_id: i64,
-    ) -> (Option<TrackListTrack>, Option<TrackListValue>) {
-        if let Ok(mut playlist) = self.client.playlist(playlist_id).await {
-            let mut tracklist = TrackListValue::new(playlist.to_tracklist());
-            tracklist.set_playlist(playlist.clone());
+    ) -> (Option<Track>, Option<TrackListValue>) {
+        if let Ok(playlist) = self.client.playlist(playlist_id).await {
+            let playlist: Playlist = playlist.into();
+
+            let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
+
+            tracklist.set_playlist(playlist);
             tracklist.set_list_type(TrackListType::Playlist);
+            tracklist.set_track_status(1, TrackStatus::Playing);
 
             self.replace_list(tracklist.clone());
 
@@ -159,13 +149,6 @@ impl PlayerState {
             (None, None)
         }
     }
-    pub fn set_active_screen(&mut self, screen: ActiveScreen) {
-        self.active_screen = screen;
-    }
-
-    pub fn active_screen(&self) -> ActiveScreen {
-        self.active_screen.clone()
-    }
 
     pub fn set_status(&mut self, status: StatusValue) {
         self.status = status;
@@ -175,7 +158,7 @@ impl PlayerState {
         self.status.clone()
     }
 
-    pub fn set_current_track(&mut self, track: TrackListTrack) {
+    pub fn set_current_track(&mut self, track: Track) {
         self.current_track = Some(track);
     }
 
@@ -187,14 +170,6 @@ impl PlayerState {
         self.position.clone()
     }
 
-    pub fn set_buffering(&mut self, buffering: bool) {
-        self.is_buffering = buffering;
-    }
-
-    pub fn buffering(&self) -> bool {
-        self.is_buffering
-    }
-
     pub fn set_resume(&mut self, resume: bool) {
         self.resume = resume;
     }
@@ -203,34 +178,15 @@ impl PlayerState {
         self.resume
     }
 
-    pub fn progress(&self) -> FloatValue {
-        let duration = self.duration.inner_clocktime().mseconds() as f64;
-        let position = self.position.inner_clocktime().mseconds() as f64;
-
-        if duration >= position {
-            FloatValue(position / duration)
-        } else {
-            FloatValue(1.0)
-        }
-    }
-
-    pub fn set_duration(&mut self, duration: ClockValue) {
-        self.duration = duration;
-    }
-
-    pub fn duration(&self) -> ClockValue {
-        self.duration.clone()
-    }
-
-    pub fn current_track(&self) -> Option<TrackListTrack> {
+    pub fn current_track(&self) -> Option<Track> {
         self.current_track.clone()
     }
 
-    pub fn unplayed_tracks(&self) -> Vec<&TrackListTrack> {
+    pub fn unplayed_tracks(&self) -> Vec<&Track> {
         self.tracklist.unplayed_tracks()
     }
 
-    pub fn played_tracks(&self) -> Vec<&TrackListTrack> {
+    pub fn played_tracks(&self) -> Vec<&Track> {
         self.tracklist.played_tracks()
     }
 
@@ -246,10 +202,6 @@ impl PlayerState {
         self.tracklist.get_playlist()
     }
 
-    pub fn current_track_index(&self) -> Option<usize> {
-        self.current_track.as_ref().map(|track| track.index)
-    }
-
     pub fn replace_list(&mut self, tracklist: TrackListValue) {
         debug!("replacing tracklist");
         self.tracklist = tracklist;
@@ -261,14 +213,14 @@ impl PlayerState {
 
     pub fn track_index(&self, track_id: usize) -> Option<usize> {
         if let Some(track) = self.tracklist.find_track(track_id) {
-            Some(track.index)
+            Some(track.position)
         } else {
             None
         }
     }
 
-    pub fn set_track_status(&mut self, track_id: usize, status: TrackStatus) {
-        self.tracklist.set_track_status(track_id, status);
+    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
+        self.tracklist.set_track_status(position, status);
     }
 
     pub fn target_status(&self) -> StatusValue {
@@ -279,39 +231,27 @@ impl PlayerState {
         self.target_status = target.into();
     }
 
-    pub fn set_live(&mut self, live: bool) {
-        self.is_live = live;
-    }
-
-    pub fn live(&self) -> bool {
-        self.is_live
-    }
-
     /// Attach a `TrackURL` to the given track.
-    pub async fn attach_track_url(&mut self, track: &mut TrackListTrack) {
+    pub async fn attach_track_url(&mut self, track: &mut Track) {
         debug!("fetching track url");
-        if let Ok(track_url) = self.client.track_url(track.track.id, None, None).await {
+        if let Ok(track_url) = self.client.track_url(track.id as i32, None, None).await {
             debug!("attaching url information to track");
-            track.set_track_url(track_url);
-        }
-    }
-
-    pub async fn attach_track_url_current(&mut self) {
-        if let Some(current_track) = self.current_track.as_mut() {
-            if let Ok(track_url) = self
-                .client
-                .track_url(current_track.track.id, None, None)
-                .await
-            {
-                current_track.set_track_url(track_url);
-            }
+            track.track_url = Some(track_url.url);
+            track.sampling_rate = track_url.sampling_rate as f32;
+            track.bit_depth = track_url.bit_depth as usize;
         }
     }
 
     pub async fn next_track_url(&self) -> Option<String> {
-        if let Some(current_index) = self.current_track_index() {
-            if let Some(next_track) = self.tracklist.find_track_by_index(current_index + 1) {
-                if let Ok(track_url) = self.client.track_url(next_track.track.id, None, None).await
+        if let Some(current_track) = self.current_track() {
+            if let Some(next_track) = self
+                .tracklist
+                .find_track_by_index(current_track.position + 1)
+            {
+                if let Ok(track_url) = self
+                    .client
+                    .track_url(next_track.id as i32, None, None)
+                    .await
                 {
                     return Some(track_url.url);
                 } else {
@@ -327,18 +267,16 @@ impl PlayerState {
         &mut self,
         index: Option<usize>,
         direction: SkipDirection,
-    ) -> Option<TrackListTrack> {
-        if self.is_buffering {
-            return None;
-        }
-
+    ) -> Option<Track> {
         let next_track_index = if let Some(i) = index {
             if i <= self.tracklist.total() {
                 Some(i)
             } else {
                 None
             }
-        } else if let Some(current_track_index) = self.current_track_index() {
+        } else if let Some(current_track) = self.current_track() {
+            let current_track_index = current_track.position;
+
             match direction {
                 SkipDirection::Forward => {
                     if current_track_index < self.tracklist.total() {
@@ -363,19 +301,22 @@ impl PlayerState {
             let mut current_track = None;
 
             for t in self.tracklist.queue.iter_mut() {
-                match t.index.cmp(&index) {
+                match t.position.cmp(&index) {
                     std::cmp::Ordering::Less => {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
-                        t.status = TrackStatus::Playing;
-
-                        if let Ok(track_url) = self.client.track_url(t.track.id, None, None).await {
-                            t.set_track_url(track_url);
+                        if let Ok(track_url) = self.client.track_url(t.id as i32, None, None).await
+                        {
+                            t.status = TrackStatus::Playing;
+                            t.track_url = Some(track_url.url);
+                            t.bit_depth = track_url.bit_depth as usize;
+                            t.sampling_rate = track_url.sampling_rate as f32;
+                            self.current_track = Some(t.clone());
+                            current_track = Some(t.clone());
+                        } else {
+                            t.status = TrackStatus::Unplayable;
                         }
-
-                        self.current_track = Some(t.clone());
-                        current_track = Some(t.clone());
                     }
                     std::cmp::Ordering::Greater => {
                         t.status = TrackStatus::Unplayed;
@@ -390,10 +331,45 @@ impl PlayerState {
         }
     }
 
-    pub fn reset_player(&mut self) {
-        self.target_status = GstState::Paused.into();
-        self.position = ClockValue::default();
-        self.current_progress = FloatValue(0.0);
+    pub async fn search_all(&self, query: &str) -> Option<SearchAllResults> {
+        match self.client.search_all(query.to_string(), 100).await {
+            Ok(results) => Some(results),
+            Err(_) => None,
+        }
+    }
+
+    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Vec<Album> {
+        match self.client.artist(artist_id, None).await {
+            Ok(results) => {
+                if let Some(albums) = results.albums {
+                    albums
+                        .items
+                        .into_iter()
+                        .map(|a| a.into())
+                        .collect::<Vec<Album>>()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Vec<Track> {
+        match self.client.playlist(playlist_id).await {
+            Ok(results) => {
+                if let Some(tracks) = results.tracks {
+                    tracks
+                        .items
+                        .into_iter()
+                        .map(|t| t.into())
+                        .collect::<Vec<Track>>()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
@@ -411,11 +387,8 @@ impl PlayerState {
     pub fn reset(&mut self) {
         self.tracklist.clear();
         self.current_track = None;
-        self.current_progress = FloatValue(0.0);
-        self.duration = ClockValue::default();
         self.position = ClockValue::default();
         self.status = gstreamer::State::Null.into();
-        self.is_buffering = false;
         self.resume = false;
     }
 
@@ -428,15 +401,10 @@ impl PlayerState {
             current_track: None,
             client,
             tracklist,
-            duration: ClockValue::default(),
             position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
             target_status: StatusValue(gstreamer::State::Null),
-            current_progress: FloatValue(0.0),
-            is_buffering: false,
-            is_live: false,
             resume: false,
-            active_screen: ActiveScreen::NowPlaying,
             quit_sender,
         }
     }
@@ -455,21 +423,16 @@ impl PlayerState {
             match entity_type {
                 TrackListType::Album => {
                     if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
-                        self.replace_list(TrackListValue::new(album.to_tracklist()));
+                        let album: Album = album.into();
+
+                        self.replace_list(TrackListValue::new(Some(album.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
-                        if let Some(track) = self
-                            .tracklist
-                            .find_track_by_index(last_state.playback_track_index as usize)
-                        {
-                            let duration = ClockTime::from_seconds(track.track.duration as u64);
-                            let position =
-                                ClockTime::from_mseconds(last_state.playback_position as u64);
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
 
-                            self.set_position(position.into());
-                            self.set_duration(duration.into());
-                        }
+                        self.set_position(position.into());
 
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
@@ -481,7 +444,7 @@ impl PlayerState {
                     }
                 }
                 TrackListType::Playlist => {
-                    if let Ok(mut playlist) = self
+                    if let Ok(playlist) = self
                         .client
                         .playlist(
                             last_state
@@ -491,31 +454,23 @@ impl PlayerState {
                         )
                         .await
                     {
-                        if let Some(tracklist_tracks) = playlist.to_tracklist() {
-                            self.replace_list(TrackListValue::new(Some(tracklist_tracks)));
-                            self.tracklist.set_list_type(TrackListType::Playlist);
-                            self.tracklist.set_playlist(playlist);
+                        let playlist: Playlist = playlist.into();
 
-                            if let Some(track) = self
-                                .tracklist
-                                .find_track_by_index(last_state.playback_track_index as usize)
-                            {
-                                let duration = ClockTime::from_seconds(track.track.duration as u64);
-                                let position =
-                                    ClockTime::from_mseconds(last_state.playback_position as u64);
+                        self.replace_list(TrackListValue::new(Some(playlist.tracks.clone())));
+                        self.tracklist.set_list_type(TrackListType::Playlist);
+                        self.tracklist.set_playlist(playlist);
 
-                                self.set_position(position.into());
-                                self.set_duration(duration.into());
-                            }
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        self.set_position(position.into());
 
-                            self.skip_track(
-                                Some(last_state.playback_track_index as usize),
-                                SkipDirection::Forward,
-                            )
-                            .await;
+                        self.skip_track(
+                            Some(last_state.playback_track_index as usize),
+                            SkipDirection::Forward,
+                        )
+                        .await;
 
-                            return true;
-                        }
+                        return true;
                     }
                 }
                 TrackListType::Track => {
@@ -524,7 +479,7 @@ impl PlayerState {
                         .parse()
                         .expect("failed to parse track id");
                     if let Ok(track) = self.client.track(track_id).await {
-                        let mut track = TrackListTrack::new(track, Some(0), Some(1), None);
+                        let mut track: Track = track.into();
                         track.status = TrackStatus::Playing;
 
                         let mut queue = VecDeque::new();
@@ -536,12 +491,10 @@ impl PlayerState {
                         self.replace_list(tracklist);
                         self.tracklist.set_list_type(TrackListType::Track);
 
-                        let duration = ClockTime::from_seconds(track.track.duration as u64);
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
 
                         self.set_position(position.into());
-                        self.set_duration(duration.into());
 
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),

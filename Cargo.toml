@@ -4,6 +4,7 @@ members = [
   "qobuz-api",
   "playlist-sync",
 ]
+exclude = ["www"]
 
 [profile.release]
 lto = true

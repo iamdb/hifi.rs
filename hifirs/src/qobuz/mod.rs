@@ -1,11 +1,12 @@
-use crate::sql::db::Database;
-use enum_as_inner::EnumAsInner;
+use crate::{
+    qobuz::{album::Album, playlist::Playlist, track::Track},
+    sql::db::Database,
+};
 use hifirs_qobuz_api::{
     client::{
-        album::{Album, AlbumSearchResults},
         api::{self, Client},
-        artist::{Artist, ArtistSearchResults},
-        playlist::{Playlist, UserPlaylistsResult},
+        artist::Artist as QobuzArtist,
+        search_results::SearchAllResults,
         AudioQuality,
     },
     Credentials,
@@ -16,6 +17,7 @@ pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;
+pub mod playlist;
 pub mod track;
 
 pub async fn make_client(
@@ -109,6 +111,65 @@ pub async fn setup_client(client: &mut Client, db: &Database) -> Result<Client> 
     Ok(client.clone())
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResults {
+    pub query: String,
+    pub albums: Vec<Album>,
+    pub tracks: Vec<Track>,
+    pub artists: Vec<Artist>,
+    pub playlists: Vec<Playlist>,
+}
+
+impl From<SearchAllResults> for SearchResults {
+    fn from(s: SearchAllResults) -> Self {
+        Self {
+            query: s.query,
+            albums: s
+                .albums
+                .items
+                .into_iter()
+                .map(|a| a.into())
+                .collect::<Vec<Album>>(),
+            tracks: s
+                .tracks
+                .items
+                .into_iter()
+                .map(|t| t.into())
+                .collect::<Vec<Track>>(),
+            artists: s
+                .artists
+                .items
+                .into_iter()
+                .map(|a| Artist {
+                    name: a.name,
+                    id: a.id as usize,
+                })
+                .collect::<Vec<Artist>>(),
+            playlists: s
+                .playlists
+                .items
+                .into_iter()
+                .map(|p| p.into())
+                .collect::<Vec<Playlist>>(),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct Artist {
+    pub id: usize,
+    pub name: String,
+}
+
+impl From<QobuzArtist> for Artist {
+    fn from(a: QobuzArtist) -> Self {
+        Self {
+            id: a.id as usize,
+            name: a.name,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Composer {
     pub id: i64,
@@ -141,45 +202,4 @@ pub struct TrackURL {
 pub struct User {
     pub id: i64,
     pub login: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, EnumAsInner)]
-pub enum SearchResults {
-    Albums(AlbumSearchResults),
-    Artists(ArtistSearchResults),
-    UserPlaylists(UserPlaylistsResult),
-    Playlist(Box<Playlist>),
-    Album(Box<Album>),
-    Artist(Artist),
-}
-
-impl From<SearchResults> for Vec<Vec<String>> {
-    fn from(results: SearchResults) -> Self {
-        match results {
-            SearchResults::Albums(r) => r.into(),
-            SearchResults::Artists(r) => r.into(),
-            SearchResults::UserPlaylists(r) => r.into(),
-            SearchResults::Playlist(r) => r.into(),
-            SearchResults::Album(r) => r.into(),
-            SearchResults::Artist(r) => r.into(),
-        }
-    }
-}
-
-impl From<AlbumSearchResults> for SearchResults {
-    fn from(results: AlbumSearchResults) -> Self {
-        SearchResults::Albums(results)
-    }
-}
-
-impl From<Box<Album>> for SearchResults {
-    fn from(album: Box<Album>) -> Self {
-        Self::Album(album)
-    }
-}
-
-impl From<SearchResults> for Album {
-    fn from(results: SearchResults) -> Self {
-        results.into()
-    }
 }

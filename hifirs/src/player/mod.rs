@@ -4,10 +4,12 @@ use crate::{
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
     },
+    qobuz::SearchResults,
+    qobuz::{album::Album, track::Track},
     sql::db::Database,
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
-        ClockValue, StatusValue,
+        ClockValue, StatusValue, TrackListValue,
     },
     REFRESH_RESOLUTION,
 };
@@ -45,7 +47,6 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
         .expect("error building playbin element");
 
     playbin.set_property_from_str("flags", "audio+buffering");
-    playbin.set_property("instant-uri", false);
     playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
@@ -117,13 +118,10 @@ static ABOUT_TO_FINISH: Lazy<AboutToFinish> = Lazy::new(|| {
 
     AboutToFinish { tx, rx }
 });
-
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
-
-static IS_SKIPPING: AtomicBool = AtomicBool::new(false);
-
+static IS_BUFFERING: AtomicBool = AtomicBool::new(false);
+static IS_LIVE: AtomicBool = AtomicBool::new(false);
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
-
 static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
@@ -176,7 +174,7 @@ pub async fn set_player_state(state: gst::State, wait: bool) -> Result<()> {
         }
         StateChangeSuccess::NoPreroll => {
             debug!("*** stream is live ***");
-            STATE.get().unwrap().write().await.set_live(true);
+            IS_LIVE.store(true, Ordering::Relaxed);
         }
     }
 
@@ -284,7 +282,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
                 .await?;
 
             if let Some(url) = track.track_url {
-                PLAYBIN.set_property("uri", url.url);
+                PLAYBIN.set_property("uri", url);
 
                 ready(true).await?;
                 pause(true).await?;
@@ -352,38 +350,30 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
     // then it goes to the beginning. If triggered again
     // within a second after playing, it will skip to the previous track.
     if direction == SkipDirection::Backward {
-        if let Some(current_position) = PLAYBIN.query_position::<ClockTime>() {
-            let one_second = ClockTime::from_seconds(1);
-
-            if current_position > one_second && num.is_none() {
+        if let Some(current_position) = position() {
+            if current_position.inner_clocktime().seconds() > 1 && num.is_none() {
                 debug!("current track position >1s, seeking to start of track");
 
                 let zero_clock: ClockValue = ClockTime::default().into();
 
                 seek(zero_clock.clone(), None).await?;
-                let mut state = STATE.get().unwrap().write().await;
-                state.set_position(zero_clock.clone());
 
                 return Ok(());
             }
         }
     }
 
-    if IS_SKIPPING.load(Ordering::Relaxed) {
-        return Ok(());
-    }
-
-    IS_SKIPPING.store(true, Ordering::Relaxed);
-
     let mut state = STATE.get().unwrap().write().await;
+    let target_status = state.target_status();
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
         drop(state);
 
-        if let Some(track_url) = &next_track_to_play.track_url {
+        if let Some(url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
-            PLAYBIN.set_property("instant-uri", true);
-            PLAYBIN.set_property("uri", Some(track_url.url.clone()));
+            ready(false).await?;
+            PLAYBIN.set_property("uri", Some(url.clone()));
+            set_player_state(target_status.into(), false).await?;
 
             BROADCAST_CHANNELS
                 .tx
@@ -408,8 +398,11 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 pub async fn skip_to(index: usize) -> Result<()> {
     let state = STATE.get().unwrap().read().await;
 
-    if let Some(current_index) = state.current_track_index() {
+    if let Some(current_track) = state.current_track() {
         drop(state);
+
+        let current_index = current_track.position;
+
         if index > current_index {
             debug!(
                 "skipping forward from track {} to track {}",
@@ -453,7 +446,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         .await
     {
         if let Some(track_url) = &track_list_track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url.url.as_str()));
+            PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
             if !is_playing() {
                 play(false).await?;
@@ -491,7 +484,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
         .await
     {
         if let Some(track_url) = &track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url.url.clone()));
+            PLAYBIN.set_property("uri", Some(track_url));
 
             if !is_playing() {
                 play(false).await?;
@@ -555,7 +548,7 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
         .await
     {
         if let Some(t) = &first_track.track_url {
-            PLAYBIN.set_property("uri", Some(t.url.as_str()));
+            PLAYBIN.set_property("uri", Some(t.as_str()));
 
             if !is_playing() {
                 play(false).await?;
@@ -590,7 +583,7 @@ async fn prep_next_track() -> Result<()> {
 
         debug!("received new track, adding to player");
         if let Some(next_playlist_track_url) = &next_track.track_url {
-            PLAYBIN.set_property("uri", Some(next_playlist_track_url.url.clone()));
+            PLAYBIN.set_property("uri", Some(next_playlist_track_url.clone()));
         }
     } else {
         debug!("no more tracks left");
@@ -602,6 +595,56 @@ async fn prep_next_track() -> Result<()> {
 #[instrument]
 pub fn notify_receiver() -> BroadcastReceiver {
     BROADCAST_CHANNELS.rx.clone()
+}
+
+#[instrument]
+pub async fn current_tracklist() -> TrackListValue {
+    STATE.get().unwrap().read().await.track_list()
+}
+
+#[instrument]
+pub async fn current_track() -> Option<Track> {
+    STATE.get().unwrap().read().await.current_track()
+}
+
+#[instrument]
+pub fn is_buffering() -> bool {
+    IS_BUFFERING.load(Ordering::Relaxed)
+}
+
+#[instrument]
+pub async fn search(query: &str) -> SearchResults {
+    STATE
+        .get()
+        .unwrap()
+        .read()
+        .await
+        .search_all(query)
+        .await
+        .unwrap_or_default()
+        .into()
+}
+
+#[instrument]
+pub async fn artist_albums(artist_id: i32) -> Vec<Album> {
+    STATE
+        .get()
+        .unwrap()
+        .read()
+        .await
+        .fetch_artist_albums(artist_id)
+        .await
+}
+
+#[instrument]
+pub async fn playlist_tracks(playlist_id: i64) -> Vec<Track> {
+    STATE
+        .get()
+        .unwrap()
+        .read()
+        .await
+        .fetch_playlist_tracks(playlist_id)
+        .await
 }
 
 /// Inserts the most recent position into the state at a set interval.
@@ -617,7 +660,8 @@ pub async fn clock_loop() {
 
         if current_state() == GstState::Playing.into() {
             if let Some(position) = position() {
-                if position != last_position {
+                if position.inner_clocktime().seconds() != last_position.inner_clocktime().seconds()
+                {
                     last_position = position.clone();
 
                     let mut state = STATE.get().unwrap().write().await;
@@ -626,7 +670,7 @@ pub async fn clock_loop() {
 
                     BROADCAST_CHANNELS
                         .tx
-                        .broadcast(Notification::Position { position })
+                        .broadcast(Notification::Position { clock: position })
                         .await
                         .expect("failed to send notification");
                 }
@@ -685,18 +729,22 @@ pub async fn player_loop() -> Result<()> {
             }
             Some(almost_done) = about_to_finish.next() => {
                 if almost_done {
-                    prep_next_track().await?
+                    tokio::spawn(async { prep_next_track().await });
                 }
             }
             Some(action) = actions.next() => {
                 match action {
                     Action::JumpBackward => jump_backward().await?,
                     Action::JumpForward => jump_forward().await?,
-                    Action::Next => skip(SkipDirection::Forward,None).await?,
+                    Action::Next => {
+                        skip(SkipDirection::Forward,None).await?;
+                    },
                     Action::Pause => pause(false).await?,
                     Action::Play => play(false).await?,
                     Action::PlayPause => play_pause().await?,
-                    Action::Previous => skip(SkipDirection::Backward,None).await?,
+                    Action::Previous => {
+                        skip(SkipDirection::Backward,None).await?;
+                    },
                     Action::Stop => stop(false).await?,
                     Action::PlayAlbum { album_id } => {
                         play_album(album_id).await?;
@@ -704,13 +752,24 @@ pub async fn player_loop() -> Result<()> {
                     Action::PlayTrack { track_id } => {
                         play_track(track_id).await?;
                     },
-                    Action::PlayUri { uri } => play_uri(uri).await?,
+                    Action::PlayUri { uri } => {
+                        play_uri(uri).await?;
+                    },
                     Action::PlayPlaylist { playlist_id } => {
                         play_playlist(playlist_id).await?;
                     },
                     Action::Quit => STATE.get().unwrap().read().await.quit(),
-                    Action::SkipTo { num } => skip_to(num).await?,
-                    Action::SkipToById { track_id } => skip_to_by_id(track_id).await?
+                    Action::SkipTo { num } => {
+                        skip_to(num).await?;
+                    },
+                    Action::SkipToById { track_id } => {
+                        skip_to_by_id(track_id).await?;
+                    },
+                    Action::Search { query } => {
+                       search(&query).await;
+                    }
+                    Action::FetchArtistAlbums {artist_id: _} => {}
+                    Action::FetchPlaylistTracks{playlist_id: _} => {}
                 }
             }
             Some(msg) = messages.next() => {
@@ -724,9 +783,7 @@ pub async fn player_loop() -> Result<()> {
                             state.set_target_status(GstState::Paused);
                             drop(state);
 
-                            pause(true).await?;
-
-                            skip(SkipDirection::Backward, Some(0)).await?;
+                            skip(SkipDirection::Backward, Some(1)).await?;
                         }
                     },
                     MessageView::AsyncDone(msg) => {
@@ -739,12 +796,7 @@ pub async fn player_loop() -> Result<()> {
                             ClockTime::default().into()
                         };
 
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { position }).await?;
-
-                        if IS_SKIPPING.load(Ordering::Relaxed) {
-                            PLAYBIN.set_property("instant-uri", false);
-                            IS_SKIPPING.store(false, Ordering::Relaxed);
-                        }
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position }).await?;
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
@@ -759,40 +811,25 @@ pub async fn player_loop() -> Result<()> {
 
                         if let Some(duration) = duration() {
                             debug!("setting track duration");
-                            let mut state = STATE.get().unwrap().write().await;
-                            state.set_duration(duration.clone());
-                            drop(state);
-
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { duration }).await?;
-                        }
-
-                        if IS_SKIPPING.load(Ordering::Relaxed) {
-                            PLAYBIN.set_property("instant-uri", false);
-                            IS_SKIPPING.store(false, Ordering::Relaxed);
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { clock: duration }).await?;
                         }
                     }
                     MessageView::Buffering(buffering) => {
-                        if STATE.get().unwrap().read().await.live() {
+                        if IS_LIVE.load(Ordering::Relaxed) {
                             debug!("stream is live, ignore buffering");
                             continue;
                         }
                         let percent = buffering.percent();
 
                         let target_status = STATE.get().unwrap().read().await.target_status();
-                        let is_buffering = STATE.get().unwrap().read().await.buffering();
 
-                        if percent < 100 && !is_paused() && !is_buffering {
+                        if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
                             pause(false).await?;
 
-                            STATE.get().unwrap().write().await.set_buffering(true);
-                        } else if percent > 99 && is_buffering && is_paused() {
+                            IS_BUFFERING.store(true, Ordering::Relaxed);
+                        } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
                             set_player_state(target_status.clone().into(), false).await?;
-                            STATE.get().unwrap().write().await.set_buffering(false);
-
-                            if IS_SKIPPING.load(Ordering::Relaxed) {
-                                PLAYBIN.set_property("instant-uri", false);
-                                IS_SKIPPING.store(false, Ordering::Relaxed);
-                            }
+                            IS_BUFFERING.store(false, Ordering::Relaxed);
                         }
 
                         if percent.rem_euclid(5) == 0 {

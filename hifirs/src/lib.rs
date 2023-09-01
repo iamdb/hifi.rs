@@ -14,6 +14,7 @@ pub mod state;
 pub mod cursive;
 #[macro_use]
 pub mod sql;
+pub mod websocket;
 
-const REFRESH_RESOLUTION: u64 = 1000;
+const REFRESH_RESOLUTION: u64 = 250;
 pub const TEST_TEMP_PATH: &str = "/tmp/hifirs_test";

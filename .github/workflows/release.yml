@@ -26,6 +26,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ runner.os }}-rust-cache-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build Web UI
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - run: "npm install && npm run build"
+        working-directory: www
       - name: Install gstreamer (ubuntu-latest)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -40,10 +46,8 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-      - name: Install cargo binstall
-        run: curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
       - name: Install Cargo Plugins
-        run: cargo binstall --force --no-confirm cargo-make cargo-insta sqlx-cli
+        run: cargo install cargo-make cargo-insta sqlx-cli
       - name: Create db file
         run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
         env: 

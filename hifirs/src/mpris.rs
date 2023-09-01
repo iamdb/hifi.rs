@@ -1,12 +1,11 @@
+use crate::qobuz::track::Track;
 use crate::{
-    player::{controls::Controls, notification::BroadcastReceiver, notification::Notification},
+    player::{self, controls::Controls, notification::Notification},
     state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::track::TrackListTrack;
 use std::collections::HashMap;
-use tokio::select;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
@@ -59,139 +58,153 @@ pub async fn init(controls: Controls) -> Connection {
     }
 }
 
-pub async fn receive_notifications(conn: Connection, mut receiver: BroadcastReceiver) {
+pub async fn receive_notifications(conn: Connection) {
+    let mut receiver = player::notify_receiver();
     let object_server = conn.object_server();
 
-    loop {
-        select! {
-            Ok(notification) = receiver.recv() => {
-                match notification {
-                    Notification::Buffering { is_buffering: _, target_status: _, percent: _ } => {
-                        let iface_ref = object_server
-                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                            .await
-                            .expect("failed to get object server");
+    while let Ok(notification) = receiver.recv().await {
+        match notification {
+            Notification::Buffering {
+                is_buffering: _,
+                target_status: _,
+                percent: _,
+            } => {
+                let iface_ref = object_server
+                    .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                    .await
+                    .expect("failed to get object server");
 
-                        iface_ref.get_mut().await
-                            .playback_status_changed(iface_ref.signal_context())
-                            .await
-                            .expect("failed to signal metadata change");
-                    },
-                    Notification::Status { status } => {
-                        let iface_ref = object_server
-                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                            .await
-                            .expect("failed to get object server");
+                iface_ref
+                    .get_mut()
+                    .await
+                    .playback_status_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
+            }
+            Notification::Status { status } => {
+                let iface_ref = object_server
+                    .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                    .await
+                    .expect("failed to get object server");
 
-                            let mut iface = iface_ref.get_mut().await;
-                            iface.status = status.clone();
+                let mut iface = iface_ref.get_mut().await;
+                iface.status = status.clone();
 
-                            match status.into() {
-                                GstState::Null => {
-                                    iface.can_play = true;
-                                    iface.can_pause = true;
-                                    iface.can_stop = false;
-                                },
-                                GstState::Paused => {
-                                    iface.can_play = true;
-                                    iface.can_pause = false;
-                                    iface.can_stop = true;
-                                },
-                                GstState::Playing => {
-                                    iface.position_ts = chrono::offset::Local::now();
-                                    iface.can_play = true;
-                                    iface.can_pause = true;
-                                    iface.can_stop = true;
-                                }
-                                _ => {
-                                    iface.can_play = true;
-                                    iface.can_pause = true;
-                                    iface.can_stop = true;
-                                }
-                            }
-
-                            iface
-                                .playback_status_changed(iface_ref.signal_context())
-                                .await
-                                .expect("failed to signal metadata change");
-                    },
-                    Notification::Position { position } => {
-                        let iface_ref = object_server
-                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                            .await
-                            .expect("failed to get object server");
-
-                        let mut iface = iface_ref.get_mut().await;
-                        let now = chrono::offset::Local::now();
-                        let diff = now.signed_duration_since(iface.position_ts);
-                        let position_secs = position.inner_clocktime().seconds();
-
-                        if diff.num_seconds() != position_secs as i64 {
-                            debug!("mpris clock drift, sending new position");
-                            iface.position_ts = chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
-
-                            MprisPlayer::seeked(
-                                iface_ref.signal_context(),
-                                position.inner_clocktime().useconds() as i64,
-                            )
-                            .await
-                            .expect("failed to send seeked signal");
-                        }
-
-                    },
-                    Notification::Duration { duration: _ } => {
-                        let iface_ref = object_server
-                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                            .await
-                            .expect("failed to get object server");
-
-                        let iface = iface_ref.get().await;
-                        iface
-                            .metadata_changed(iface_ref.signal_context())
-                            .await
-                            .expect("failed to signal metadata change");
-                    },
-                    Notification::CurrentTrackList { list } => {
-                        if let Some(current) = list.current_track() {
-                            let list_ref = object_server
-                                .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
-                                .await
-                                .expect("failed to get object server");
-
-                            let tracks = list.cursive_list().iter().map(|t| t.0.clone()).collect::<Vec<String>>();
-                            let mut list_iface = list_ref.get_mut().await;
-
-                            list_iface.track_list = list;
-
-                            MprisTrackList::track_list_replaced(list_ref.signal_context(), tracks, current.track.title).await.expect("failed to send track list replaced signal");
-                        }
-                    },
-                    Notification::CurrentTrack { track } => {
-                        let iface_ref = object_server
-                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                            .await
-                            .expect("failed to get object server");
-
-                        let mut iface = iface_ref.get_mut().await;
-
-                        iface.can_previous = track.index != 0;
-
-                        iface.can_next = !(iface.total_tracks != 0 && track.index == iface.total_tracks - 1);
-
-                        iface.total_tracks = track.total;
-                        iface.current_track = Some(track);
-
-                        iface
-                            .metadata_changed(iface_ref.signal_context())
-                            .await
-                            .expect("failed to signal metadata change");
-                    },
-                    Notification::Error { error: _ } => {
-
+                match status.into() {
+                    GstState::Null => {
+                        iface.can_play = true;
+                        iface.can_pause = true;
+                        iface.can_stop = false;
+                    }
+                    GstState::Paused => {
+                        iface.can_play = true;
+                        iface.can_pause = false;
+                        iface.can_stop = true;
+                    }
+                    GstState::Playing => {
+                        iface.position_ts = chrono::offset::Local::now();
+                        iface.can_play = true;
+                        iface.can_pause = true;
+                        iface.can_stop = true;
+                    }
+                    _ => {
+                        iface.can_play = true;
+                        iface.can_pause = true;
+                        iface.can_stop = true;
                     }
                 }
+
+                iface
+                    .playback_status_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
             }
-            else => {}
+            Notification::Position { clock } => {
+                let iface_ref = object_server
+                    .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                    .await
+                    .expect("failed to get object server");
+
+                let mut iface = iface_ref.get_mut().await;
+                let now = chrono::offset::Local::now();
+                let diff = now.signed_duration_since(iface.position_ts);
+                let position_secs = clock.inner_clocktime().seconds();
+
+                if diff.num_seconds() != position_secs as i64 {
+                    debug!("mpris clock drift, sending new position");
+                    iface.position_ts =
+                        chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
+
+                    MprisPlayer::seeked(
+                        iface_ref.signal_context(),
+                        clock.inner_clocktime().useconds() as i64,
+                    )
+                    .await
+                    .expect("failed to send seeked signal");
+                }
+            }
+            Notification::Duration { clock: _ } => {
+                let iface_ref = object_server
+                    .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                    .await
+                    .expect("failed to get object server");
+
+                let iface = iface_ref.get().await;
+                iface
+                    .metadata_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
+            }
+            Notification::CurrentTrackList { list } => {
+                if let Some(current) = list.current_track() {
+                    let list_ref = object_server
+                        .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
+                        .await
+                        .expect("failed to get object server");
+
+                    let tracks = list
+                        .cursive_list()
+                        .iter()
+                        .map(|t| t.0.clone())
+                        .collect::<Vec<String>>();
+                    let mut list_iface = list_ref.get_mut().await;
+
+                    list_iface.track_list = list;
+
+                    MprisTrackList::track_list_replaced(
+                        list_ref.signal_context(),
+                        tracks,
+                        current.title,
+                    )
+                    .await
+                    .expect("failed to send track list replaced signal");
+                }
+            }
+            Notification::CurrentTrack { track } => {
+                let iface_ref = object_server
+                    .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                    .await
+                    .expect("failed to get object server");
+
+                let mut iface = iface_ref.get_mut().await;
+
+                iface.can_previous = track.position != 0;
+
+                iface.can_next =
+                    !(iface.total_tracks != 0 && track.position == iface.total_tracks - 1);
+
+                if let Some(album) = &track.album {
+                    iface.total_tracks = album.total_tracks;
+                }
+
+                iface.current_track = Some(track);
+
+                iface
+                    .metadata_changed(iface_ref.signal_context())
+                    .await
+                    .expect("failed to signal metadata change");
+            }
+            Notification::Error { error: _ } => {}
         }
     }
 }
@@ -239,7 +252,7 @@ pub struct MprisPlayer {
     status: StatusValue,
     position: ClockValue,
     position_ts: DateTime<Local>,
-    current_track: Option<TrackListTrack>,
+    current_track: Option<Track>,
     total_tracks: usize,
     can_play: bool,
     can_pause: bool,
@@ -363,7 +376,7 @@ impl MprisTrackList {
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
-                if tracks.contains(&i.track.id.to_string()) {
+                if tracks.contains(&i.id.to_string()) {
                     Some(track_to_meta(i.clone()))
                 } else {
                     None
@@ -387,7 +400,7 @@ impl MprisTrackList {
         self.track_list
             .unplayed_tracks()
             .iter()
-            .map(|i| i.track.id.to_string())
+            .map(|i| i.id.to_string())
             .collect::<Vec<String>>()
     }
     #[dbus_interface(property, name = "CanEditTracks")]
@@ -396,49 +409,41 @@ impl MprisTrackList {
     }
 }
 
-fn track_to_meta(
-    playlist_track: TrackListTrack,
-) -> HashMap<&'static str, zvariant::Value<'static>> {
+fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value<'static>> {
     let mut meta = HashMap::new();
 
     meta.insert(
         "mpris:trackid",
         zvariant::Value::new(format!(
             "/org/hifirs/Player/TrackList/{}",
-            playlist_track.track.id
+            playlist_track.id
         )),
     );
     meta.insert(
         "xesam:title",
-        zvariant::Value::new(playlist_track.track.title.trim().to_string()),
+        zvariant::Value::new(playlist_track.title.trim().to_string()),
     );
     meta.insert(
         "xesam:trackNumber",
-        zvariant::Value::new(playlist_track.track.track_number),
+        zvariant::Value::new(playlist_track.position as i32),
     );
 
     meta.insert(
         "mpris:length",
         zvariant::Value::new(
-            ClockTime::from_seconds(playlist_track.track.duration as u64).useconds() as i64,
+            ClockTime::from_seconds(playlist_track.duration_seconds as u64).useconds() as i64,
         ),
     );
 
-    if let Some(artist) = playlist_track.track.performer {
+    if let Some(artist) = playlist_track.artist {
         meta.insert(
             "xesam:artist",
             zvariant::Value::new(artist.name.trim().to_string()),
         );
     }
 
-    let album = if let Some(album) = playlist_track.album {
-        Some(album)
-    } else {
-        playlist_track.track.album
-    };
-
-    if let Some(album) = album {
-        meta.insert("mpris:artUrl", zvariant::Value::new(album.image.large));
+    if let Some(album) = playlist_track.album {
+        meta.insert("mpris:artUrl", zvariant::Value::new(album.cover_art));
         meta.insert(
             "xesam:album",
             zvariant::Value::new(album.title.trim().to_string()),

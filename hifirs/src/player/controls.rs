@@ -1,7 +1,9 @@
 use crate::{action, action_blocking};
 use flume::{Receiver, Sender};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Action {
     Play,
     Pause,
@@ -18,6 +20,9 @@ pub enum Action {
     PlayTrack { track_id: i32 },
     PlayUri { uri: String },
     PlayPlaylist { playlist_id: i64 },
+    Search { query: String },
+    FetchArtistAlbums { artist_id: i32 },
+    FetchPlaylistTracks { playlist_id: i64 },
 }
 
 /// Provides controls for other modules to send commands
@@ -30,7 +35,7 @@ pub struct Controls {
 
 impl Controls {
     pub fn new() -> Controls {
-        let (action_tx, action_rx) = flume::bounded::<Action>(10);
+        let (action_tx, action_rx) = flume::unbounded::<Action>();
 
         Controls {
             action_rx,
@@ -48,9 +53,6 @@ impl Controls {
     }
     pub async fn play_pause(&self) {
         action!(self, Action::PlayPause);
-    }
-    pub fn play_pause_blocking(&self) {
-        action_blocking!(self, Action::PlayPause);
     }
     pub async fn stop(&self) {
         action!(self, Action::Stop);

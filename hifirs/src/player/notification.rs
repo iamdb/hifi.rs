@@ -1,14 +1,16 @@
-use hifirs_qobuz_api::client::track::TrackListTrack;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     player,
+    qobuz::track::Track,
     state::{ClockValue, StatusValue, TrackListValue},
 };
 
 pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
 pub type BroadcastSender = async_broadcast::Sender<Notification>;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub enum Notification {
     Buffering {
         is_buffering: bool,
@@ -19,16 +21,16 @@ pub enum Notification {
         status: StatusValue,
     },
     Position {
-        position: ClockValue,
+        clock: ClockValue,
     },
     Duration {
-        duration: ClockValue,
+        clock: ClockValue,
     },
     CurrentTrackList {
         list: TrackListValue,
     },
     CurrentTrack {
-        track: TrackListTrack,
+        track: Track,
     },
     Error {
         error: player::error::Error,

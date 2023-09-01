@@ -1,10 +1,13 @@
+use std::net::SocketAddr;
+
 #[cfg(target_os = "linux")]
 use crate::mpris;
 use crate::{
     cursive::{self, CursiveUI},
     player::{self},
-    qobuz::{self, SearchResults},
+    qobuz::{self},
     sql::db::{self, Database},
+    websocket,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -20,12 +23,23 @@ struct Cli {
     /// Provide a username. (overrides any database value)
     #[clap(short, long)]
     pub username: Option<String>,
+
     #[clap(short, long)]
     /// Provide a password. (overrides any database value)
     pub password: Option<String>,
-    #[clap(short, long)]
+
+    #[clap(short, long, default_value_t = false)]
     /// Quit after done playing
-    pub quit_when_done: Option<bool>,
+    pub quit_when_done: bool,
+
+    #[clap(short, long, default_value_t = false)]
+    /// Start web server with websocket API and embedded UI.
+    pub web: bool,
+
+    #[clap(long, default_value = "0.0.0.0:9888")]
+    /// Specify a different interface and port for the web server to listen on.
+    /// (default 0.0.0.0:9888)
+    pub interface: SocketAddr,
 
     #[clap(subcommand)]
     pub command: Commands,
@@ -162,23 +176,27 @@ impl From<player::error::Error> for Error {
     }
 }
 
-async fn setup_player<'s>(
+async fn setup_player(
     database: Database,
     quit_when_done: bool,
     username: Option<String>,
     password: Option<String>,
     resume: bool,
+    web: bool,
+    interface: SocketAddr,
 ) -> Result<CursiveUI, Error> {
     let client = qobuz::make_client(username, password, &database).await?;
 
     player::init(client.clone(), database, quit_when_done).await?;
 
-    let controls = player::controls();
-    let tui = CursiveUI::new(controls, client.clone());
+    let tui = CursiveUI::new(client.clone());
 
     if resume {
         tokio::spawn(async move {
-            player::resume(false).await.expect("failed to resume");
+            match player::resume(false).await {
+                Ok(_) => debug!("resume success"),
+                Err(error) => debug!("resume error {error}"),
+            }
         });
     }
 
@@ -187,15 +205,15 @@ async fn setup_player<'s>(
         let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        let notify_receiver = player::notify_receiver();
         tokio::spawn(async {
-            mpris::receive_notifications(conn, notify_receiver).await;
+            mpris::receive_notifications(conn).await;
         });
     }
 
-    let notify_receiver = player::notify_receiver();
-    tokio::spawn(async { cursive::receive_notifications(notify_receiver).await });
-
+    tokio::spawn(async { cursive::receive_notifications().await });
+    if web {
+        tokio::spawn(async move { websocket::init(interface).await });
+    }
     tokio::spawn(async { player::player_loop().await });
 
     Ok(tui)
@@ -218,21 +236,17 @@ pub async fn run() -> Result<(), Error> {
     // SETUP DATABASE
     let data = db::new().await;
 
-    let mut quit_when_done = false;
-
-    if let Some(should_quit) = cli.quit_when_done {
-        quit_when_done = should_quit;
-    }
-
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 true,
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -243,10 +257,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::Play { url } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -259,10 +275,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamTrack { track_id } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -275,10 +293,12 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamAlbum { album_id } => {
             let mut tui = setup_player(
                 data.to_owned(),
-                quit_when_done,
+                cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
                 false,
+                cli.web,
+                cli.interface,
             )
             .await?;
 
@@ -307,8 +327,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                let results =
-                    SearchResults::Albums(client.search_albums(query.clone(), limit).await?);
+                let results = client.search_albums(query.clone(), limit).await?;
 
                 output!(results, output_format);
 
@@ -320,8 +339,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client = qobuz::make_client(cli.username, cli.password, &data).await?;
-                let results =
-                    SearchResults::Artists(client.search_artists(query.clone(), limit).await?);
+                let results = client.search_artists(query.clone(), limit).await?;
 
                 output!(results, output_format);
 
