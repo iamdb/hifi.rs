@@ -1,10 +1,11 @@
 use crate::{
     qobuz::{
+        self,
         album::Album,
         playlist::Playlist,
         track::{Track, TrackStatus},
     },
-    sql::db::Database,
+    sql::db,
     state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
@@ -18,7 +19,6 @@ use tokio::sync::{
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
-    db: Database,
     client: Client,
     current_track: Option<Track>,
     tracklist: TrackListValue,
@@ -74,10 +74,7 @@ impl From<PlayerState> for SavedState {
 }
 
 impl PlayerState {
-    pub async fn play_album(
-        &mut self,
-        album_id: String,
-    ) -> (Option<Track>, Option<TrackListValue>) {
+    pub async fn play_album(&mut self, album_id: String) -> Option<Track> {
         if let Ok(album) = self.client.album(album_id.as_str()).await {
             let album: Album = album.into();
 
@@ -93,15 +90,15 @@ impl PlayerState {
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
 
-                (Some(first_track.clone()), Some(tracklist))
+                Some(first_track.clone())
             } else {
-                (None, None)
+                None
             }
         } else {
-            (None, None)
+            None
         }
     }
-    pub async fn play_track(&mut self, track_id: i32) -> (Option<Track>, Option<TrackListValue>) {
+    pub async fn play_track(&mut self, track_id: i32) -> Option<Track> {
         if let Ok(new_track) = self.client.track(track_id).await {
             let mut track: Track = new_track.into();
             track.status = TrackStatus::Playing;
@@ -118,15 +115,12 @@ impl PlayerState {
             self.set_current_track(track.clone());
             self.set_target_status(GstState::Playing);
 
-            (Some(track), Some(tracklist))
+            Some(track)
         } else {
-            (None, None)
+            None
         }
     }
-    pub async fn play_playlist(
-        &mut self,
-        playlist_id: i64,
-    ) -> (Option<Track>, Option<TrackListValue>) {
+    pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<Track> {
         if let Ok(playlist) = self.client.playlist(playlist_id).await {
             let playlist: Playlist = playlist.into();
 
@@ -138,15 +132,17 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            let first_track = tracklist.queue.front_mut().unwrap();
+            if let Some(first_track) = tracklist.queue.front_mut() {
+                self.attach_track_url(first_track).await;
+                self.set_current_track(first_track.clone());
+                self.set_target_status(GstState::Playing);
 
-            self.attach_track_url(first_track).await;
-            self.set_current_track(first_track.clone());
-            self.set_target_status(GstState::Playing);
-
-            (Some(first_track.clone()), Some(tracklist))
+                Some(first_track.clone())
+            } else {
+                None
+            }
         } else {
-            (None, None)
+            None
         }
     }
 
@@ -372,6 +368,19 @@ impl PlayerState {
         }
     }
 
+    pub async fn fetch_user_playlists(&self) -> Vec<Playlist> {
+        if let Ok(playlists) = self.client.user_playlists().await {
+            playlists
+                .playlists
+                .items
+                .into_iter()
+                .map(|p| p.into())
+                .collect::<Vec<Playlist>>()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
         self.quit_sender.subscribe()
     }
@@ -392,12 +401,15 @@ impl PlayerState {
         self.resume = false;
     }
 
-    pub fn new(client: Client, db: Database) -> Self {
+    pub async fn new(username: Option<String>, password: Option<String>) -> Self {
+        let client = qobuz::make_client(username, password)
+            .await
+            .expect("error making client");
+
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
         Self {
-            db,
             current_track: None,
             client,
             tracklist,
@@ -412,12 +424,12 @@ impl PlayerState {
     pub async fn persist(&self) {
         debug!("persisting state to database");
         if self.current_track.is_some() {
-            self.db.persist_state(self.clone()).await;
+            db::persist_state(self.clone()).await;
         }
     }
 
     pub async fn load_last_state(&mut self) -> bool {
-        if let Some(last_state) = self.db.get_last_state().await {
+        if let Some(last_state) = db::get_last_state().await {
             let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
 
             match entity_type {

@@ -23,6 +23,7 @@ pub enum Action {
     Search { query: String },
     FetchArtistAlbums { artist_id: i32 },
     FetchPlaylistTracks { playlist_id: i64 },
+    FetchUserPlaylists,
 }
 
 /// Provides controls for other modules to send commands

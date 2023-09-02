@@ -1,18 +1,18 @@
 <script>
 	export let controls;
 
-	import { playlistTracks, searchResults, artistAlbums } from '$lib/websocket';
+	import { searchResults, playlistTracks, artistAlbums, playlistTitle } from '$lib/websocket';
 	import { writable } from 'svelte/store';
 	import ListItem from './ListItem.svelte';
 	import ListAlbum from './ListAlbum.svelte';
 	import Button from './Button.svelte';
 	import List from './List.svelte';
+	import PlaylistTracks from './PlaylistTracks.svelte';
 
 	const searchTab = writable('albums');
 	const artistName = writable('');
 	const showArtistAlbums = writable(false);
 
-	const playlistTitle = writable('');
 	const showPlaylistTracks = writable(false);
 
 	const onSubmit = (e) => {
@@ -27,7 +27,7 @@
 	};
 </script>
 
-<div class="text-xl xl:text-4xl relative h-full px-4 flex flex-col">
+<div class="text-xl xl:text-4xl relative h-full px-2 lg:px-4 flex flex-col">
 	<form on:submit={onSubmit} class="flex flex-row pt-4">
 		<input
 			name="query"
@@ -37,25 +37,25 @@
 		/>
 		<Button type="submit">Search</Button>
 	</form>
-	<div class="text-xl xl:text-4xl my-4 gap-x-8 grid grid-cols-4">
+	<div class="text-2xl xl:text-4xl my-4 gap-x-8 grid grid-cols-4">
 		<button
-			class:bg-amber-700={$searchTab !== 'albums'}
-			class:bg-blue-500={$searchTab === 'albums'}
+			class:bg-yellow-800={$searchTab !== 'albums'}
+			class:bg-blue-800={$searchTab === 'albums'}
 			on:click={() => searchTab.set('albums')}>Albums</button
 		>
 		<button
-			class:bg-amber-700={$searchTab !== 'artists'}
-			class:bg-blue-500={$searchTab === 'artists'}
+			class:bg-yellow-800={$searchTab !== 'artists'}
+			class:bg-blue-800={$searchTab === 'artists'}
 			on:click={() => searchTab.set('artists')}>Artists</button
 		>
 		<button
-			class:bg-amber-700={$searchTab !== 'tracks'}
-			class:bg-blue-500={$searchTab === 'tracks'}
+			class:bg-yellow-800={$searchTab !== 'tracks'}
+			class:bg-blue-800={$searchTab === 'tracks'}
 			on:click={() => searchTab.set('tracks')}>Tracks</button
 		>
 		<button
-			class:bg-amber-700={$searchTab !== 'playlists'}
-			class:bg-blue-500={$searchTab === 'playlists'}
+			class:bg-yellow-800={$searchTab !== 'playlists'}
+			class:bg-blue-800={$searchTab === 'playlists'}
 			on:click={() => searchTab.set('playlists')}>Playlist</button
 		>
 	</div>
@@ -64,7 +64,7 @@
 			{#each $searchResults.albums as album}
 				<ListItem>
 					<button
-						class="w-full !text-left"
+						class="w-full !text-left p-4"
 						on:click|stopPropagation={() => controls.playAlbum(album.id)}
 					>
 						<ListAlbum {album} />
@@ -75,7 +75,7 @@
 			{#each $searchResults.artists as artist}
 				<ListItem>
 					<button
-						class="w-full !text-left"
+						class="w-full !text-left p-4"
 						on:click|stopPropagation={() => {
 							$artistAlbums.albums = [];
 							$artistAlbums.id = null;
@@ -92,7 +92,7 @@
 			{#each $searchResults.tracks as track}
 				<ListItem>
 					<button
-						class="w-full !text-left"
+						class="w-full !text-left p-4"
 						on:click|stopPropagation={() => controls.playTrack(track.id)}
 					>
 						<h3>{track.title}</h3>
@@ -104,7 +104,7 @@
 			{#each $searchResults.playlists as playlist}
 				<ListItem>
 					<button
-						class="w-full !text-left"
+						class="w-full !text-left p-4"
 						on:click|stopPropagation={() => {
 							$playlistTracks.tracks = [];
 							$playlistTracks.id = null;
@@ -131,7 +131,7 @@
 					{#each $artistAlbums.albums as album}
 						<ListItem>
 							<button
-								class="w-full !text-left"
+								class="w-full !text-left p-4"
 								on:click|stopPropagation={() => controls.playAlbum(album.id)}
 							>
 								<ListAlbum {album} />
@@ -144,35 +144,6 @@
 	{/if}
 
 	{#if $showPlaylistTracks}
-		<div class="absolute w-full h-full flex flex-col bg-amber-950 top-0 left-0">
-			<div class="flex flex-row items-center justify-between py-4 bg-amber-900 px-4">
-				<h2>
-					tracks in <span class="font-bold leading-none text-amber-500">{$playlistTitle}</span>
-				</h2>
-				<div class="text-2xl">
-					<button class="bg-blue-900 p-2" on:click={() => controls.playPlaylist($playlistTracks.id)}
-						>play</button
-					>
-					<button class="bg-blue-900 p-2" on:click={() => showPlaylistTracks.set(false)}
-						>close</button
-					>
-				</div>
-			</div>
-			<div class="overflow-y-scroll p-4">
-				<List>
-					{#each $playlistTracks.tracks as track}
-						<ListItem>
-							<button
-								class="w-full !text-left"
-								on:click|stopPropagation={() => controls.playTrack(track.id)}
-							>
-								<h3>{track.title}</h3>
-								<h4 class="opacity-60">{track.artist.name}</h4>
-							</button>
-						</ListItem>
-					{/each}
-				</List>
-			</div>
-		</div>
+		<PlaylistTracks {controls} {showPlaylistTracks} />
 	{/if}
 </div>

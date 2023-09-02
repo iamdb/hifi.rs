@@ -10,6 +10,7 @@ export const searchResults = writable({
   playlists: [],
   tracks: [],
 });
+export const userPlaylists = writable([])
 
 const position = writable(0);
 const duration = writable(0);
@@ -79,6 +80,7 @@ export const durationString = derived(duration, (d) => {
 
 export const artistAlbums = writable({ "id": null, albums: [] });
 export const playlistTracks = writable({ "id": null, tracks: [] });
+export const playlistTitle = writable('');
 
 export class WS {
   constructor(dev) {
@@ -97,6 +99,7 @@ export class WS {
     this.ws = new WebSocket(`ws://${this.host}/ws`);
     this.ws.onopen = () => {
       connected.set(true);
+      this.fetchUserPlaylists()
     };
 
     this.ws.onclose = () => {
@@ -109,7 +112,6 @@ export class WS {
 
     this.ws.onmessage = (message) => {
       const json = JSON.parse(message.data);
-      console.log(json)
 
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);
@@ -129,6 +131,8 @@ export class WS {
         artistAlbums.set(json.artistAlbums);
       } else if (Object.hasOwn(json, 'playlistTracks')) {
         playlistTracks.set(json.playlistTracks);
+      } else if (Object.hasOwn(json, 'userPlaylists')) {
+        userPlaylists.set(json.userPlaylists)
       }
     };
 
@@ -179,5 +183,9 @@ export class WS {
 
   fetchPlaylistTracks(playlist_id) {
     this.ws.send(JSON.stringify({ fetchPlaylistTracks: { playlist_id } }))
+  }
+
+  fetchUserPlaylists() {
+    this.ws.send(JSON.stringify({ fetchUserPlaylists: null }))
   }
 }

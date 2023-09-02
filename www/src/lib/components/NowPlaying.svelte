@@ -4,13 +4,14 @@
 	import ListItem from './ListItem.svelte';
 
 	export let controls;
-	console.log(secsToTimecode(60));
 </script>
 
-<div class="h-full p-4 flex flex-col">
-	<div class="mb-4 text-center text-xl xl:text-4xl">
-		<p>{$currentTrack.artist.name}</p>
-		<p>{$entityTitle}</p>
+<div class="h-full p-2 lg:p-4 flex flex-col">
+	<div class="mb-4 text-center">
+		<p class="text-2xl xl:text-4xl">{$entityTitle}</p>
+		{#if $listType === 'Album'}
+			<p class="text-xl xl:text-3xl opacity-60">by {$currentTrack.artist.name}</p>
+		{/if}
 	</div>
 	<List>
 		{#each $queue as track}
@@ -19,7 +20,7 @@
 					class:opacity-60={track.status === 'Played'}
 					class:text-amber-500={track.status === 'Playing'}
 					on:click|stopPropagation={() => controls.skipTo(track.position)}
-					class="flex flex-row text-left gap-x-4"
+					class="flex flex-row text-left gap-x-4 p-4 w-full"
 				>
 					{#if $listType === 'Album' || $listType === 'Track'}
 						<span class="self-start">{track.number.toString().padStart(2, '0')}</span>
