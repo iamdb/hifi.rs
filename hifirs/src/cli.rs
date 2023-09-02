@@ -6,7 +6,7 @@ use crate::{
     cursive::{self, CursiveUI},
     player::{self},
     qobuz::{self},
-    sql::db::{self, Database},
+    sql::db::{self},
     websocket,
 };
 use clap::{Parser, Subcommand};
@@ -177,7 +177,6 @@ impl From<player::error::Error> for Error {
 }
 
 async fn setup_player(
-    database: Database,
     quit_when_done: bool,
     username: Option<String>,
     password: Option<String>,
@@ -185,11 +184,9 @@ async fn setup_player(
     web: bool,
     interface: SocketAddr,
 ) -> Result<CursiveUI, Error> {
-    let client = qobuz::make_client(username, password, &database).await?;
+    player::init(username, password, quit_when_done).await?;
 
-    player::init(client.clone(), database, quit_when_done).await?;
-
-    let tui = CursiveUI::new(client.clone());
+    let tui = CursiveUI::new();
 
     if resume {
         tokio::spawn(async move {
@@ -233,14 +230,13 @@ pub async fn run() -> Result<(), Error> {
     // PARSE CLI ARGS
     let cli = Cli::parse();
 
-    // SETUP DATABASE
-    let data = db::new().await;
+    // INIT DB
+    db::init().await;
 
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
             let mut tui = setup_player(
-                data.to_owned(),
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -256,7 +252,6 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::Play { url } => {
             let mut tui = setup_player(
-                data.to_owned(),
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -274,7 +269,6 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::StreamTrack { track_id } => {
             let mut tui = setup_player(
-                data.to_owned(),
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -292,7 +286,6 @@ pub async fn run() -> Result<(), Error> {
         }
         Commands::StreamAlbum { album_id } => {
             let mut tui = setup_player(
-                data.to_owned(),
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -314,7 +307,7 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
                 let results = client.search_all(query, limit.unwrap_or_default()).await?;
 
                 output!(results, output_format);
@@ -326,7 +319,7 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
                 let results = client.search_albums(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -338,7 +331,7 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
                 let results = client.search_artists(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -346,28 +339,28 @@ pub async fn run() -> Result<(), Error> {
                 Ok(())
             }
             ApiCommands::Playlist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
 
                 let results = client.playlist(id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Album { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
 
                 let results = client.album(&id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Artist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
 
                 let results = client.artist(id, Some(500)).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Track { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password, &data).await?;
+                let client = qobuz::make_client(cli.username, cli.password).await?;
 
                 let results = client.track(id).await?;
                 output!(results, output_format);
@@ -375,7 +368,7 @@ pub async fn run() -> Result<(), Error> {
             }
         },
         Commands::Reset => {
-            data.clear_state().await;
+            db::clear_state().await;
             Ok(())
         }
         Commands::Config { command } => match command {
@@ -384,7 +377,7 @@ pub async fn run() -> Result<(), Error> {
                     .with_prompt("Enter your username / email")
                     .interact_text()
                 {
-                    data.set_username(username).await;
+                    db::set_username(username).await;
 
                     println!("Username saved.");
                 }
@@ -399,14 +392,14 @@ pub async fn run() -> Result<(), Error> {
 
                     debug!("saving password to database: {}", md5_pw);
 
-                    data.set_password(md5_pw).await;
+                    db::set_password(md5_pw).await;
 
                     println!("Password saved.");
                 }
                 Ok(())
             }
             ConfigCommands::DefaultQuality { quality } => {
-                data.set_default_quality(quality).await;
+                db::set_default_quality(quality).await;
 
                 println!("Default quality saved.");
 
@@ -418,7 +411,7 @@ pub async fn run() -> Result<(), Error> {
                     .interact()
                 {
                     if ok {
-                        data.clear_state().await;
+                        db::clear_state().await;
                         println!("Database cleared.");
                     }
                 }

@@ -215,6 +215,16 @@ async fn handle_connection(socket: WebSocket) {
                                         Err(error) => debug!("error sending response {}", error),
                                     }
                                 }
+                                Action::FetchUserPlaylists => {
+                                    let results = player::user_playlists().await;
+                                    match rt_sender
+                                        .send_async(json!({ "userPlaylists": results }))
+                                        .await
+                                    {
+                                        Ok(_) => {}
+                                        Err(error) => debug!("error sending response {}", error),
+                                    }
+                                }
                             }
                         };
                     }

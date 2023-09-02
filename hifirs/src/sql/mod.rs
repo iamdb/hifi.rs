@@ -3,8 +3,8 @@ pub mod db;
 
 #[macro_export]
 macro_rules! acquire {
-    ($self:ident) => {
-        $self.pool.acquire().await
+    () => {
+        POOL.get().unwrap().acquire().await
     };
 }
 

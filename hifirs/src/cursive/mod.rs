@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     player::{self, controls::Controls, notification::Notification},
-    qobuz::{album::Album, track::Track, SearchResults},
+    qobuz::SearchResults,
     state::TrackListType,
 };
 use cursive::{
@@ -28,7 +28,6 @@ use cursive::{
 };
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::api::Client;
 use once_cell::sync::{Lazy, OnceCell};
 use tokio::select;
 use tokio_stream::StreamExt;
@@ -37,7 +36,6 @@ type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
 
 static SINK: OnceCell<CursiveSender> = OnceCell::new();
 static CONTROLS: Lazy<Controls> = Lazy::new(player::controls);
-static CLIENT: OnceCell<Client> = OnceCell::new();
 
 static UNSTREAMABLE: &str = "UNSTREAMABLE";
 static ENTER_URL_OPEN: AtomicBool = AtomicBool::new(false);
@@ -47,8 +45,7 @@ pub struct CursiveUI {
 }
 
 impl CursiveUI {
-    pub fn new(client: Client) -> Self {
-        CLIENT.set(client).expect("error setting client");
+    pub fn new() -> Self {
         let mut siv = cursive::default();
 
         SINK.set(siv.cb_sink().clone()).expect("error setting sink");
@@ -250,19 +247,12 @@ impl CursiveUI {
         let mut user_playlists = SelectView::new().popup();
         user_playlists.add_item("Select Playlist", 0);
 
-        match CLIENT.get().unwrap().user_playlists().await {
-            Ok(my_playlists) => {
-                debug!("received user playlists, adding to screen");
-                my_playlists.playlists.items.iter().for_each(|p| {
-                    user_playlists.add_item(p.name.clone(), p.id);
-                });
-            }
-            Err(error) => {
-                debug!(?error);
-            }
-        }
+        let my_playlists = player::user_playlists().await;
+        my_playlists.iter().for_each(|p| {
+            user_playlists.add_item(p.title.clone(), p.id);
+        });
 
-        user_playlists.set_on_submit(move |s: &mut Cursive, item: &i64| {
+        user_playlists.set_on_submit(move |s: &mut Cursive, item: &usize| {
             if item == &0 {
                 s.call_on_name("play_button", |button: &mut Button| {
                     button.disable();
@@ -534,6 +524,12 @@ impl CursiveUI {
     }
 }
 
+impl Default for CursiveUI {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 type ResultsPanel = ScrollView<NamedView<SelectView<(i32, Option<String>)>>>;
 
 fn load_search_results(item: &str, s: &mut Cursive) {
@@ -597,7 +593,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     search_results.set_on_submit(move |s: &mut Cursive, item: &String| {
                         let layout = submit_playlist(
                             s,
-                            item.parse::<i64>().expect("failed to parse string"),
+                            item.parse::<usize>().expect("failed to parse string"),
                         );
 
                         let event_panel =
@@ -614,97 +610,86 @@ fn load_search_results(item: &str, s: &mut Cursive) {
     }
 }
 
-fn submit_playlist(_s: &mut Cursive, item: i64) -> LinearLayout {
+fn submit_playlist(_s: &mut Cursive, item: usize) -> LinearLayout {
     let mut layout = LinearLayout::vertical();
 
-    if let Ok(playlist) = block_on(async { CLIENT.get().unwrap().playlist(item).await }) {
-        if let Some(tracks) = playlist.tracks {
-            let mut list = CursiveUI::results_list("playlist_items");
-            let mut playlist_items = list.get_inner_mut().get_mut();
+    let playlist_tracks = block_on(async { player::playlist_tracks(item as i64).await });
 
-            for (i, t) in tracks.items.iter().enumerate() {
-                let mut row = StyledString::plain(format!("{:02} ", i));
-                let t: Track = t.clone().into();
+    let mut list = CursiveUI::results_list("playlist_items");
+    let mut playlist_items = list.get_inner_mut().get_mut();
 
-                row.append(t.list_item());
+    for (i, t) in playlist_tracks.iter().enumerate() {
+        let mut row = StyledString::plain(format!("{:02} ", i));
 
-                let track_id = if t.available { t.id as i32 } else { -1 };
+        row.append(t.list_item());
 
-                let value = if let Some(album) = &t.album {
-                    let album_id = if album.available {
-                        album.id.clone()
-                    } else {
-                        UNSTREAMABLE.to_string()
-                    };
+        let track_id = if t.available { t.id as i32 } else { -1 };
 
-                    (track_id, Some(album_id))
-                } else {
-                    (track_id, None)
-                };
+        let value = if let Some(album) = &t.album {
+            let album_id = if album.available {
+                album.id.clone()
+            } else {
+                UNSTREAMABLE.to_string()
+            };
 
-                playlist_items.add_item(row, value);
-            }
+            (track_id, Some(album_id))
+        } else {
+            (track_id, None)
+        };
 
-            playlist_items.set_on_submit(move |s, item| {
-                submit_track(s, item.clone());
-            });
-
-            let meta = LinearLayout::horizontal()
-                .child(Button::new("play", move |_s| {
-                    tokio::spawn(async move { CONTROLS.play_playlist(playlist.id).await });
-                }))
-                .child(
-                    TextView::new(format!("total tracks: {}", playlist.tracks_count))
-                        .h_align(HAlign::Right)
-                        .full_width(),
-                );
-
-            layout.add_child(meta);
-            layout.add_child(list);
-        }
+        playlist_items.add_item(row, value);
     }
+
+    playlist_items.set_on_submit(move |s, item| {
+        submit_track(s, item.clone());
+    });
+
+    let meta = LinearLayout::horizontal()
+        .child(Button::new("play", move |_s| {
+            tokio::spawn(async move { CONTROLS.play_playlist(item as i64).await });
+        }))
+        .child(
+            TextView::new(format!("total tracks: {}", playlist_tracks.len()))
+                .h_align(HAlign::Right)
+                .full_width(),
+        );
+
+    layout.add_child(meta);
+    layout.add_child(list);
 
     layout
 }
 
 fn submit_artist(s: &mut Cursive, item: i32) {
-    if let Ok(artist) = block_on(async { CLIENT.get().unwrap().artist(item, Some(100)).await }) {
-        if let Some(mut albums) = artist.albums {
-            albums
-                .items
-                .sort_by_key(|a| a.release_date_original.to_owned());
+    let artist_albums = block_on(async { player::artist_albums(item).await });
 
-            let mut tree = cursive::menu::Tree::new();
+    let mut tree = cursive::menu::Tree::new();
 
-            for a in albums.items {
-                let a: Album = a.into();
-
-                if !a.available {
-                    continue;
-                }
-
-                tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
-                    let id = a.id.clone();
-                    tokio::spawn(async move { CONTROLS.play_album(id).await });
-
-                    s.call_on_name(
-                        "screens",
-                        |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                            screens.set_active_screen(0);
-                        },
-                    );
-                });
-            }
-
-            let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
-
-            let events = album_list
-                .scrollable()
-                .resized(SizeConstraint::Full, SizeConstraint::Free);
-
-            s.screen_mut().add_layer(events);
+    for a in artist_albums {
+        if !a.available {
+            continue;
         }
-    };
+
+        tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
+            let id = a.id.clone();
+            tokio::spawn(async move { CONTROLS.play_album(id).await });
+
+            s.call_on_name(
+                "screens",
+                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                    screens.set_active_screen(0);
+                },
+            );
+        });
+    }
+
+    let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
+
+    let events = album_list
+        .scrollable()
+        .resized(SizeConstraint::Full, SizeConstraint::Free);
+
+    s.screen_mut().add_layer(events);
 }
 
 fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
