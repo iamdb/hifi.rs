@@ -14,6 +14,7 @@ use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
+use tokio::task::JoinHandle;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{fmt, prelude::*};
 
@@ -31,6 +32,10 @@ struct Cli {
     #[clap(short, long, default_value_t = false)]
     /// Quit after done playing
     pub quit_when_done: bool,
+
+    #[clap(short, long, default_value_t = false)]
+    /// Disable the TUI interface.
+    pub disable_tui: bool,
 
     #[clap(short, long, default_value_t = false)]
     /// Start web server with websocket API and embedded UI.
@@ -183,10 +188,10 @@ async fn setup_player(
     resume: bool,
     web: bool,
     interface: SocketAddr,
-) -> Result<CursiveUI, Error> {
-    player::init(username, password, quit_when_done).await?;
-
-    let tui = CursiveUI::new();
+) -> JoinHandle<Result<(), player::error::Error>> {
+    player::init(username, password, quit_when_done)
+        .await
+        .expect("failed to init player");
 
     if resume {
         tokio::spawn(async move {
@@ -211,9 +216,8 @@ async fn setup_player(
     if web {
         tokio::spawn(async move { websocket::init(interface).await });
     }
-    tokio::spawn(async { player::player_loop().await });
 
-    Ok(tui)
+    tokio::spawn(async { player::player_loop().await })
 }
 
 pub async fn run() -> Result<(), Error> {
@@ -236,7 +240,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
-            let mut tui = setup_player(
+            let join_handle = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -244,14 +248,19 @@ pub async fn run() -> Result<(), Error> {
                 cli.web,
                 cli.interface,
             )
-            .await?;
+            .await;
 
-            tui.run().await;
+            if !cli.disable_tui {
+                let mut tui = CursiveUI::new();
+                tui.run().await;
+            } else {
+                join_handle.await.expect("error joining handle")?;
+            }
 
             Ok(())
         }
         Commands::Play { url } => {
-            let mut tui = setup_player(
+            let join_handle = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -259,16 +268,21 @@ pub async fn run() -> Result<(), Error> {
                 cli.web,
                 cli.interface,
             )
-            .await?;
+            .await;
 
             player::play_uri(url).await?;
 
-            tui.run().await;
+            if !cli.disable_tui {
+                let mut tui = CursiveUI::new();
+                tui.run().await;
+            } else {
+                join_handle.await.expect("error joining handle")?;
+            }
 
             Ok(())
         }
         Commands::StreamTrack { track_id } => {
-            let mut tui = setup_player(
+            let join_handle = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -276,16 +290,21 @@ pub async fn run() -> Result<(), Error> {
                 cli.web,
                 cli.interface,
             )
-            .await?;
+            .await;
 
             player::play_track(track_id).await?;
 
-            tui.run().await;
+            if !cli.disable_tui {
+                let mut tui = CursiveUI::new();
+                tui.run().await;
+            } else {
+                join_handle.await.expect("error joining handle")?;
+            }
 
             Ok(())
         }
         Commands::StreamAlbum { album_id } => {
-            let mut tui = setup_player(
+            let join_handle = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -293,11 +312,16 @@ pub async fn run() -> Result<(), Error> {
                 cli.web,
                 cli.interface,
             )
-            .await?;
+            .await;
 
             player::play_album(album_id).await?;
 
-            tui.run().await;
+            if !cli.disable_tui {
+                let mut tui = CursiveUI::new();
+                tui.run().await;
+            } else {
+                join_handle.await.expect("error joining handle")?;
+            }
 
             Ok(())
         }
