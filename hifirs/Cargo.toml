@@ -10,7 +10,7 @@ async-broadcast = "0.5"
 chrono = "0.4"
 clap = { version = "4", features = ["derive", "env"] }
 comfy-table = "7.0"
-ctrlc = "3.0"
+ctrlc = "3.4"
 cursive = { version = "0.20", default-features = false, features = ["crossterm-backend"] } 
 dialoguer = { version = "0.10", features = ["fuzzy-select"] }
 dirs = "5"
