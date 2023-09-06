@@ -43,6 +43,8 @@ pub async fn init() {
         .expect("migration failed");
 
     POOL.set(pool).expect("error setting static pool");
+
+    create_config().await;
 }
 
 pub async fn clear_state() {
