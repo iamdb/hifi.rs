@@ -264,6 +264,21 @@ pub async fn resume(autoplay: bool) -> Result<()> {
     if state.load_last_state().await {
         state.set_resume(true);
 
+        if let Some(current_track) = state.current_track() {
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::CurrentTrack {
+                    track: current_track,
+                })
+                .await?;
+        }
+
+        let list = state.track_list();
+        BROADCAST_CHANNELS
+            .tx
+            .broadcast(Notification::CurrentTrackList { list })
+            .await?;
+
         if autoplay {
             state.set_target_status(GstState::Playing);
         } else {
@@ -361,7 +376,8 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
         if let Some(url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
-            ready(false).await?;
+            PLAYBIN.set_property("instant-uri", true);
+            ready(true).await?;
             PLAYBIN.set_property("uri", Some(url.clone()));
             set_player_state(target_status.into(), false).await?;
         }
@@ -520,6 +536,7 @@ async fn prep_next_track() -> Result<()> {
 
         debug!("received new track, adding to player");
         if let Some(next_playlist_track_url) = &next_track.track_url {
+            PLAYBIN.set_property("instant-uri", false);
             PLAYBIN.set_property("uri", Some(next_playlist_track_url.clone()));
         }
     } else {
@@ -759,7 +776,9 @@ pub async fn player_loop() -> Result<()> {
                             ClockTime::default().into()
                         };
 
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position }).await?;
+                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position.clone() }).await?;
+
+                        STATE.get().unwrap().write().await.set_position(position);
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");

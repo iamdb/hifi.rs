@@ -203,7 +203,7 @@ impl TrackListValue {
         self.queue.clear();
     }
 
-    #[instrument(skip(self))]
+    #[instrument(skip(self, album), fields(album_id = album.id))]
     pub fn set_album(&mut self, album: Album) {
         debug!("setting tracklist album");
         self.album = Some(album);

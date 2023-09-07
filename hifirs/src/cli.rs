@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 #[cfg(target_os = "linux")]
 use crate::mpris;
@@ -7,7 +7,7 @@ use crate::{
     player::{self},
     qobuz::{self},
     sql::db::{self},
-    websocket,
+    wait, websocket,
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
@@ -31,6 +31,10 @@ struct Cli {
     #[clap(short, long, default_value_t = false)]
     /// Quit after done playing
     pub quit_when_done: bool,
+
+    #[clap(short, long, default_value_t = false)]
+    /// Disable the TUI interface.
+    pub disable_tui: bool,
 
     #[clap(short, long, default_value_t = false)]
     /// Start web server with websocket API and embedded UI.
@@ -183,10 +187,8 @@ async fn setup_player(
     resume: bool,
     web: bool,
     interface: SocketAddr,
-) -> Result<CursiveUI, Error> {
+) -> Result<(), Error> {
     player::init(username, password, quit_when_done).await?;
-
-    let tui = CursiveUI::new();
 
     if resume {
         tokio::spawn(async move {
@@ -207,13 +209,13 @@ async fn setup_player(
         });
     }
 
-    tokio::spawn(async { cursive::receive_notifications().await });
     if web {
         tokio::spawn(async move { websocket::init(interface).await });
     }
+
     tokio::spawn(async { player::player_loop().await });
 
-    Ok(tui)
+    Ok(())
 }
 
 pub async fn run() -> Result<(), Error> {
@@ -236,7 +238,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
-            let mut tui = setup_player(
+            setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -246,12 +248,12 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            tui.run().await;
+            wait!(cli.disable_tui);
 
             Ok(())
         }
         Commands::Play { url } => {
-            let mut tui = setup_player(
+            setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -263,12 +265,12 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_uri(url).await?;
 
-            tui.run().await;
+            wait!(cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamTrack { track_id } => {
-            let mut tui = setup_player(
+            setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -280,12 +282,12 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_track(track_id).await?;
 
-            tui.run().await;
+            wait!(cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamAlbum { album_id } => {
-            let mut tui = setup_player(
+            setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -297,7 +299,7 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_album(album_id).await?;
 
-            tui.run().await;
+            wait!(cli.disable_tui);
 
             Ok(())
         }
@@ -423,23 +425,21 @@ pub async fn run() -> Result<(), Error> {
 
 #[macro_export]
 macro_rules! wait {
-    ($state:expr) => {
-        let mut quitter = $state.read().await.quitter();
+    ($disable_tui: expr) => {
+        if !$disable_tui {
+            let mut tui = CursiveUI::new();
+            tokio::spawn(async { cursive::receive_notifications().await });
+            tui.run().await;
+        } else {
+            debug!("waiting for ctrlc");
+            tokio::signal::ctrl_c()
+                .await
+                .expect("error waiting for ctrlc");
 
-        let state = $state.clone();
-        ctrlc::set_handler(move || {
-            state.blocking_read().quit();
-            std::process::exit(0);
-        })
-        .expect("error setting ctrlc handler");
+            debug!("ctrlc received, quitting");
+            player::controls().quit().await;
 
-        loop {
-            if let Ok(quit) = quitter.try_recv() {
-                if quit {
-                    debug!("quitting main thread");
-                    break;
-                }
-            }
+            std::thread::sleep(Duration::from_secs(1));
         }
     };
 }

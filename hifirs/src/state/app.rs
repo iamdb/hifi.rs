@@ -238,27 +238,6 @@ impl PlayerState {
         }
     }
 
-    pub async fn next_track_url(&self) -> Option<String> {
-        if let Some(current_track) = self.current_track() {
-            if let Some(next_track) = self
-                .tracklist
-                .find_track_by_index(current_track.position + 1)
-            {
-                if let Ok(track_url) = self
-                    .client
-                    .track_url(next_track.id as i32, None, None)
-                    .await
-                {
-                    return Some(track_url.url);
-                } else {
-                    return None;
-                }
-            }
-        }
-
-        None
-    }
-
     pub async fn skip_track(
         &mut self,
         index: Option<usize>,
