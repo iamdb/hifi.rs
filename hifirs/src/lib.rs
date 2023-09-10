@@ -12,6 +12,7 @@ mod qobuz;
 #[macro_use]
 pub mod state;
 pub mod cursive;
+pub mod service;
 #[macro_use]
 pub mod sql;
 pub mod websocket;

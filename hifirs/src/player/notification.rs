@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     player,
-    qobuz::track::Track,
+    service::Track,
     state::{ClockValue, StatusValue, TrackListValue},
 };
 

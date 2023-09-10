@@ -1,16 +1,11 @@
 use crate::{
-    qobuz::{
-        self,
-        album::Album,
-        playlist::Playlist,
-        track::{Track, TrackStatus},
-    },
+    qobuz,
+    service::{Album, MusicService, Playlist, SearchResults, Track, TrackStatus},
     sql::db,
     state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
 use std::{collections::VecDeque, fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
@@ -19,7 +14,7 @@ use tokio::sync::{
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
-    client: Client,
+    client: Arc<dyn MusicService>,
     current_track: Option<Track>,
     tracklist: TrackListValue,
     position: ClockValue,
@@ -75,9 +70,7 @@ impl From<PlayerState> for SavedState {
 
 impl PlayerState {
     pub async fn play_album(&mut self, album_id: String) -> Option<Track> {
-        if let Ok(album) = self.client.album(album_id.as_str()).await {
-            let album: Album = album.into();
-
+        if let Some(album) = self.client.album(album_id.as_str()).await {
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
@@ -99,8 +92,7 @@ impl PlayerState {
         }
     }
     pub async fn play_track(&mut self, track_id: i32) -> Option<Track> {
-        if let Ok(new_track) = self.client.track(track_id).await {
-            let mut track: Track = new_track.into();
+        if let Some(mut track) = self.client.track(track_id).await {
             track.status = TrackStatus::Playing;
 
             let mut queue = VecDeque::new();
@@ -121,9 +113,7 @@ impl PlayerState {
         }
     }
     pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<Track> {
-        if let Ok(playlist) = self.client.playlist(playlist_id).await {
-            let playlist: Playlist = playlist.into();
-
+        if let Some(playlist) = self.client.playlist(playlist_id).await {
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
 
             tracklist.set_playlist(playlist);
@@ -230,11 +220,11 @@ impl PlayerState {
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut Track) {
         debug!("fetching track url");
-        if let Ok(track_url) = self.client.track_url(track.id as i32, None, None).await {
+        if let Some(track_url) = self.client.track_url(track.id as i32).await {
             debug!("attaching url information to track");
-            track.track_url = Some(track_url.url);
-            track.sampling_rate = track_url.sampling_rate as f32;
-            track.bit_depth = track_url.bit_depth as usize;
+            track.track_url = Some(track_url);
+            //track.sampling_rate = track_url.sampling_rate as f32;
+            //track.bit_depth = track_url.bit_depth as usize;
         }
     }
 
@@ -281,12 +271,11 @@ impl PlayerState {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
-                        if let Ok(track_url) = self.client.track_url(t.id as i32, None, None).await
-                        {
+                        if let Some(track_url) = self.client.track_url(t.id as i32).await {
                             t.status = TrackStatus::Playing;
-                            t.track_url = Some(track_url.url);
-                            t.bit_depth = track_url.bit_depth as usize;
-                            t.sampling_rate = track_url.sampling_rate as f32;
+                            t.track_url = Some(track_url);
+                            //t.bit_depth = track_url.bit_depth as usize;
+                            //t.sampling_rate = track_url.sampling_rate as f32;
                             self.current_track = Some(t.clone());
                             current_track = Some(t.clone());
                         } else {
@@ -306,58 +295,26 @@ impl PlayerState {
         }
     }
 
-    pub async fn search_all(&self, query: &str) -> Option<SearchAllResults> {
-        match self.client.search_all(query.to_string(), 100).await {
-            Ok(results) => Some(results),
-            Err(_) => None,
+    pub async fn search_all(&self, query: &str) -> Option<SearchResults> {
+        self.client.search(query).await
+    }
+
+    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Option<Vec<Album>> {
+        match self.client.artist(artist_id).await {
+            Some(results) => results.albums,
+            None => None,
         }
     }
 
-    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Vec<Album> {
-        match self.client.artist(artist_id, None).await {
-            Ok(results) => {
-                if let Some(albums) = results.albums {
-                    albums
-                        .items
-                        .into_iter()
-                        .map(|a| a.into())
-                        .collect::<Vec<Album>>()
-                } else {
-                    Vec::new()
-                }
-            }
-            Err(_) => Vec::new(),
-        }
-    }
-
-    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Vec<Track> {
+    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Option<VecDeque<Track>> {
         match self.client.playlist(playlist_id).await {
-            Ok(results) => {
-                if let Some(tracks) = results.tracks {
-                    tracks
-                        .items
-                        .into_iter()
-                        .map(|t| t.into())
-                        .collect::<Vec<Track>>()
-                } else {
-                    Vec::new()
-                }
-            }
-            Err(_) => Vec::new(),
+            Some(results) => Some(results.tracks),
+            None => None,
         }
     }
 
-    pub async fn fetch_user_playlists(&self) -> Vec<Playlist> {
-        if let Ok(playlists) = self.client.user_playlists().await {
-            playlists
-                .playlists
-                .items
-                .into_iter()
-                .map(|p| p.into())
-                .collect::<Vec<Playlist>>()
-        } else {
-            Vec::new()
-        }
+    pub async fn fetch_user_playlists(&self) -> Option<Vec<Playlist>> {
+        self.client.user_playlists().await
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
@@ -381,9 +338,11 @@ impl PlayerState {
     }
 
     pub async fn new(username: Option<String>, password: Option<String>) -> Self {
-        let client = qobuz::make_client(username, password)
-            .await
-            .expect("error making client");
+        let client = Arc::new(
+            qobuz::make_client(username, password)
+                .await
+                .expect("error making client"),
+        );
 
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
@@ -413,9 +372,7 @@ impl PlayerState {
 
             match entity_type {
                 TrackListType::Album => {
-                    if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
-                        let album: Album = album.into();
-
+                    if let Some(album) = self.client.album(&last_state.playback_entity_id).await {
                         self.replace_list(TrackListValue::new(Some(album.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
@@ -435,7 +392,7 @@ impl PlayerState {
                     }
                 }
                 TrackListType::Playlist => {
-                    if let Ok(playlist) = self
+                    if let Some(playlist) = self
                         .client
                         .playlist(
                             last_state
@@ -445,8 +402,6 @@ impl PlayerState {
                         )
                         .await
                     {
-                        let playlist: Playlist = playlist.into();
-
                         self.replace_list(TrackListValue::new(Some(playlist.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Playlist);
                         self.tracklist.set_playlist(playlist);
@@ -469,8 +424,7 @@ impl PlayerState {
                         .playback_entity_id
                         .parse()
                         .expect("failed to parse track id");
-                    if let Ok(track) = self.client.track(track_id).await {
-                        let mut track: Track = track.into();
+                    if let Some(mut track) = self.client.track(track_id).await {
                         track.status = TrackStatus::Playing;
 
                         let mut queue = VecDeque::new();

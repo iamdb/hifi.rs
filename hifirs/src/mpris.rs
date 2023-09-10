@@ -1,6 +1,6 @@
-use crate::qobuz::track::Track;
 use crate::{
     player::{self, controls::Controls, notification::Notification},
+    service::Track,
     state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};

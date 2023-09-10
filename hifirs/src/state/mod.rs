@@ -9,11 +9,7 @@ use std::{
     ops::RangeBounds,
 };
 
-use crate::qobuz::{
-    album::Album,
-    playlist::Playlist,
-    track::{Track, TrackStatus},
-};
+use crate::service::{Album, Playlist, Track, TrackStatus};
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 #[non_exhaustive]

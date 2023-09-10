@@ -1,19 +1,8 @@
 use std::collections::VecDeque;
 
-use crate::qobuz::track::Track;
 use hifirs_qobuz_api::client::playlist::Playlist as QobuzPlaylist;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Playlist {
-    pub title: String,
-    pub duration_seconds: usize,
-    pub tracks_count: usize,
-    pub id: usize,
-    pub cover_art: Option<String>,
-    pub tracks: VecDeque<Track>,
-}
+use crate::service::{Playlist, Track};
 
 impl From<QobuzPlaylist> for Playlist {
     fn from(value: QobuzPlaylist) -> Self {

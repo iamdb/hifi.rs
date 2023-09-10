@@ -1,29 +1,7 @@
-use crate::{
-    cursive::CursiveFormat,
-    qobuz::{track::Track, Artist},
-};
-use cursive::{
-    theme::{Effect, Style},
-    utils::markup::StyledString,
-};
 use hifirs_qobuz_api::client::album::Album as QobuzAlbum;
-use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, str::FromStr};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Album {
-    pub id: String,
-    pub title: String,
-    pub artist: Artist,
-    pub release_year: usize,
-    pub hires_available: bool,
-    pub explicit: bool,
-    pub total_tracks: usize,
-    pub tracks: VecDeque<Track>,
-    pub available: bool,
-    pub cover_art: String,
-}
+use crate::service::{Album, Track};
 
 impl From<QobuzAlbum> for Album {
     fn from(value: QobuzAlbum) -> Self {
@@ -63,34 +41,5 @@ impl From<QobuzAlbum> for Album {
             tracks,
             cover_art: value.image.large,
         }
-    }
-}
-
-impl CursiveFormat for Album {
-    fn list_item(&self) -> StyledString {
-        let mut style = Style::none();
-
-        if !self.available {
-            style = style.combine(Effect::Dim).combine(Effect::Strikethrough);
-        }
-
-        let mut title = StyledString::styled(self.title.clone(), style.combine(Effect::Bold));
-
-        title.append_styled(" by ", style);
-        title.append_styled(self.artist.name.clone(), style);
-        title.append_styled(" ", style);
-
-        title.append_styled(self.release_year.to_string(), style.combine(Effect::Dim));
-        title.append_plain(" ");
-
-        if self.explicit {
-            title.append_styled("e", style.combine(Effect::Dim));
-        }
-
-        if self.hires_available {
-            title.append_styled("*", style.combine(Effect::Dim));
-        }
-
-        title
     }
 }

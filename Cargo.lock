@@ -1535,6 +1535,7 @@ name = "hifi-rs"
 version = "0.3.3"
 dependencies = [
  "async-broadcast",
+ "async-trait",
  "axum",
  "cached",
  "chrono",

@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     player::{self, controls::Controls, notification::Notification},
-    qobuz::SearchResults,
+    service::SearchResults,
     state::TrackListType,
 };
 use cursive::{

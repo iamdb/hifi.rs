@@ -4,8 +4,7 @@ use crate::{
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
     },
-    qobuz::SearchResults,
-    qobuz::{album::Album, playlist::Playlist, track::Track},
+    service::{Album, Playlist, SearchResults, Track},
     state::{
         app::{PlayerState, SafePlayerState, SkipDirection},
         ClockValue, StatusValue, TrackListValue,
@@ -23,9 +22,10 @@ use gstreamer as gst;
 use hifirs_qobuz_api::client::{self, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
+    collections::VecDeque,
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc,
     },
     time::Duration,
@@ -49,6 +49,8 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     playbin.set_property_from_str("flags", "audio+buffering");
     playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
+
+        debug!("**** {}", element.name());
 
         if element.name().contains("urisourcebin") {
             element.set_property("parse-streams", true);
@@ -121,6 +123,7 @@ static ABOUT_TO_FINISH: Lazy<AboutToFinish> = Lazy::new(|| {
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
 static IS_BUFFERING: AtomicBool = AtomicBool::new(false);
 static IS_LIVE: AtomicBool = AtomicBool::new(false);
+static SAMPLING_RATE: AtomicU32 = AtomicU32::new(0);
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -580,50 +583,67 @@ pub async fn search(query: &str) -> SearchResults {
         .search_all(query)
         .await
         .unwrap_or_default()
-        .into()
 }
 
 #[instrument]
 #[cached(size = 10, time = 600)]
 /// Fetch the albums for a specific artist.
 pub async fn artist_albums(artist_id: i32) -> Vec<Album> {
-    let mut albums = STATE
+    if let Some(mut albums) = STATE
         .get()
         .unwrap()
         .read()
         .await
         .fetch_artist_albums(artist_id)
-        .await;
+        .await
+    {
+        albums.sort_by_key(|a| a.release_year);
 
-    albums.sort_by_key(|a| a.release_year);
-
-    albums
+        albums
+    } else {
+        Vec::new()
+    }
 }
 
 #[instrument]
 #[cached(size = 10, time = 600)]
 /// Fetch the tracks for a specific playlist.
-pub async fn playlist_tracks(playlist_id: i64) -> Vec<Track> {
-    STATE
+pub async fn playlist_tracks(playlist_id: i64) -> VecDeque<Track> {
+    if let Some(tracks) = STATE
         .get()
         .unwrap()
         .read()
         .await
         .fetch_playlist_tracks(playlist_id)
         .await
+    {
+        tracks
+    } else {
+        VecDeque::new()
+    }
 }
 
 #[instrument]
 #[cached(size = 1, time = 600)]
 /// Fetch the current user's list of playlists.
 pub async fn user_playlists() -> Vec<Playlist> {
-    STATE
+    if let Some(playlists) = STATE
         .get()
         .unwrap()
         .read()
         .await
         .fetch_user_playlists()
         .await
+    {
+        playlists
+    } else {
+        Vec::new()
+    }
+}
+
+#[instrument]
+pub fn current_sampling_rate() -> u32 {
+    SAMPLING_RATE.load(Ordering::Relaxed)
 }
 
 /// Inserts the most recent position into the state at a set interval.
@@ -670,6 +690,7 @@ pub async fn player_loop() -> Result<()> {
     let mut quitter = STATE.get().unwrap().read().await.quitter();
 
     let clock_handle = tokio::spawn(async { clock_loop().await });
+    let mut last_position = 0;
 
     loop {
         select! {
@@ -776,9 +797,14 @@ pub async fn player_loop() -> Result<()> {
                             ClockTime::default().into()
                         };
 
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position.clone() }).await?;
+                        let current_seconds = position.inner_clocktime().seconds();
 
-                        STATE.get().unwrap().write().await.set_position(position);
+                        if current_seconds > 0 && last_position != current_seconds {
+                            BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position.clone() }).await?;
+                            STATE.get().unwrap().write().await.set_position(position);
+
+                            last_position = current_seconds;
+                        }
                     }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
@@ -818,6 +844,14 @@ pub async fn player_loop() -> Result<()> {
                             debug!("buffering {}%", percent);
                             BROADCAST_CHANNELS.tx.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
                         }
+                    }
+                    MessageView::StreamsSelected(selected) => {
+                        let stream = &selected.streams()[0];
+                        let caps = stream.caps().unwrap();
+
+                        let rate: u32 = caps.structure(0).unwrap().get("rate").unwrap();
+
+                        SAMPLING_RATE.store(rate, Ordering::Relaxed);
                     }
                     MessageView::StateChanged(state_changed) => {
                         let current_state = state_changed

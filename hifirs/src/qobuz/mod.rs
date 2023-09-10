@@ -1,17 +1,16 @@
 use crate::{
-    qobuz::{album::Album, playlist::Playlist, track::Track},
+    service::{Album, Artist, MusicService, Playlist, SearchResults, Track},
     sql::db::{self},
 };
+use async_trait::async_trait;
 use hifirs_qobuz_api::{
     client::{
-        api::{self, Client},
-        artist::Artist as QobuzArtist,
+        api::{self, Client as QobuzClient},
         search_results::SearchAllResults,
         AudioQuality,
     },
     Credentials,
 };
-use serde::{Deserialize, Serialize};
 
 pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
@@ -20,7 +19,72 @@ pub mod artist;
 pub mod playlist;
 pub mod track;
 
-pub async fn make_client(username: Option<String>, password: Option<String>) -> Result<Client> {
+#[async_trait]
+impl MusicService for QobuzClient {
+    async fn login(&self) {
+        self.login().await;
+    }
+
+    async fn album(&self, album_id: &str) -> Option<Album> {
+        match self.album(album_id).await {
+            Ok(album) => Some(album.into()),
+            Err(_) => None,
+        }
+    }
+
+    async fn track(&self, track_id: i32) -> Option<Track> {
+        match self.track(track_id).await {
+            Ok(track) => Some(track.into()),
+            Err(_) => None,
+        }
+    }
+
+    async fn artist(&self, artist_id: i32) -> Option<Artist> {
+        match self.artist(artist_id, None).await {
+            Ok(track) => Some(track.into()),
+            Err(_) => None,
+        }
+    }
+
+    async fn playlist(&self, playlist_id: i64) -> Option<Playlist> {
+        match self.playlist(playlist_id).await {
+            Ok(playlist) => Some(playlist.into()),
+            Err(_) => None,
+        }
+    }
+
+    async fn search(&self, query: &str) -> Option<SearchResults> {
+        match self.search_all(query.to_string(), 100).await {
+            Ok(results) => Some(results.into()),
+            Err(_) => None,
+        }
+    }
+
+    async fn track_url(&self, track_id: i32) -> Option<String> {
+        match self.track_url(track_id, None, None).await {
+            Ok(track_url) => Some(track_url.url),
+            Err(_) => None,
+        }
+    }
+
+    async fn user_playlists(&self) -> Option<Vec<Playlist>> {
+        match self.user_playlists().await {
+            Ok(up) => Some(
+                up.playlists
+                    .items
+                    .into_iter()
+                    .map(|p| p.into())
+                    .collect::<Vec<Playlist>>(),
+            ),
+            Err(_) => None,
+        }
+    }
+}
+
+pub async fn make_client(
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<QobuzClient> {
     let mut client = api::new(None, None, None, None).await?;
     if username.is_some() || password.is_some() {
         client.set_credentials(Credentials { username, password });
@@ -30,7 +94,7 @@ pub async fn make_client(username: Option<String>, password: Option<String>) -> 
 }
 
 /// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(client: &mut Client) -> Result<Client> {
+pub async fn setup_client(client: &mut QobuzClient) -> Result<QobuzClient> {
     info!("setting up the api client");
 
     if let Some(config) = db::get_config().await {
@@ -107,15 +171,6 @@ pub async fn setup_client(client: &mut Client) -> Result<Client> {
     Ok(client.clone())
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct SearchResults {
-    pub query: String,
-    pub albums: Vec<Album>,
-    pub tracks: Vec<Track>,
-    pub artists: Vec<Artist>,
-    pub playlists: Vec<Playlist>,
-}
-
 impl From<SearchAllResults> for SearchResults {
     fn from(s: SearchAllResults) -> Self {
         Self {
@@ -139,6 +194,7 @@ impl From<SearchAllResults> for SearchResults {
                 .map(|a| Artist {
                     name: a.name,
                     id: a.id as usize,
+                    albums: None,
                 })
                 .collect::<Vec<Artist>>(),
             playlists: s
@@ -147,21 +203,6 @@ impl From<SearchAllResults> for SearchResults {
                 .into_iter()
                 .map(|p| p.into())
                 .collect::<Vec<Playlist>>(),
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct Artist {
-    pub id: usize,
-    pub name: String,
-}
-
-impl From<QobuzArtist> for Artist {
-    fn from(a: QobuzArtist) -> Self {
-        Self {
-            id: a.id as usize,
-            name: a.name,
         }
     }
 }
