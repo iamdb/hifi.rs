@@ -15,8 +15,8 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, ClockTime, Element, MessageView, SeekFlags, State as GstState, StateChangeSuccess,
-    Structure,
+    prelude::*, Caps, ClockTime, Element, MessageView, SeekFlags, State as GstState,
+    StateChangeSuccess, Structure,
 };
 use gstreamer as gst;
 use hifirs_qobuz_api::client::{self, UrlType};
@@ -81,6 +81,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
         None
     });
+    playbin.add_property_deep_notify_watch(Some("caps"), true);
 
     // Connects to the `about-to-finish` signal so the player
     // can setup the next track to play. Enables gapless playback.
@@ -124,6 +125,7 @@ static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
 static IS_BUFFERING: AtomicBool = AtomicBool::new(false);
 static IS_LIVE: AtomicBool = AtomicBool::new(false);
 static SAMPLING_RATE: AtomicU32 = AtomicU32::new(0);
+static BIT_DEPTH: AtomicU32 = AtomicU32::new(0);
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -641,11 +643,6 @@ pub async fn user_playlists() -> Vec<Playlist> {
     }
 }
 
-#[instrument]
-pub fn current_sampling_rate() -> u32 {
-    SAMPLING_RATE.load(Ordering::Relaxed)
-}
-
 /// Inserts the most recent position into the state at a set interval.
 #[instrument]
 pub async fn clock_loop() {
@@ -806,9 +803,44 @@ pub async fn player_loop() -> Result<()> {
                             last_position = current_seconds;
                         }
                     }
+                    MessageView::PropertyNotify(el) => {
+                        if let Some(message) = el.structure() {
+                            let name: &str = message.get("property-name").unwrap_or_default();
+
+                            if name == "caps" {
+                                if let Ok(caps) = message.get::<&Caps>("property-value") {
+                                    if let Some(s) = caps.structure(0) {
+                                        let rate: i32 = s.get("rate").unwrap_or_default();
+                                        let width: &str = s.get("format").unwrap_or_default();
+
+                                        if rate > 0 && !width.is_empty() {
+                                            let bits: u32 = if width.contains("S24") {
+                                                24
+                                            } else {
+                                                16
+                                            };
+
+                                            debug!("setting sampling rate and bit depth: {rate} {width}");
+                                            SAMPLING_RATE.store(rate as u32, Ordering::Relaxed);
+                                            BIT_DEPTH.store(bits, Ordering::Relaxed);
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                    }
                     MessageView::StreamStart(_) => {
                         debug!("stream start");
-                        if let Some(current_track) = STATE.get().unwrap().read().await.current_track() {
+                        if let Some(mut current_track) = STATE.get().unwrap().read().await.current_track() {
+                            let rate = SAMPLING_RATE.load(Ordering::Relaxed);
+                            let bits = BIT_DEPTH.load(Ordering::Relaxed);
+
+                            if rate > 0 && bits > 0 {
+                                current_track.sampling_rate = rate as f32 / 1000.;
+                                current_track.bit_depth= bits as usize;
+                            }
+
                             BROADCAST_CHANNELS.tx
                                 .broadcast(Notification::CurrentTrack { track: current_track })
                                 .await?;
@@ -844,14 +876,6 @@ pub async fn player_loop() -> Result<()> {
                             debug!("buffering {}%", percent);
                             BROADCAST_CHANNELS.tx.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
                         }
-                    }
-                    MessageView::StreamsSelected(selected) => {
-                        let stream = &selected.streams()[0];
-                        let caps = stream.caps().unwrap();
-
-                        let rate: u32 = caps.structure(0).unwrap().get("rate").unwrap();
-
-                        SAMPLING_RATE.store(rate, Ordering::Relaxed);
                     }
                     MessageView::StateChanged(state_changed) => {
                         let current_state = state_changed
