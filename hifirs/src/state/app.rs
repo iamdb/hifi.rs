@@ -217,8 +217,6 @@ impl PlayerState {
         if let Some(track_url) = self.client.track_url(track.id as i32).await {
             debug!("attaching url information to track");
             track.track_url = Some(track_url);
-            //track.sampling_rate = track_url.sampling_rate as f32;
-            //track.bit_depth = track_url.bit_depth as usize;
         }
     }
 
@@ -268,8 +266,6 @@ impl PlayerState {
                         if let Some(track_url) = self.client.track_url(t.id as i32).await {
                             t.status = TrackStatus::Playing;
                             t.track_url = Some(track_url);
-                            //t.bit_depth = track_url.bit_depth as usize;
-                            //t.sampling_rate = track_url.sampling_rate as f32;
                             self.current_track = Some(t.clone());
                             current_track = Some(t.clone());
                         } else {
