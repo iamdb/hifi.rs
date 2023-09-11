@@ -65,6 +65,9 @@ pub async fn receive_notifications(conn: Connection) {
     loop {
         if let Ok(notification) = receiver.recv().await {
             match notification {
+                Notification::Quit => {
+                    return;
+                }
                 Notification::Buffering {
                     is_buffering: _,
                     target_status: _,

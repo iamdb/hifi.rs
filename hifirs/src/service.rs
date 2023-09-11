@@ -29,7 +29,7 @@ pub enum TrackStatus {
     Unplayable,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
     pub id: usize,
@@ -116,7 +116,7 @@ impl CursiveFormat for Track {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Album {
     pub id: String,
@@ -169,14 +169,14 @@ pub struct SearchResults {
     pub playlists: Vec<Playlist>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Artist {
     pub id: usize,
     pub name: String,
     pub albums: Option<Vec<Album>>,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Playlist {
     pub title: String,

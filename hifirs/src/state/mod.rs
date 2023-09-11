@@ -156,7 +156,7 @@ impl From<&str> for TrackListType {
 }
 
 /// A tracklist is a list of tracks.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TrackListValue {
     queue: VecDeque<Track>,
     album: Option<Album>,

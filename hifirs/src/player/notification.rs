@@ -9,7 +9,7 @@ use crate::{
 pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
 pub type BroadcastSender = async_broadcast::Sender<Notification>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum Notification {
     Buffering {
@@ -36,6 +36,7 @@ pub enum Notification {
         bitdepth: u32,
         sampling_rate: u32,
     },
+    Quit,
     Error {
         error: player::error::Error,
     },

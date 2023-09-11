@@ -758,6 +758,9 @@ pub async fn receive_notifications() {
         select! {
             Some(notification) = receiver.next() => {
                 match notification {
+                    Notification::Quit => {
+                        return;
+                    }
                     Notification::Status { status } => {
                         SINK.get()
                             .unwrap()

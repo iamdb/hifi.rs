@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 #[cfg(target_os = "linux")]
 use crate::mpris;
@@ -14,6 +14,7 @@ use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
+use tokio::task::JoinHandle;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{fmt, prelude::*};
 
@@ -187,16 +188,18 @@ async fn setup_player(
     resume: bool,
     web: bool,
     interface: SocketAddr,
-) -> Result<(), Error> {
+) -> Result<Vec<JoinHandle<()>>, Error> {
     player::init(username, password, quit_when_done).await?;
 
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+
     if resume {
-        tokio::spawn(async move {
+        handles.push(tokio::spawn(async move {
             match player::resume(false).await {
                 Ok(_) => debug!("resume success"),
                 Err(error) => debug!("resume error {error}"),
             }
-        });
+        }));
     }
 
     #[cfg(target_os = "linux")]
@@ -204,18 +207,25 @@ async fn setup_player(
         let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        tokio::spawn(async {
+        handles.push(tokio::spawn(async {
             mpris::receive_notifications(conn).await;
-        });
+        }));
     }
 
     if web {
-        tokio::spawn(async move { websocket::init(interface).await });
+        handles.push(tokio::spawn(
+            async move { websocket::init(interface).await },
+        ));
     }
 
-    tokio::spawn(async { player::player_loop().await });
+    handles.push(tokio::spawn(async {
+        match player::player_loop().await {
+            Ok(_) => debug!("player loop exited successfully"),
+            Err(error) => debug!("player loop error {error}"),
+        }
+    }));
 
-    Ok(())
+    Ok(handles)
 }
 
 pub async fn run() -> Result<(), Error> {
@@ -238,7 +248,7 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -248,12 +258,12 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::Play { url } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -265,12 +275,12 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_uri(url).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamTrack { track_id } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -282,12 +292,12 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_track(track_id).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamAlbum { album_id } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
                 cli.username.to_owned(),
                 cli.password.to_owned(),
@@ -299,7 +309,7 @@ pub async fn run() -> Result<(), Error> {
 
             player::play_album(album_id).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
@@ -425,16 +435,25 @@ pub async fn run() -> Result<(), Error> {
 
 #[macro_export]
 macro_rules! wait {
-    ($disable_tui: expr) => {
+    (mut $handles: expr, $disable_tui: expr) => {
         if !$disable_tui {
             let mut tui = CursiveUI::new();
-            tokio::spawn(async { cursive::receive_notifications().await });
+
+            $handles.push(tokio::spawn(async {
+                cursive::receive_notifications().await
+            }));
+
             tui.run().await;
 
             debug!("tui exited, quitting");
             player::controls().quit().await;
 
-            std::thread::sleep(Duration::from_millis(500));
+            for h in $handles {
+                match h.await {
+                    Ok(_) => debug!("exited"),
+                    Err(error) => debug!("{error}"),
+                };
+            }
         } else {
             debug!("waiting for ctrlc");
             tokio::signal::ctrl_c()
@@ -444,7 +463,12 @@ macro_rules! wait {
             debug!("ctrlc received, quitting");
             player::controls().quit().await;
 
-            std::thread::sleep(Duration::from_millis(500));
+            for h in $handles {
+                match h.await {
+                    Ok(_) => debug!("exited"),
+                    Err(error) => debug!("{error}"),
+                };
+            }
         }
     };
 }

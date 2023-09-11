@@ -15,7 +15,7 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
+    prelude::*, ClockTime, DebugLevel, Element, Message, MessageView, SeekFlags, State as GstState,
     StateChangeSuccess, Structure,
 };
 use gstreamer as gst;
@@ -42,6 +42,12 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     gst::init().expect("error initializing gstreamer");
+
+    #[cfg(not(debug_assertions))]
+    gst::debug_set_active(false);
+
+    #[cfg(not(debug_assertions))]
+    gst::debug_set_default_threshold(DebugLevel::None);
 
     let playbin = gst::ElementFactory::make("playbin3")
         .build()
@@ -146,39 +152,43 @@ pub async fn init(
 }
 #[instrument]
 /// Play the player.
-pub async fn play(wait: bool) -> Result<()> {
-    set_player_state(gst::State::Playing, wait).await?;
+pub async fn play() -> Result<()> {
+    set_player_state(gst::State::Playing).await?;
     Ok(())
 }
 #[instrument]
 /// Pause the player.
-pub async fn pause(wait: bool) -> Result<()> {
-    set_player_state(gst::State::Paused, wait).await?;
+pub async fn pause() -> Result<()> {
+    set_player_state(gst::State::Paused).await?;
     Ok(())
 }
 #[instrument]
 /// Ready the player.
-pub async fn ready(wait: bool) -> Result<()> {
-    set_player_state(gst::State::Ready, wait).await?;
+pub async fn ready() -> Result<()> {
+    set_player_state(gst::State::Ready).await?;
     Ok(())
 }
 #[instrument]
 /// Stop the player.
-pub async fn stop(wait: bool) -> Result<()> {
-    set_player_state(gst::State::Null, wait).await?;
+pub async fn stop() -> Result<()> {
+    set_player_state(gst::State::Null).await?;
     Ok(())
 }
 #[instrument]
 /// Sets the player to a specific state.
-pub async fn set_player_state(state: gst::State, wait: bool) -> Result<()> {
+pub async fn set_player_state(state: gst::State) -> Result<()> {
     let ret = PLAYBIN.set_state(state)?;
+
+    let mut wait = false;
 
     match ret {
         StateChangeSuccess::Success => {
             debug!("*** successful state change ***");
+            wait = false;
         }
         StateChangeSuccess::Async => {
             debug!("*** async state change ***");
+            wait = true;
         }
         StateChangeSuccess::NoPreroll => {
             debug!("*** stream is live ***");
@@ -206,10 +216,10 @@ pub async fn play_pause() -> Result<()> {
 
     if is_playing() {
         state.set_target_status(GstState::Paused);
-        pause(false).await?;
+        pause().await?;
     } else if is_paused() || is_ready() {
         state.set_target_status(GstState::Playing);
-        play(false).await?;
+        play().await?;
     }
 
     Ok(())
@@ -293,8 +303,8 @@ pub async fn resume(autoplay: bool) -> Result<()> {
             if let Some(url) = track.track_url {
                 PLAYBIN.set_property("uri", url);
 
-                ready(true).await?;
-                pause(true).await?;
+                ready().await?;
+                pause().await?;
 
                 seek(last_position, None).await?;
 
@@ -373,9 +383,7 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
     let mut state = STATE.get().unwrap().write().await;
     let target_status = state.target_status();
 
-    ready(true).await?;
-
-    PLAYBIN.set_property("instant-uri", true);
+    ready().await?;
 
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
         drop(state);
@@ -385,7 +393,7 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 
             PLAYBIN.set_property("uri", Some(url.clone()));
 
-            set_player_state(target_status.into(), false).await?;
+            set_player_state(target_status.into()).await?;
         }
     }
 
@@ -432,10 +440,8 @@ pub async fn skip_to_by_id(track_id: usize) -> Result<()> {
 #[instrument]
 /// Plays a single track.
 pub async fn play_track(track_id: i32) -> Result<()> {
-    PLAYBIN.set_property("instant-uri", true);
-
     if !is_ready() {
-        ready(true).await?;
+        ready().await?;
     }
 
     if let Some(track_url) = STATE
@@ -449,7 +455,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
         if !is_playing() {
-            play(false).await?;
+            play().await?;
         }
     }
 
@@ -458,10 +464,8 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 #[instrument]
 /// Plays a full album.
 pub async fn play_album(album_id: String) -> Result<()> {
-    PLAYBIN.set_property("instant-uri", true);
-
     if !is_ready() {
-        ready(true).await?;
+        ready().await?;
     }
 
     if let Some(track_url) = STATE
@@ -475,7 +479,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
         PLAYBIN.set_property("uri", Some(track_url));
 
         if !is_playing() {
-            play(false).await?;
+            play().await?;
         }
     }
 
@@ -484,10 +488,8 @@ pub async fn play_album(album_id: String) -> Result<()> {
 #[instrument]
 /// Plays all tracks in a playlist.
 pub async fn play_playlist(playlist_id: i64) -> Result<()> {
-    PLAYBIN.set_property("instant-uri", true);
-
     if !is_ready() {
-        ready(true).await?;
+        ready().await?;
     }
 
     if let Some(track_url) = STATE
@@ -501,7 +503,7 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
         if !is_playing() {
-            play(false).await?;
+            play().await?;
         }
     }
 
@@ -535,8 +537,6 @@ pub async fn play_uri(uri: String) -> Result<()> {
 /// In response to the about-to-finish signal,
 /// prepare the next track by downloading the stream url.
 async fn prep_next_track() -> Result<()> {
-    PLAYBIN.set_property("instant-uri", false);
-
     let mut state = STATE.get().unwrap().write().await;
 
     if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
@@ -707,22 +707,28 @@ fn broadcast_audio_quality(audio_info: &AudioInfo) {
 }
 
 async fn quit() -> Result<()> {
-    debug!("quitting player loop, exiting application");
+    debug!("stopping player");
 
     if is_playing() {
         debug!("pausing player");
-        pause(true).await?;
+        pause().await?;
     }
 
     if is_paused() {
         debug!("readying player");
-        ready(true).await?;
+        ready().await?;
     }
 
     if is_ready() {
         debug!("stopping player");
-        stop(true).await?;
+        stop().await?;
     }
+
+    BROADCAST_CHANNELS
+        .tx
+        .broadcast(Notification::Quit)
+        .await
+        .expect("error sending broadcast");
 
     Ok(())
 }
@@ -746,6 +752,7 @@ pub async fn player_loop() -> Result<()> {
                 if should_quit {
                     clock_handle.abort();
                     quit().await?;
+                    break;
                 }
             }
             Some(almost_done) = about_to_finish.next() => {
@@ -761,6 +768,8 @@ pub async fn player_loop() -> Result<()> {
             }
         }
     }
+
+    Ok(())
 }
 
 async fn handle_action(action: Action) -> Result<()> {
@@ -770,13 +779,13 @@ async fn handle_action(action: Action) -> Result<()> {
         Action::Next => {
             skip(SkipDirection::Forward, None).await?;
         }
-        Action::Pause => pause(false).await?,
-        Action::Play => play(false).await?,
+        Action::Pause => pause().await?,
+        Action::Play => play().await?,
         Action::PlayPause => play_pause().await?,
         Action::Previous => {
             skip(SkipDirection::Backward, None).await?;
         }
-        Action::Stop => stop(false).await?,
+        Action::Stop => stop().await?,
         Action::PlayAlbum { album_id } => {
             play_album(album_id).await?;
         }
@@ -879,11 +888,11 @@ async fn handle_message(msg: Message) -> Result<()> {
             let target_status = STATE.get().unwrap().read().await.target_status();
 
             if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
-                pause(false).await?;
+                pause().await?;
 
                 IS_BUFFERING.store(true, Ordering::Relaxed);
             } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
-                set_player_state(target_status.clone().into(), false).await?;
+                set_player_state(target_status.clone().into()).await?;
                 IS_BUFFERING.store(false, Ordering::Relaxed);
             }
 
@@ -934,8 +943,8 @@ async fn handle_message(msg: Message) -> Result<()> {
         }
         MessageView::ClockLost(_) => {
             debug!("clock lost, restarting playback");
-            pause(true).await?;
-            play(true).await?;
+            pause().await?;
+            play().await?;
         }
         MessageView::Error(err) => {
             BROADCAST_CHANNELS
@@ -943,9 +952,9 @@ async fn handle_message(msg: Message) -> Result<()> {
                 .broadcast(Notification::Error { error: err.into() })
                 .await?;
 
-            ready(true).await?;
-            pause(true).await?;
-            play(true).await?;
+            ready().await?;
+            pause().await?;
+            play().await?;
 
             debug!(
                 "Error from {:?}: {} ({:?})",
