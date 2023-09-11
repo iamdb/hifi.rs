@@ -15,10 +15,11 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, Caps, ClockTime, Element, MessageView, SeekFlags, State as GstState,
+    prelude::*, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
     StateChangeSuccess, Structure,
 };
 use gstreamer as gst;
+use gstreamer_audio::AudioInfo;
 use hifirs_qobuz_api::client::{self, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
@@ -49,8 +50,6 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     playbin.set_property_from_str("flags", "audio+buffering");
     playbin.connect("element-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
-
-        debug!("**** {}", element.name());
 
         if element.name().contains("urisourcebin") {
             element.set_property("parse-streams", true);
@@ -266,7 +265,7 @@ pub async fn seek(time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
 pub async fn resume(autoplay: bool) -> Result<()> {
     let mut state = STATE.get().unwrap().write().await;
 
-    if state.load_last_state().await {
+    if let Some(last_position) = state.load_last_state().await {
         state.set_resume(true);
 
         if let Some(current_track) = state.current_track() {
@@ -297,9 +296,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
                 ready(true).await?;
                 pause(true).await?;
 
-                let position = state.position();
-
-                seek(position.clone(), None).await?;
+                seek(last_position, None).await?;
 
                 return Ok(());
             } else {
@@ -375,15 +372,19 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 
     let mut state = STATE.get().unwrap().write().await;
     let target_status = state.target_status();
+
+    ready(true).await?;
+
+    PLAYBIN.set_property("instant-uri", true);
+
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
         drop(state);
 
         if let Some(url) = &next_track_to_play.track_url {
             debug!("skipping {direction} to next track");
 
-            PLAYBIN.set_property("instant-uri", true);
-            ready(true).await?;
             PLAYBIN.set_property("uri", Some(url.clone()));
+
             set_player_state(target_status.into(), false).await?;
         }
     }
@@ -431,11 +432,13 @@ pub async fn skip_to_by_id(track_id: usize) -> Result<()> {
 #[instrument]
 /// Plays a single track.
 pub async fn play_track(track_id: i32) -> Result<()> {
+    PLAYBIN.set_property("instant-uri", true);
+
     if !is_ready() {
         ready(true).await?;
     }
 
-    if let Some(track_list_track) = STATE
+    if let Some(track_url) = STATE
         .get()
         .unwrap()
         .write()
@@ -443,12 +446,10 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         .play_track(track_id)
         .await
     {
-        if let Some(track_url) = &track_list_track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url.as_str()));
+        PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
-            if !is_playing() {
-                play(false).await?;
-            }
+        if !is_playing() {
+            play(false).await?;
         }
     }
 
@@ -457,11 +458,13 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 #[instrument]
 /// Plays a full album.
 pub async fn play_album(album_id: String) -> Result<()> {
+    PLAYBIN.set_property("instant-uri", true);
+
     if !is_ready() {
         ready(true).await?;
     }
 
-    if let Some(track) = STATE
+    if let Some(track_url) = STATE
         .get()
         .unwrap()
         .write()
@@ -469,12 +472,36 @@ pub async fn play_album(album_id: String) -> Result<()> {
         .play_album(album_id)
         .await
     {
-        if let Some(track_url) = &track.track_url {
-            PLAYBIN.set_property("uri", Some(track_url));
+        PLAYBIN.set_property("uri", Some(track_url));
 
-            if !is_playing() {
-                play(false).await?;
-            }
+        if !is_playing() {
+            play(false).await?;
+        }
+    }
+
+    Ok(())
+}
+#[instrument]
+/// Plays all tracks in a playlist.
+pub async fn play_playlist(playlist_id: i64) -> Result<()> {
+    PLAYBIN.set_property("instant-uri", true);
+
+    if !is_ready() {
+        ready(true).await?;
+    }
+
+    if let Some(track_url) = STATE
+        .get()
+        .unwrap()
+        .write()
+        .await
+        .play_playlist(playlist_id)
+        .await
+    {
+        PLAYBIN.set_property("uri", Some(track_url.as_str()));
+
+        if !is_playing() {
+            play(false).await?;
         }
     }
 
@@ -505,35 +532,11 @@ pub async fn play_uri(uri: String) -> Result<()> {
     Ok(())
 }
 #[instrument]
-/// Plays all tracks in a playlist.
-pub async fn play_playlist(playlist_id: i64) -> Result<()> {
-    if !is_ready() {
-        ready(true).await?;
-    }
-
-    if let Some(first_track) = STATE
-        .get()
-        .unwrap()
-        .write()
-        .await
-        .play_playlist(playlist_id)
-        .await
-    {
-        if let Some(t) = &first_track.track_url {
-            PLAYBIN.set_property("uri", Some(t.as_str()));
-
-            if !is_playing() {
-                play(false).await?;
-            }
-        }
-    }
-
-    Ok(())
-}
-#[instrument]
 /// In response to the about-to-finish signal,
 /// prepare the next track by downloading the stream url.
 async fn prep_next_track() -> Result<()> {
+    PLAYBIN.set_property("instant-uri", false);
+
     let mut state = STATE.get().unwrap().write().await;
 
     if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
@@ -541,7 +544,6 @@ async fn prep_next_track() -> Result<()> {
 
         debug!("received new track, adding to player");
         if let Some(next_playlist_track_url) = &next_track.track_url {
-            PLAYBIN.set_property("instant-uri", false);
             PLAYBIN.set_property("uri", Some(next_playlist_track_url.clone()));
         }
     } else {
@@ -660,10 +662,6 @@ pub async fn clock_loop() {
                 {
                     last_position = position.clone();
 
-                    let mut state = STATE.get().unwrap().write().await;
-                    state.set_position(position.clone());
-                    drop(state);
-
                     BROADCAST_CHANNELS
                         .tx
                         .broadcast(Notification::Position { clock: position })
@@ -673,6 +671,60 @@ pub async fn clock_loop() {
             }
         }
     }
+}
+
+fn broadcast_audio_quality(audio_info: &AudioInfo) {
+    let bits = audio_info.depth();
+    let previous_bits = BIT_DEPTH.swap(bits, Ordering::Relaxed);
+
+    let rate = audio_info.rate();
+    let previous_rate = SAMPLING_RATE.swap(rate, Ordering::Relaxed);
+
+    if rate == 0 || bits == 0 {
+        return;
+    }
+
+    if previous_rate != rate || previous_bits != bits {
+        debug!(?bits, ?previous_bits, ?rate, ?previous_rate);
+        // debug!("updating sampling rate: {rate} kHz");
+        // SAMPLING_RATE.store(rate, Ordering::Relaxed);
+
+        // debug!("updating bit depth: {bits} bits");
+        // BIT_DEPTH.store(bits, Ordering::Relaxed);
+
+        match BROADCAST_CHANNELS
+            .tx
+            .try_broadcast(Notification::AudioQuality {
+                bitdepth: audio_info.depth(),
+                sampling_rate: audio_info.rate(),
+            }) {
+            Ok(_) => {}
+            Err(err) => {
+                debug!(?err);
+            }
+        }
+    }
+}
+
+async fn quit() -> Result<()> {
+    debug!("quitting player loop, exiting application");
+
+    if is_playing() {
+        debug!("pausing player");
+        pause(true).await?;
+    }
+
+    if is_paused() {
+        debug!("readying player");
+        ready(true).await?;
+    }
+
+    if is_ready() {
+        debug!("stopping player");
+        stop(true).await?;
+    }
+
+    Ok(())
 }
 
 /// Handles messages from GStreamer, receives player actions from external controls
@@ -687,41 +739,13 @@ pub async fn player_loop() -> Result<()> {
     let mut quitter = STATE.get().unwrap().read().await.quitter();
 
     let clock_handle = tokio::spawn(async { clock_loop().await });
-    let mut last_position = 0;
 
     loop {
         select! {
-            quit = quitter.recv() => {
-                match quit {
-                    Ok(quit) => {
-                        if quit {
-                            debug!("quitting player loop, exiting application");
-
-                            clock_handle.abort();
-
-                            if is_playing() {
-                                debug!("pausing player");
-                                pause(true).await?;
-                            }
-
-                            if is_paused() {
-                                debug!("readying player");
-                                ready(true).await?;
-                            }
-
-
-                            if is_ready() {
-                                debug!("stopping player");
-                                stop(true).await?;
-                            }
-
-                            std::process::exit(1);
-                        }
-                    },
-                    Err(_) => {
-                        debug!("quitting player loop, with error");
-                        break;
-                    },
+            Ok(should_quit)= quitter.recv() => {
+                if should_quit {
+                    clock_handle.abort();
+                    quit().await?;
                 }
             }
             Some(almost_done) = about_to_finish.next() => {
@@ -730,194 +754,207 @@ pub async fn player_loop() -> Result<()> {
                 }
             }
             Some(action) = actions.next() => {
-                match action {
-                    Action::JumpBackward => jump_backward().await?,
-                    Action::JumpForward => jump_forward().await?,
-                    Action::Next => {
-                        skip(SkipDirection::Forward,None).await?;
-                    },
-                    Action::Pause => pause(false).await?,
-                    Action::Play => play(false).await?,
-                    Action::PlayPause => play_pause().await?,
-                    Action::Previous => {
-                        skip(SkipDirection::Backward,None).await?;
-                    },
-                    Action::Stop => stop(false).await?,
-                    Action::PlayAlbum { album_id } => {
-                        play_album(album_id).await?;
-                    },
-                    Action::PlayTrack { track_id } => {
-                        play_track(track_id).await?;
-                    },
-                    Action::PlayUri { uri } => {
-                        play_uri(uri).await?;
-                    },
-                    Action::PlayPlaylist { playlist_id } => {
-                        play_playlist(playlist_id).await?;
-                    },
-                    Action::Quit => STATE.get().unwrap().read().await.quit(),
-                    Action::SkipTo { num } => {
-                        skip_to(num).await?;
-                    },
-                    Action::SkipToById { track_id } => {
-                        skip_to_by_id(track_id).await?;
-                    },
-                    Action::Search { query } => {
-                       search(&query).await;
-                    }
-                    Action::FetchArtistAlbums {artist_id: _} => {}
-                    Action::FetchPlaylistTracks{playlist_id: _} => {}
-                    Action::FetchUserPlaylists => {}
-                }
+                tokio::spawn(async { handle_action(action).await.expect("error handling action") });
             }
             Some(msg) = messages.next() => {
-                match msg.view() {
-                    MessageView::Eos(_) => {
-                        debug!("END OF STREAM");
-                        if QUIT_WHEN_DONE.load(Ordering::Relaxed) {
-                            STATE.get().unwrap().read().await.quit();
-                        } else {
-                            let mut state = STATE.get().unwrap().write().await;
-                            state.set_target_status(GstState::Paused);
-                            drop(state);
-
-                            skip(SkipDirection::Backward, Some(1)).await?;
-                        }
-                    },
-                    MessageView::AsyncDone(msg) => {
-                        debug!("ASYNC DONE");
-                        let position = if let Some(p)= msg.running_time() {
-                            p.into()
-                        } else if let Some(p) = position() {
-                            p
-                        } else {
-                            ClockTime::default().into()
-                        };
-
-                        let current_seconds = position.inner_clocktime().seconds();
-
-                        if current_seconds > 0 && last_position != current_seconds {
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Position { clock: position.clone() }).await?;
-                            STATE.get().unwrap().write().await.set_position(position);
-
-                            last_position = current_seconds;
-                        }
-                    }
-                    MessageView::PropertyNotify(el) => {
-                        if let Some(message) = el.structure() {
-                            let name: &str = message.get("property-name").unwrap_or_default();
-
-                            if name == "caps" {
-                                if let Ok(caps) = message.get::<&Caps>("property-value") {
-                                    if let Some(s) = caps.structure(0) {
-                                        let rate: i32 = s.get("rate").unwrap_or_default();
-                                        let width: &str = s.get("format").unwrap_or_default();
-
-                                        if rate > 0 && !width.is_empty() {
-                                            let bits: u32 = if width.contains("S24") {
-                                                24
-                                            } else {
-                                                16
-                                            };
-
-                                            debug!("setting sampling rate and bit depth: {rate} {width}");
-                                            SAMPLING_RATE.store(rate as u32, Ordering::Relaxed);
-                                            BIT_DEPTH.store(bits, Ordering::Relaxed);
-                                        }
-                                    }
-                                }
-                            }
-
-                        }
-                    }
-                    MessageView::StreamStart(_) => {
-                        debug!("stream start");
-                        if let Some(mut current_track) = STATE.get().unwrap().read().await.current_track() {
-                            let rate = SAMPLING_RATE.load(Ordering::Relaxed);
-                            let bits = BIT_DEPTH.load(Ordering::Relaxed);
-
-                            if rate > 0 && bits > 0 {
-                                current_track.sampling_rate = rate as f32 / 1000.;
-                                current_track.bit_depth= bits as usize;
-                            }
-
-                            BROADCAST_CHANNELS.tx
-                                .broadcast(Notification::CurrentTrack { track: current_track })
-                                .await?;
-                        }
-
-                        let list = STATE.get().unwrap().read().await.track_list();
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::CurrentTrackList{ list }).await?;
-
-                        if let Some(duration) = duration() {
-                            debug!("setting track duration");
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Duration { clock: duration }).await?;
-                        }
-                    }
-                    MessageView::Buffering(buffering) => {
-                        if IS_LIVE.load(Ordering::Relaxed) {
-                            debug!("stream is live, ignore buffering");
-                            continue;
-                        }
-                        let percent = buffering.percent();
-
-                        let target_status = STATE.get().unwrap().read().await.target_status();
-
-                        if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
-                            pause(false).await?;
-
-                            IS_BUFFERING.store(true, Ordering::Relaxed);
-                        } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
-                            set_player_state(target_status.clone().into(), false).await?;
-                            IS_BUFFERING.store(false, Ordering::Relaxed);
-                        }
-
-                        if percent.rem_euclid(5) == 0 {
-                            debug!("buffering {}%", percent);
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Buffering { is_buffering: percent < 99, target_status, percent }).await?;
-                        }
-                    }
-                    MessageView::StateChanged(state_changed) => {
-                        let current_state = state_changed
-                            .current()
-                            .to_value()
-                            .get::<GstState>()
-                            .unwrap();
-
-                        let mut state = STATE.get().unwrap().write().await;
-
-                        if state.status() != current_state.into() && state.target_status() == current_state.into() {
-                            debug!("player state changed {:?}", current_state);
-                            state.set_status(current_state.into());
-                            drop(state);
-
-                            BROADCAST_CHANNELS.tx.broadcast(Notification::Status { status: current_state.into() }).await?;
-                        }
-                    }
-                    MessageView::ClockLost(_) => {
-                        debug!("clock lost, restarting playback");
-                        pause(true).await?;
-                        play(true).await?;
-                    }
-                    MessageView::Error(err) => {
-                        BROADCAST_CHANNELS.tx.broadcast(Notification::Error { error: err.into() }).await?;
-
-                        ready(true).await?;
-                        pause(true).await?;
-                        play(true).await?;
-
-                        debug!(
-                            "Error from {:?}: {} ({:?})",
-                            err.src().map(|s| s.path_string()),
-                            err.error(),
-                            err.debug()
-                        );
-                    }
-                    _ => (),
-                }
-
+                tokio::spawn(async { handle_message(msg).await.expect("error handling message") });
             }
         }
+    }
+}
+
+async fn handle_action(action: Action) -> Result<()> {
+    match action {
+        Action::JumpBackward => jump_backward().await?,
+        Action::JumpForward => jump_forward().await?,
+        Action::Next => {
+            skip(SkipDirection::Forward, None).await?;
+        }
+        Action::Pause => pause(false).await?,
+        Action::Play => play(false).await?,
+        Action::PlayPause => play_pause().await?,
+        Action::Previous => {
+            skip(SkipDirection::Backward, None).await?;
+        }
+        Action::Stop => stop(false).await?,
+        Action::PlayAlbum { album_id } => {
+            play_album(album_id).await?;
+        }
+        Action::PlayTrack { track_id } => {
+            play_track(track_id).await?;
+        }
+        Action::PlayUri { uri } => {
+            play_uri(uri).await?;
+        }
+        Action::PlayPlaylist { playlist_id } => {
+            play_playlist(playlist_id).await?;
+        }
+        Action::Quit => STATE.get().unwrap().read().await.quit(),
+        Action::SkipTo { num } => {
+            skip_to(num).await?;
+        }
+        Action::SkipToById { track_id } => {
+            skip_to_by_id(track_id).await?;
+        }
+        Action::Search { query } => {
+            search(&query).await;
+        }
+        Action::FetchArtistAlbums { artist_id: _ } => {}
+        Action::FetchPlaylistTracks { playlist_id: _ } => {}
+        Action::FetchUserPlaylists => {}
+    }
+
+    Ok(())
+}
+
+async fn handle_message(msg: Message) -> Result<()> {
+    match msg.view() {
+        MessageView::Eos(_) => {
+            debug!("END OF STREAM");
+            if QUIT_WHEN_DONE.load(Ordering::Relaxed) {
+                STATE.get().unwrap().read().await.quit();
+            } else {
+                let mut state = STATE.get().unwrap().write().await;
+                state.set_target_status(GstState::Paused);
+                drop(state);
+
+                skip(SkipDirection::Backward, Some(1)).await?;
+            }
+        }
+        MessageView::AsyncDone(msg) => {
+            debug!("ASYNC DONE");
+            let position = if let Some(p) = msg.running_time() {
+                p
+            } else if let Some(p) = position() {
+                p.inner_clocktime()
+            } else {
+                ClockTime::default()
+            };
+
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::Position {
+                    clock: position.into(),
+                })
+                .await?;
+        }
+        MessageView::PropertyNotify(el) => {
+            let (_, prop_name, value) = el.get();
+
+            if let Some(v) = value {
+                if prop_name == "caps" {
+                    if let Ok(caps) = v.get() {
+                        if let Ok(audio_info) = gstreamer_audio::AudioInfo::from_caps(caps) {
+                            broadcast_audio_quality(&audio_info);
+                        }
+                    }
+                }
+            }
+        }
+        MessageView::StreamStart(_) => {
+            debug!("stream start");
+
+            if let Some(current_track) = STATE.get().unwrap().read().await.current_track() {
+                BROADCAST_CHANNELS
+                    .tx
+                    .broadcast(Notification::CurrentTrack {
+                        track: current_track,
+                    })
+                    .await?;
+            }
+
+            let list = STATE.get().unwrap().read().await.track_list();
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::CurrentTrackList { list })
+                .await?;
+        }
+        MessageView::Buffering(buffering) => {
+            if IS_LIVE.load(Ordering::Relaxed) {
+                debug!("stream is live, ignore buffering");
+                return Ok(());
+            }
+            let percent = buffering.percent();
+
+            let target_status = STATE.get().unwrap().read().await.target_status();
+
+            if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
+                pause(false).await?;
+
+                IS_BUFFERING.store(true, Ordering::Relaxed);
+            } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
+                set_player_state(target_status.clone().into(), false).await?;
+                IS_BUFFERING.store(false, Ordering::Relaxed);
+            }
+
+            if percent.rem_euclid(5) == 0 {
+                debug!("buffering {}%", percent);
+                BROADCAST_CHANNELS
+                    .tx
+                    .broadcast(Notification::Buffering {
+                        is_buffering: percent < 99,
+                        target_status,
+                        percent: percent as u32,
+                    })
+                    .await?;
+            }
+        }
+        MessageView::StateChanged(state_changed) => {
+            let current_state = state_changed
+                .current()
+                .to_value()
+                .get::<GstState>()
+                .unwrap();
+
+            let mut state = STATE.get().unwrap().write().await;
+
+            if state.status() != current_state.into()
+                && state.target_status() == current_state.into()
+            {
+                debug!("player state changed {:?}", current_state);
+                state.set_status(current_state.into());
+                drop(state);
+
+                BROADCAST_CHANNELS
+                    .tx
+                    .broadcast(Notification::Status {
+                        status: current_state.into(),
+                    })
+                    .await?;
+            }
+        }
+        MessageView::DurationChanged(_) => {
+            if let Some(duration) = duration() {
+                debug!("setting track duration");
+                BROADCAST_CHANNELS
+                    .tx
+                    .broadcast(Notification::Duration { clock: duration })
+                    .await?;
+            }
+        }
+        MessageView::ClockLost(_) => {
+            debug!("clock lost, restarting playback");
+            pause(true).await?;
+            play(true).await?;
+        }
+        MessageView::Error(err) => {
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::Error { error: err.into() })
+                .await?;
+
+            ready(true).await?;
+            pause(true).await?;
+            play(true).await?;
+
+            debug!(
+                "Error from {:?}: {} ({:?})",
+                err.src().map(|s| s.path_string()),
+                err.error(),
+                err.debug()
+            );
+        }
+        _ => (),
     }
 
     Ok(())

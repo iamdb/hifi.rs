@@ -1,5 +1,5 @@
 use crate::{
-    qobuz,
+    player, qobuz,
     service::{Album, MusicService, Playlist, SearchResults, Track, TrackStatus},
     sql::db,
     state::{ClockValue, StatusValue, TrackListType, TrackListValue},
@@ -17,7 +17,6 @@ pub struct PlayerState {
     client: Arc<dyn MusicService>,
     current_track: Option<Track>,
     tracklist: TrackListValue,
-    position: ClockValue,
     status: StatusValue,
     resume: bool,
     target_status: StatusValue,
@@ -41,7 +40,10 @@ impl From<PlayerState> for SavedState {
         if let Some(current_track) = state.current_track() {
             let playback_track_index = current_track.position as i64;
             let playback_track_id = current_track.id as i64;
-            let playback_position = state.position().inner_clocktime().mseconds() as i64;
+            let playback_position = player::position()
+                .unwrap_or_default()
+                .inner_clocktime()
+                .mseconds() as i64;
             let playback_entity_type = state.list_type();
             let playback_entity_id = match playback_entity_type {
                 TrackListType::Album => state.album().expect("failed to get album id").id.clone(),
@@ -69,7 +71,7 @@ impl From<PlayerState> for SavedState {
 }
 
 impl PlayerState {
-    pub async fn play_album(&mut self, album_id: String) -> Option<Track> {
+    pub async fn play_album(&mut self, album_id: String) -> Option<String> {
         if let Some(album) = self.client.album(album_id.as_str()).await {
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
@@ -83,7 +85,7 @@ impl PlayerState {
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
 
-                Some(first_track.clone())
+                first_track.track_url.clone()
             } else {
                 None
             }
@@ -91,7 +93,7 @@ impl PlayerState {
             None
         }
     }
-    pub async fn play_track(&mut self, track_id: i32) -> Option<Track> {
+    pub async fn play_track(&mut self, track_id: i32) -> Option<String> {
         if let Some(mut track) = self.client.track(track_id).await {
             track.status = TrackStatus::Playing;
 
@@ -107,12 +109,12 @@ impl PlayerState {
             self.set_current_track(track.clone());
             self.set_target_status(GstState::Playing);
 
-            Some(track)
+            track.track_url.clone()
         } else {
             None
         }
     }
-    pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<Track> {
+    pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<String> {
         if let Some(playlist) = self.client.playlist(playlist_id).await {
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
 
@@ -127,7 +129,7 @@ impl PlayerState {
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
 
-                Some(first_track.clone())
+                first_track.track_url.clone()
             } else {
                 None
             }
@@ -146,14 +148,6 @@ impl PlayerState {
 
     pub fn set_current_track(&mut self, track: Track) {
         self.current_track = Some(track);
-    }
-
-    pub fn set_position(&mut self, position: ClockValue) {
-        self.position = position;
-    }
-
-    pub fn position(&self) -> ClockValue {
-        self.position.clone()
     }
 
     pub fn set_resume(&mut self, resume: bool) {
@@ -332,7 +326,6 @@ impl PlayerState {
     pub fn reset(&mut self) {
         self.tracklist.clear();
         self.current_track = None;
-        self.position = ClockValue::default();
         self.status = gstreamer::State::Null.into();
         self.resume = false;
     }
@@ -351,7 +344,6 @@ impl PlayerState {
             current_track: None,
             client,
             tracklist,
-            position: ClockValue::default(),
             status: StatusValue(gstreamer::State::Null),
             target_status: StatusValue(gstreamer::State::Null),
             resume: false,
@@ -366,7 +358,7 @@ impl PlayerState {
         }
     }
 
-    pub async fn load_last_state(&mut self) -> bool {
+    pub async fn load_last_state(&mut self) -> Option<ClockValue> {
         if let Some(last_state) = db::get_last_state().await {
             let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
 
@@ -377,18 +369,15 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-
-                        self.set_position(position.into());
-
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position.into());
                     }
                 }
                 TrackListType::Playlist => {
@@ -406,17 +395,15 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Playlist);
                         self.tracklist.set_playlist(playlist);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-                        self.set_position(position.into());
-
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position.into());
                     }
                 }
                 TrackListType::Track => {
@@ -436,25 +423,22 @@ impl PlayerState {
                         self.replace_list(tracklist);
                         self.tracklist.set_list_type(TrackListType::Track);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-
-                        self.set_position(position.into());
-
                         self.skip_track(
                             Some(last_state.playback_track_index as usize),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position.into());
                     }
                 }
                 TrackListType::Unknown => unreachable!(),
             }
         }
 
-        false
+        None
     }
 }
 

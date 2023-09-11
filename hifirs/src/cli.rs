@@ -430,6 +430,11 @@ macro_rules! wait {
             let mut tui = CursiveUI::new();
             tokio::spawn(async { cursive::receive_notifications().await });
             tui.run().await;
+
+            debug!("tui exited, quitting");
+            player::controls().quit().await;
+
+            std::thread::sleep(Duration::from_millis(500));
         } else {
             debug!("waiting for ctrlc");
             tokio::signal::ctrl_c()
@@ -439,7 +444,7 @@ macro_rules! wait {
             debug!("ctrlc received, quitting");
             player::controls().quit().await;
 
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(500));
         }
     };
 }

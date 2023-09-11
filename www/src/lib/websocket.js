@@ -133,6 +133,14 @@ export class WS {
         playlistTracks.set(json.playlistTracks);
       } else if (Object.hasOwn(json, 'userPlaylists')) {
         userPlaylists.set(json.userPlaylists)
+      } else if (Object.hasOwn(json, 'audioQuality')) {
+        currentTrack.update((track) => {
+          if (track) {
+            track.bitDepth = json.audioQuality.bitdepth
+            track.samplingRate = json.audioQuality.sampling_rate / 1000
+          }
+          return track
+        })
       }
     };
 

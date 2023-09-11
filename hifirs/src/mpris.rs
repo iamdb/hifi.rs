@@ -206,6 +206,10 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to signal metadata change");
                 }
                 Notification::Error { error: _ } => {}
+                Notification::AudioQuality {
+                    bitdepth: _,
+                    sampling_rate: _,
+                } => {}
             }
         }
     }

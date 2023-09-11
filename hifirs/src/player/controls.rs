@@ -1,4 +1,4 @@
-use crate::{action, action_blocking};
+use crate::action;
 use flume::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 
@@ -60,9 +60,6 @@ impl Controls {
     }
     pub async fn quit(&self) {
         action!(self, Action::Quit)
-    }
-    pub fn quit_blocking(&self) {
-        action_blocking!(self, Action::Quit)
     }
     pub async fn next(&self) {
         action!(self, Action::Next);

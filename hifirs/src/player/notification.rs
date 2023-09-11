@@ -14,7 +14,7 @@ pub type BroadcastSender = async_broadcast::Sender<Notification>;
 pub enum Notification {
     Buffering {
         is_buffering: bool,
-        percent: i32,
+        percent: u32,
         target_status: StatusValue,
     },
     Status {
@@ -31,6 +31,10 @@ pub enum Notification {
     },
     CurrentTrack {
         track: Track,
+    },
+    AudioQuality {
+        bitdepth: u32,
+        sampling_rate: u32,
     },
     Error {
         error: player::error::Error,
