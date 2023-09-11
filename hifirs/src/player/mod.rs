@@ -15,7 +15,7 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, ClockTime, DebugLevel, Element, Message, MessageView, SeekFlags, State as GstState,
+    prelude::*, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
     StateChangeSuccess, Structure,
 };
 use gstreamer as gst;

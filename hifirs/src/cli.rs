@@ -450,8 +450,8 @@ macro_rules! wait {
 
             for h in $handles {
                 match h.await {
-                    Ok(_) => debug!("exited"),
-                    Err(error) => debug!("{error}"),
+                    Ok(_) => debug!("task exited"),
+                    Err(error) => debug!("task error {error}"),
                 };
             }
         } else {
@@ -465,8 +465,8 @@ macro_rules! wait {
 
             for h in $handles {
                 match h.await {
-                    Ok(_) => debug!("exited"),
-                    Err(error) => debug!("{error}"),
+                    Ok(_) => debug!("task exited"),
+                    Err(error) => debug!("task error {error}"),
                 };
             }
         }
