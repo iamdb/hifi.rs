@@ -10,7 +10,7 @@ RUN npm install && npm run build
 
 FROM rust:1-bookworm as build
 
-RUN apt-get update && apt-get install -y curl libgstreamer1.0-dev
+RUN apt-get update && apt-get install -y curl libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
 ENV PKG_CONFIG_PATH_x86_64_unknown_linux_gnu="/usr/lib/x86_64-linux-gnu/pkgconfig"
 ENV DATABASE_URL "sqlite:///tmp/data.db"
