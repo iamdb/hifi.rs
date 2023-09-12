@@ -15,11 +15,10 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
+    prelude::*, Caps, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
     StateChangeSuccess, Structure,
 };
 use gstreamer as gst;
-use gstreamer_audio::AudioInfo;
 use hifirs_qobuz_api::client::{self, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
@@ -42,12 +41,6 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     gst::init().expect("error initializing gstreamer");
-
-    #[cfg(not(debug_assertions))]
-    gst::debug_set_active(false);
-
-    #[cfg(not(debug_assertions))]
-    gst::debug_set_default_threshold(DebugLevel::None);
 
     let playbin = gst::ElementFactory::make("playbin3")
         .build()
@@ -673,39 +666,6 @@ pub async fn clock_loop() {
     }
 }
 
-fn broadcast_audio_quality(audio_info: &AudioInfo) {
-    let bits = audio_info.depth();
-    let previous_bits = BIT_DEPTH.swap(bits, Ordering::Relaxed);
-
-    let rate = audio_info.rate();
-    let previous_rate = SAMPLING_RATE.swap(rate, Ordering::Relaxed);
-
-    if rate == 0 || bits == 0 {
-        return;
-    }
-
-    if previous_rate != rate || previous_bits != bits {
-        debug!(?bits, ?previous_bits, ?rate, ?previous_rate);
-        // debug!("updating sampling rate: {rate} kHz");
-        // SAMPLING_RATE.store(rate, Ordering::Relaxed);
-
-        // debug!("updating bit depth: {bits} bits");
-        // BIT_DEPTH.store(bits, Ordering::Relaxed);
-
-        match BROADCAST_CHANNELS
-            .tx
-            .try_broadcast(Notification::AudioQuality {
-                bitdepth: audio_info.depth(),
-                sampling_rate: audio_info.rate(),
-            }) {
-            Ok(_) => {}
-            Err(err) => {
-                debug!(?err);
-            }
-        }
-    }
-}
-
 async fn quit() -> Result<()> {
     debug!("stopping player");
 
@@ -852,9 +812,40 @@ async fn handle_message(msg: Message) -> Result<()> {
 
             if let Some(v) = value {
                 if prop_name == "caps" {
-                    if let Ok(caps) = v.get() {
-                        if let Ok(audio_info) = gstreamer_audio::AudioInfo::from_caps(caps) {
-                            broadcast_audio_quality(&audio_info);
+                    if let Ok(caps) = v.get::<&Caps>() {
+                        if !caps.is_empty() {
+                            if let Some(structure) = caps.structure(0) {
+                                let rate: u32 = structure.get("rate").unwrap_or_default();
+                                let format: &str = structure.get("format").unwrap_or_default();
+                                let bits = if format.starts_with("S24") {
+                                    24_u32
+                                } else if format.starts_with("S16") {
+                                    16_u32
+                                } else {
+                                    0
+                                };
+
+                                if rate == 0 || bits == 0 {
+                                    return Ok(());
+                                }
+
+                                let previous_bits = BIT_DEPTH.swap(bits, Ordering::SeqCst);
+                                let previous_rate = SAMPLING_RATE.swap(rate, Ordering::SeqCst);
+
+                                if previous_rate != rate || previous_bits != bits {
+                                    match BROADCAST_CHANNELS.tx.try_broadcast(
+                                        Notification::AudioQuality {
+                                            bitdepth: bits,
+                                            sampling_rate: rate,
+                                        },
+                                    ) {
+                                        Ok(_) => {}
+                                        Err(err) => {
+                                            debug!(?err);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

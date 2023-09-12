@@ -18,7 +18,6 @@ enum-as-inner = "0.6"
 flume = "0.11"
 futures = "0.3"
 gstreamer = { version = "0.21", features = ["serde", "v1_20"] }
-gstreamer-audio = { version = "0.21", features = ["serde", "v1_20"] }
 md5 = "0.7.0"
 hifirs-qobuz-api = { version = "*", path = "../qobuz-api" }
 rand = "0.8"
