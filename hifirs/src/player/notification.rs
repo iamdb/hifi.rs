@@ -23,9 +23,6 @@ pub enum Notification {
     Position {
         clock: ClockValue,
     },
-    Duration {
-        clock: ClockValue,
-    },
     CurrentTrackList {
         list: TrackListValue,
     },

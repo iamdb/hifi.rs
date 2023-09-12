@@ -923,15 +923,6 @@ async fn handle_message(msg: Message) -> Result<()> {
                     .await?;
             }
         }
-        MessageView::DurationChanged(_) => {
-            if let Some(duration) = duration() {
-                debug!("setting track duration");
-                BROADCAST_CHANNELS
-                    .tx
-                    .broadcast(Notification::Duration { clock: duration })
-                    .await?;
-            }
-        }
         MessageView::ClockLost(_) => {
             debug!("clock lost, restarting playback");
             pause().await?;

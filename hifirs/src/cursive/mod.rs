@@ -803,16 +803,6 @@ pub async fn receive_notifications() {
                             }))
                             .expect("failed to send update");
                     }
-                    Notification::Duration { clock } => {
-                        SINK.get()
-                            .unwrap()
-                            .send(Box::new(move |s| {
-                                if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                    progress.set_max(clock.inner_clocktime().seconds() as usize);
-                                }
-                            }))
-                            .expect("failed to send update");
-                    }
                     Notification::CurrentTrack { track } => {
                         let lt = list_type.clone();
                         SINK.get()

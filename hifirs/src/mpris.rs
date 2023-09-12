@@ -147,18 +147,6 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to send seeked signal");
                     }
                 }
-                Notification::Duration { clock: _ } => {
-                    let iface_ref = object_server
-                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                        .await
-                        .expect("failed to get object server");
-
-                    let iface = iface_ref.get().await;
-                    iface
-                        .metadata_changed(iface_ref.signal_context())
-                        .await
-                        .expect("failed to signal metadata change");
-                }
                 Notification::CurrentTrackList { list } => {
                     if let Some(current) = list.current_track() {
                         let list_ref = object_server

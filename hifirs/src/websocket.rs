@@ -117,12 +117,6 @@ async fn handle_connection(socket: WebSocket) {
             }
         }
 
-        if let Some(duration) = player::duration() {
-            if let Ok(d) = serde_json::to_string(&Notification::Duration { clock: duration }) {
-                sender.send(Message::Text(d)).await.expect("error");
-            }
-        }
-
         if let Ok(s) = serde_json::to_string(&Notification::Status {
             status: player::current_state(),
         }) {

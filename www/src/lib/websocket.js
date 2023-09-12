@@ -71,9 +71,9 @@ export const positionString = derived(position, (p) => {
   return `${positionMinutes.toString(10).padStart(2, 0)}:${positionSeconds.toString(10).padStart(2, 0)}`
 })
 
-export const durationString = derived(duration, (d) => {
-  const durationMinutes = Math.floor(d / 1000 / 1000 / 1000 / 60);
-  const durationSeconds = Math.floor(d / 1000 / 1000 / 1000) - durationMinutes * 60;
+export const durationString = derived(currentTrack, (d) => {
+  const durationMinutes = Math.floor(d.durationSeconds / 60);
+  const durationSeconds = d.durationSeconds - durationMinutes * 60;
 
   return `${durationMinutes.toString(10).padStart(2, 0)}:${durationSeconds.toString(10).padStart(2, 0)}`
 })

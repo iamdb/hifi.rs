@@ -43,7 +43,6 @@ struct Cli {
 
     #[clap(long, default_value = "0.0.0.0:9888")]
     /// Specify a different interface and port for the web server to listen on.
-    /// (default 0.0.0.0:9888)
     pub interface: SocketAddr,
 
     #[clap(subcommand)]
@@ -69,6 +68,7 @@ enum Commands {
         #[clap(value_parser)]
         album_id: String,
     },
+    /// Retreive data from the Qobuz API
     Api {
         #[clap(subcommand)]
         command: ApiCommands,
