@@ -4,8 +4,9 @@ use sqlx::{sqlite::SqliteConnectOptions, Pool, Sqlite, SqlitePool};
 use std::path::PathBuf;
 
 use crate::{
-    acquire, get_one, query,
-    state::app::{PlayerState, SavedState},
+    acquire, get_one,
+    player::queue::controls::{PlayerState, SavedState},
+    query,
 };
 
 static POOL: OnceCell<Pool<Sqlite>> = OnceCell::new();

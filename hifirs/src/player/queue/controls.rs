@@ -1,8 +1,9 @@
 use crate::{
-    player, qobuz,
+    player,
+    player::queue::{TrackListType, TrackListValue},
+    qobuz,
     service::{Album, MusicService, Playlist, SearchResults, Track, TrackStatus},
     sql::db,
-    state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
@@ -17,9 +18,9 @@ pub struct PlayerState {
     client: Arc<dyn MusicService>,
     current_track: Option<Track>,
     tracklist: TrackListValue,
-    status: StatusValue,
+    status: GstState,
     resume: bool,
-    target_status: StatusValue,
+    target_status: GstState,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -40,10 +41,7 @@ impl From<PlayerState> for SavedState {
         if let Some(current_track) = state.current_track() {
             let playback_track_index = current_track.position as i64;
             let playback_track_id = current_track.id as i64;
-            let playback_position = player::position()
-                .unwrap_or_default()
-                .inner_clocktime()
-                .mseconds() as i64;
+            let playback_position = player::position().unwrap_or_default().mseconds() as i64;
             let playback_entity_type = state.list_type();
             let playback_entity_id = match playback_entity_type {
                 TrackListType::Album => state.album().expect("failed to get album id").id.clone(),
@@ -138,12 +136,12 @@ impl PlayerState {
         }
     }
 
-    pub fn set_status(&mut self, status: StatusValue) {
+    pub fn set_status(&mut self, status: GstState) {
         self.status = status;
     }
 
-    pub fn status(&self) -> StatusValue {
-        self.status.clone()
+    pub fn status(&self) -> GstState {
+        self.status
     }
 
     pub fn set_current_track(&mut self, track: Track) {
@@ -203,12 +201,12 @@ impl PlayerState {
         self.tracklist.set_track_status(position, status);
     }
 
-    pub fn target_status(&self) -> StatusValue {
-        self.target_status.clone()
+    pub fn target_status(&self) -> GstState {
+        self.target_status
     }
 
     pub fn set_target_status(&mut self, target: GstState) {
-        self.target_status = target.into();
+        self.target_status = target;
     }
 
     /// Attach a `TrackURL` to the given track.
@@ -322,7 +320,7 @@ impl PlayerState {
     pub fn reset(&mut self) {
         self.tracklist.clear();
         self.current_track = None;
-        self.status = gstreamer::State::Null.into();
+        self.status = gstreamer::State::Null;
         self.resume = false;
     }
 
@@ -340,8 +338,8 @@ impl PlayerState {
             current_track: None,
             client,
             tracklist,
-            status: StatusValue(gstreamer::State::Null),
-            target_status: StatusValue(gstreamer::State::Null),
+            status: gstreamer::State::Null,
+            target_status: gstreamer::State::Null,
             resume: false,
             quit_sender,
         }
@@ -354,7 +352,7 @@ impl PlayerState {
         }
     }
 
-    pub async fn load_last_state(&mut self) -> Option<ClockValue> {
+    pub async fn load_last_state(&mut self) -> Option<ClockTime> {
         if let Some(last_state) = db::get_last_state().await {
             let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
 
@@ -373,7 +371,7 @@ impl PlayerState {
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
-                        return Some(position.into());
+                        return Some(position);
                     }
                 }
                 TrackListType::Playlist => {
@@ -399,7 +397,7 @@ impl PlayerState {
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
-                        return Some(position.into());
+                        return Some(position);
                     }
                 }
                 TrackListType::Track => {
@@ -427,7 +425,7 @@ impl PlayerState {
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
-                        return Some(position.into());
+                        return Some(position);
                     }
                 }
                 TrackListType::Unknown => unreachable!(),

@@ -3,12 +3,12 @@ use crate::{
         controls::{Action, Controls},
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
+        queue::{
+            controls::{PlayerState, SafePlayerState, SkipDirection},
+            TrackListValue,
+        },
     },
     service::{Album, Playlist, SearchResults, Track},
-    state::{
-        app::{PlayerState, SafePlayerState, SkipDirection},
-        ClockValue, StatusValue, TrackListValue,
-    },
     REFRESH_RESOLUTION,
 };
 use cached::proc_macro::cached;
@@ -36,6 +36,8 @@ use tokio::{select, sync::RwLock};
 pub mod controls;
 pub mod error;
 pub mod notification;
+#[macro_use]
+pub mod queue;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -191,11 +193,8 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
 
     if wait {
         let mut interval = tokio::time::interval(Duration::from_millis(100));
-        while current_state() != state.into() {
-            debug!(
-                "waiting for player to change to {}",
-                current_state().as_str()
-            );
+        while current_state() != state {
+            debug!("waiting for player to change state");
             interval.tick().await;
         }
     }
@@ -234,33 +233,29 @@ pub fn is_ready() -> bool {
 }
 #[instrument]
 /// Current player state
-pub fn current_state() -> StatusValue {
-    PLAYBIN.current_state().into()
+pub fn current_state() -> GstState {
+    PLAYBIN.current_state()
 }
 #[instrument]
 /// Current track position.
-pub fn position() -> Option<ClockValue> {
-    PLAYBIN
-        .query_position::<ClockTime>()
-        .map(|position| position.into())
+pub fn position() -> Option<ClockTime> {
+    PLAYBIN.query_position::<ClockTime>()
 }
 #[instrument]
 /// Current track duraiton.
-pub fn duration() -> Option<ClockValue> {
-    PLAYBIN
-        .query_duration::<ClockTime>()
-        .map(|duration| duration.into())
+pub fn duration() -> Option<ClockTime> {
+    PLAYBIN.query_duration::<ClockTime>()
 }
 #[instrument]
 /// Seek to a specified time in the current track.
-pub async fn seek(time: ClockValue, flags: Option<SeekFlags>) -> Result<()> {
+pub async fn seek(time: ClockTime, flags: Option<SeekFlags>) -> Result<()> {
     let flags = if let Some(flags) = flags {
         flags
     } else {
         SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS
     };
 
-    PLAYBIN.seek_simple(flags, time.inner_clocktime())?;
+    PLAYBIN.seek_simple(flags, time)?;
     Ok(())
 }
 #[instrument]
@@ -328,9 +323,9 @@ pub async fn jump_forward() -> Result<()> {
         let next_position = current_position + ten_seconds;
 
         if next_position < duration {
-            seek(next_position.into(), None).await?;
+            seek(next_position, None).await?;
         } else {
-            seek(duration.into(), None).await?;
+            seek(duration, None).await?;
         }
     }
 
@@ -341,12 +336,12 @@ pub async fn jump_forward() -> Result<()> {
 pub async fn jump_backward() -> Result<()> {
     if let Some(current_position) = PLAYBIN.query_position::<ClockTime>() {
         if current_position.seconds() < 10 {
-            seek(ClockTime::default().into(), None).await?;
+            seek(ClockTime::default(), None).await?;
         } else {
             let ten_seconds = ClockTime::from_seconds(10);
             let seek_position = current_position - ten_seconds;
 
-            seek(seek_position.into(), None).await?;
+            seek(seek_position, None).await?;
         }
     }
 
@@ -361,12 +356,12 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
     // within a second after playing, it will skip to the previous track.
     if direction == SkipDirection::Backward {
         if let Some(current_position) = position() {
-            if current_position.inner_clocktime().seconds() > 1 && num.is_none() {
+            if current_position.seconds() > 1 && num.is_none() {
                 debug!("current track position >1s, seeking to start of track");
 
-                let zero_clock: ClockValue = ClockTime::default().into();
+                let zero_clock = ClockTime::default();
 
-                seek(zero_clock.clone(), None).await?;
+                seek(zero_clock, None).await?;
 
                 return Ok(());
             }
@@ -386,7 +381,7 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 
             PLAYBIN.set_property("uri", Some(url.clone()));
 
-            set_player_state(target_status.into()).await?;
+            set_player_state(target_status).await?;
         }
     }
 
@@ -644,16 +639,15 @@ pub async fn clock_loop() {
     debug!("starting clock loop");
 
     let mut interval = tokio::time::interval(Duration::from_millis(REFRESH_RESOLUTION));
-    let mut last_position = ClockValue::default();
+    let mut last_position = ClockTime::default();
 
     loop {
         interval.tick().await;
 
-        if current_state() == GstState::Playing.into() {
+        if current_state() == GstState::Playing {
             if let Some(position) = position() {
-                if position.inner_clocktime().seconds() != last_position.inner_clocktime().seconds()
-                {
-                    last_position = position.clone();
+                if position.seconds() != last_position.seconds() {
+                    last_position = position;
 
                     BROADCAST_CHANNELS
                         .tx
@@ -795,16 +789,14 @@ async fn handle_message(msg: Message) -> Result<()> {
             let position = if let Some(p) = msg.running_time() {
                 p
             } else if let Some(p) = position() {
-                p.inner_clocktime()
+                p
             } else {
                 ClockTime::default()
             };
 
             BROADCAST_CHANNELS
                 .tx
-                .broadcast(Notification::Position {
-                    clock: position.into(),
-                })
+                .broadcast(Notification::Position { clock: position })
                 .await?;
         }
         MessageView::PropertyNotify(el) => {
@@ -883,7 +875,7 @@ async fn handle_message(msg: Message) -> Result<()> {
 
                 IS_BUFFERING.store(true, Ordering::Relaxed);
             } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
-                set_player_state(target_status.clone().into()).await?;
+                set_player_state(target_status).await?;
                 IS_BUFFERING.store(false, Ordering::Relaxed);
             }
 
@@ -908,17 +900,15 @@ async fn handle_message(msg: Message) -> Result<()> {
 
             let mut state = STATE.get().unwrap().write().await;
 
-            if state.status() != current_state.into()
-                && state.target_status() == current_state.into()
-            {
+            if state.status() != current_state && state.target_status() == current_state {
                 debug!("player state changed {:?}", current_state);
-                state.set_status(current_state.into());
+                state.set_status(current_state);
                 drop(state);
 
                 BROADCAST_CHANNELS
                     .tx
                     .broadcast(Notification::Status {
-                        status: current_state.into(),
+                        status: current_state,
                     })
                     .await?;
             }

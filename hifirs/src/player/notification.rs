@@ -1,10 +1,7 @@
+use gstreamer::{ClockTime, State};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    player,
-    service::Track,
-    state::{ClockValue, StatusValue, TrackListValue},
-};
+use crate::{player, player::queue::TrackListValue, service::Track};
 
 pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
 pub type BroadcastSender = async_broadcast::Sender<Notification>;
@@ -15,13 +12,13 @@ pub enum Notification {
     Buffering {
         is_buffering: bool,
         percent: u32,
-        target_status: StatusValue,
+        target_status: State,
     },
     Status {
-        status: StatusValue,
+        status: State,
     },
     Position {
-        clock: ClockValue,
+        clock: ClockTime,
     },
     CurrentTrackList {
         list: TrackListValue,

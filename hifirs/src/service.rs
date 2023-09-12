@@ -1,4 +1,4 @@
-use crate::{cursive::CursiveFormat, state::TrackListType};
+use crate::{cursive::CursiveFormat, player::queue::TrackListType};
 use async_trait::async_trait;
 use cursive::{
     theme::{Effect, Style},

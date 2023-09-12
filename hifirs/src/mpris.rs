@@ -1,7 +1,6 @@
 use crate::{
-    player::{self, controls::Controls, notification::Notification},
+    player::{self, controls::Controls, notification::Notification, queue::TrackListValue},
     service::Track,
-    state::{ClockValue, StatusValue, TrackListValue},
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
@@ -19,9 +18,9 @@ pub async fn init(controls: Controls) -> Connection {
     };
     let mpris_player = MprisPlayer {
         controls: controls.clone(),
-        status: GstState::Null.into(),
+        status: GstState::Null,
         current_track: None,
-        position: ClockValue::default(),
+        position: ClockTime::default(),
         position_ts: chrono::offset::Local::now(),
         total_tracks: 0,
         can_play: true,
@@ -92,9 +91,9 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to get object server");
 
                     let mut iface = iface_ref.get_mut().await;
-                    iface.status = status.clone();
+                    iface.status = status;
 
-                    match status.into() {
+                    match status {
                         GstState::Null => {
                             iface.can_play = true;
                             iface.can_pause = true;
@@ -132,19 +131,16 @@ pub async fn receive_notifications(conn: Connection) {
                     let mut iface = iface_ref.get_mut().await;
                     let now = chrono::offset::Local::now();
                     let diff = now.signed_duration_since(iface.position_ts);
-                    let position_secs = clock.inner_clocktime().seconds();
+                    let position_secs = clock.seconds();
 
                     if diff.num_seconds() != position_secs as i64 {
                         debug!("mpris clock drift, sending new position");
                         iface.position_ts =
                             chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
 
-                        MprisPlayer::seeked(
-                            iface_ref.signal_context(),
-                            clock.inner_clocktime().useconds() as i64,
-                        )
-                        .await
-                        .expect("failed to send seeked signal");
+                        MprisPlayer::seeked(iface_ref.signal_context(), clock.useconds() as i64)
+                            .await
+                            .expect("failed to send seeked signal");
                     }
                 }
                 Notification::CurrentTrackList { list } => {
@@ -246,8 +242,8 @@ impl Mpris {
 #[derive(Debug)]
 pub struct MprisPlayer {
     controls: Controls,
-    status: StatusValue,
-    position: ClockValue,
+    status: GstState,
+    position: ClockTime,
     position_ts: DateTime<Local>,
     current_track: Option<Track>,
     total_tracks: usize,
@@ -283,7 +279,13 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> String {
-        self.status.as_str().to_string()
+        match self.status {
+            GstState::Playing => "Playing".to_string(),
+            GstState::Paused => "Paused".to_string(),
+            GstState::Null => "Stopped".to_string(),
+            GstState::VoidPending => "Stopped".to_string(),
+            GstState::Ready => "Ready".to_string(),
+        }
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -312,7 +314,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Position")]
     async fn position(&self) -> i64 {
-        self.position.inner_clocktime().useconds() as i64
+        self.position.useconds() as i64
     }
     #[dbus_interface(signal, name = "Seeked")]
     pub async fn seeked(

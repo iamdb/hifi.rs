@@ -7,9 +7,8 @@ use std::{
 };
 
 use crate::{
-    player::{self, controls::Controls, notification::Notification},
+    player::{self, controls::Controls, notification::Notification, queue::TrackListType},
     service::SearchResults,
-    state::TrackListType,
 };
 use cursive::{
     align::HAlign,
@@ -764,9 +763,9 @@ pub async fn receive_notifications() {
                     Notification::Status { status } => {
                         SINK.get()
                             .unwrap()
-                            .send(Box::new(|s| {
+                            .send(Box::new(move |s| {
                                 if let Some(mut view) = s.find_name::<TextView>("player_status") {
-                                    match status.into() {
+                                    match status {
                                         GstState::Playing => {
                                             view.set_content(format!(" {}", '\u{23f5}'));
                                         }
@@ -798,7 +797,7 @@ pub async fn receive_notifications() {
                             .unwrap()
                             .send(Box::new(move |s| {
                                 if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                    progress.set_value(clock.inner_clocktime().seconds() as usize);
+                                    progress.set_value(clock.seconds() as usize);
                                 }
                             }))
                             .expect("failed to send update");
@@ -984,7 +983,7 @@ pub async fn receive_notifications() {
                                     if is_buffering {
                                         view.set_content(format!("{}%", percent));
                                     } else {
-                                        match target_status.into() {
+                                        match target_status {
                                             GstState::Playing => {
                                                 view.set_content(format!(" {}", '\u{23f5}'));
                                             }

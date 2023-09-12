@@ -8,10 +8,8 @@ pub mod cli;
 mod mpris;
 #[macro_use]
 mod player;
-mod qobuz;
-#[macro_use]
-pub mod state;
 pub mod cursive;
+mod qobuz;
 pub mod service;
 #[macro_use]
 pub mod sql;
