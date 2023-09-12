@@ -6,11 +6,9 @@ use axum::{
     routing::get,
     Router,
 };
-use flume::Sender;
 use futures::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
 use mime_guess::{mime::HTML, MimeGuess};
-use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
 use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 use tokio::select;
@@ -18,8 +16,6 @@ use tokio::select;
 use crate::player::{self, controls::Action, notification::Notification};
 
 static SITE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../www/build");
-
-static QUIT: OnceCell<Sender<()>> = OnceCell::new();
 
 pub async fn init(binding_interface: SocketAddr) {
     let app = Router::new()
@@ -31,13 +27,21 @@ pub async fn init(binding_interface: SocketAddr) {
 
     let server = axum::Server::bind(&binding_interface).serve(app.into_make_service());
 
-    let (tx, rx) = flume::bounded(1);
+    let graceful = server.with_graceful_shutdown(async {
+        let mut broadcast_receiver = player::notify_receiver();
 
-    QUIT.set(tx).expect("error setting static");
-
-    server.with_graceful_shutdown(async {
-        rx.into_recv_async().await.ok();
+        loop {
+            if let Some(message) = broadcast_receiver.next().await {
+                if message == Notification::Quit {
+                    break;
+                }
+            }
+        }
     });
+
+    if let Err(e) = graceful.await {
+        debug!(?e)
+    }
 }
 
 async fn static_handler(req: Request<Body>) -> impl IntoResponse {
@@ -130,10 +134,6 @@ async fn handle_connection(socket: WebSocket) {
         loop {
             select! {
                 Some(message) = broadcast_receiver.next() => {
-                    if message == Notification::Quit {
-                        return;
-                    }
-
                     let json = serde_json::to_string(&message).expect("error making json");
                     match sender.send(Message::Text(json)).await {
                         Ok(()) => {}
