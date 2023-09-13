@@ -14,7 +14,7 @@ impl From<QobuzAlbum> for Album {
                 .items
                 .into_iter()
                 .enumerate()
-                .map(|(i, t)| (i as u32, t.into()))
+                .map(|(i, t)| ((i + 1) as u32, t.into()))
                 .collect::<BTreeMap<u32, Track>>()
         } else {
             BTreeMap::new()

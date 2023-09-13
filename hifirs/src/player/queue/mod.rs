@@ -47,7 +47,7 @@ where
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TrackListValue {
     #[serde(serialize_with = "serialize_btree")]
-    queue: BTreeMap<u32, Track>,
+    pub queue: BTreeMap<u32, Track>,
     album: Option<Album>,
     playlist: Option<Playlist>,
     list_type: TrackListType,

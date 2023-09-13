@@ -20,9 +20,9 @@ pub async fn init(controls: Controls) -> Connection {
         controls: controls.clone(),
         status: GstState::Null,
         current_track: None,
+        total_tracks: 0,
         position: ClockTime::default(),
         position_ts: chrono::offset::Local::now(),
-        total_tracks: 0,
         can_play: true,
         can_pause: true,
         can_stop: true,
@@ -145,6 +145,29 @@ pub async fn receive_notifications(conn: Connection) {
                 }
                 Notification::CurrentTrackList { list } => {
                     if let Some(current) = list.current_track() {
+                        let player_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                        let mut player_iface = player_ref.get_mut().await;
+
+                        player_iface.can_previous = current.position != 0;
+
+                        player_iface.can_next = !(player_iface.total_tracks != 0
+                            && current.position == player_iface.total_tracks - 1);
+
+                        if let Some(album) = &current.album {
+                            player_iface.total_tracks = album.total_tracks;
+                        }
+
+                        player_iface.current_track = Some(current.clone());
+
+                        player_iface
+                            .metadata_changed(player_ref.signal_context())
+                            .await
+                            .expect("failed to signal metadata change");
+
                         let list_ref = object_server
                             .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
                             .await
@@ -167,30 +190,6 @@ pub async fn receive_notifications(conn: Connection) {
                         .await
                         .expect("failed to send track list replaced signal");
                     }
-                }
-                Notification::CurrentTrack { track } => {
-                    let iface_ref = object_server
-                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                        .await
-                        .expect("failed to get object server");
-
-                    let mut iface = iface_ref.get_mut().await;
-
-                    iface.can_previous = track.position != 0;
-
-                    iface.can_next =
-                        !(iface.total_tracks != 0 && track.position == iface.total_tracks - 1);
-
-                    if let Some(album) = &track.album {
-                        iface.total_tracks = album.total_tracks;
-                    }
-
-                    iface.current_track = Some(track);
-
-                    iface
-                        .metadata_changed(iface_ref.signal_context())
-                        .await
-                        .expect("failed to signal metadata change");
                 }
                 Notification::Error { error: _ } => {}
                 Notification::AudioQuality {
@@ -245,8 +244,8 @@ pub struct MprisPlayer {
     status: GstState,
     position: ClockTime,
     position_ts: DateTime<Local>,
-    current_track: Option<Track>,
     total_tracks: u32,
+    current_track: Option<Track>,
     can_play: bool,
     can_pause: bool,
     can_stop: bool,

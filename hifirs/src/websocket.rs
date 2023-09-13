@@ -99,16 +99,9 @@ async fn handle_connection(socket: WebSocket) {
         debug!("spawning send task");
         let mut broadcast_receiver = player::notify_receiver();
 
-        if let Some(track) = player::current_track().await {
-            let ct = serde_json::to_string(&Notification::CurrentTrack { track })
-                .expect("error making json");
-            sender.send(Message::Text(ct)).await.expect("error");
-        }
-
         if let Ok(ct) = serde_json::to_string(&Notification::CurrentTrackList {
             list: player::current_tracklist().await,
         }) {
-            debug!(?ct);
             sender.send(Message::Text(ct)).await.expect("error");
         }
 

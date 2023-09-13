@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     player::{self, controls::Controls, notification::Notification, queue::TrackListType},
-    service::SearchResults,
+    service::{SearchResults, Track, TrackStatus},
 };
 use cursive::{
     align::HAlign,
@@ -749,9 +749,48 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
     s.screen_mut().add_layer(album_or_track);
 }
 
+fn set_current_track(s: &mut Cursive, track: &Track, lt: &TrackListType) {
+    if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (
+        s.find_name::<TextView>("current_track_number"),
+        s.find_name::<TextView>("current_track_title"),
+        s.find_name::<ProgressBar>("progress"),
+    ) {
+        match lt {
+            TrackListType::Album => {
+                track_num.set_content(format!("{:03}", track.number));
+            }
+            TrackListType::Playlist => {
+                track_num.set_content(format!("{:03}", track.position));
+            }
+            TrackListType::Track => {
+                track_num.set_content(format!("{:03}", track.number));
+            }
+            TrackListType::Unknown => {
+                track_num.set_content(format!("{:03}", track.position));
+            }
+        };
+
+        track_title.set_content(track.title.trim());
+        progress.set_max(track.duration_seconds as usize);
+    }
+
+    if let Some(artist) = &track.artist {
+        s.call_on_name("artist_name", |view: &mut TextView| {
+            view.set_content(artist.name.clone());
+        });
+    }
+
+    if let (Some(mut bit_depth), Some(mut sample_rate)) = (
+        s.find_name::<TextView>("bit_depth"),
+        s.find_name::<TextView>("sample_rate"),
+    ) {
+        bit_depth.set_content(format!("{} bits", track.bit_depth));
+        sample_rate.set_content(format!("{} kHz", track.sampling_rate));
+    }
+}
+
 pub async fn receive_notifications() {
     let mut receiver = player::notify_receiver();
-    let mut list_type = TrackListType::Unknown;
 
     loop {
         select! {
@@ -802,58 +841,7 @@ pub async fn receive_notifications() {
                             }))
                             .expect("failed to send update");
                     }
-                    Notification::CurrentTrack { track } => {
-                        let lt = list_type.clone();
-                        SINK.get()
-                            .unwrap()
-                            .send(Box::new(move |s| {
-                                if let (
-                                    Some(mut track_num),
-                                    Some(mut track_title),
-                                    Some(mut progress),
-                                ) = (
-                                    s.find_name::<TextView>("current_track_number"),
-                                    s.find_name::<TextView>("current_track_title"),
-                                    s.find_name::<ProgressBar>("progress"),
-                                ) {
-                                    match lt {
-                                        TrackListType::Album => {
-                                            track_num.set_content(format!("{:03}", track.number));
-                                        }
-                                        TrackListType::Playlist => {
-                                            track_num.set_content(format!("{:03}", track.position));
-                                        }
-                                        TrackListType::Track => {
-                                            track_num.set_content(format!("{:03}", track.number));
-                                        }
-                                        TrackListType::Unknown => {
-                                            track_num.set_content(format!("{:03}", track.position));
-                                        }
-                                    };
-
-                                    track_title.set_content(track.title.trim());
-                                    progress.set_max(track.duration_seconds as usize);
-                                }
-
-                                if let Some(artist) = track.artist {
-                                    s.call_on_name("artist_name", |view: &mut TextView| {
-                                        view.set_content(artist.name);
-                                    });
-                                }
-
-                                if let (Some(mut bit_depth), Some(mut sample_rate)) = (
-                                    s.find_name::<TextView>("bit_depth"),
-                                    s.find_name::<TextView>("sample_rate"),
-                                ) {
-                                    bit_depth.set_content(format!("{} bits", track.bit_depth));
-                                    sample_rate.set_content(format!("{} kHz", track.sampling_rate));
-                                }
-                            }))
-                            .expect("failed to send update");
-                    }
                     Notification::CurrentTrackList { list } => {
-                        list_type = list.list_type().clone();
-
                         match list.list_type() {
                             TrackListType::Album => {
                                 SINK.get()
@@ -900,6 +888,13 @@ pub async fn receive_notifications() {
                                             total_tracks
                                                 .set_content(format!("{:03}", album.total_tracks));
                                         }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
+                                        }
                                     }))
                                     .expect("failed to send update");
                             }
@@ -937,8 +932,19 @@ pub async fn receive_notifications() {
                                             s.find_name::<TextView>("entity_title"),
                                             s.find_name::<TextView>("total_tracks"),
                                         ) {
+                                            if let Some(first) = playlist.tracks.first_key_value() {
+                                                set_current_track(s, first.1, list.list_type());
+                                            }
+
                                             entity_title.set_content(playlist.title.clone());
                                             total_tracks.set_content(format!("{:03}", list.total()));
+                                        }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
                                         }
                                     }))
                                     .expect("failed to send update");
@@ -964,6 +970,13 @@ pub async fn receive_notifications() {
                                             s.find_name::<TextView>("total_tracks")
                                         {
                                             total_tracks.set_content("001");
+                                        }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
                                         }
                                     }))
                                     .expect("failed to send update");

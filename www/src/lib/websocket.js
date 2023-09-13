@@ -2,7 +2,6 @@ import { derived, writable } from 'svelte/store';
 
 export const currentStatus = writable('Stopped');
 export const connected = writable(false);
-export const currentTrack = writable(null);
 export const isBuffering = writable(false);
 export const searchResults = writable({
   albums: [],
@@ -15,6 +14,9 @@ export const userPlaylists = writable([])
 const position = writable(0);
 const duration = writable(0);
 const currentTrackList = writable(null);
+export const currentTrack = derived(currentTrackList, (list) => {
+  return list?.queue.find((l) => l.status === "Playing")
+});
 
 export const queue = derived(currentTrackList, (v) => {
   return v?.queue || []
@@ -72,7 +74,6 @@ export const positionString = derived(position, (p) => {
 })
 
 export const durationString = derived(currentTrack, (d) => {
-  console.log(d)
   const durationMinutes = Math.floor(d.durationSeconds / 60);
   const durationSeconds = d.durationSeconds - durationMinutes * 60;
 
@@ -122,8 +123,6 @@ export class WS {
         duration.set(json.duration.clock);
       } else if (Object.hasOwn(json, 'status')) {
         currentStatus.set(json.status.status);
-      } else if (Object.hasOwn(json, 'currentTrack')) {
-        currentTrack.set(json.currentTrack.track);
       } else if (Object.hasOwn(json, 'currentTrackList')) {
         currentTrackList.set(json.currentTrackList?.list);
       } else if (Object.hasOwn(json, 'searchResults')) {

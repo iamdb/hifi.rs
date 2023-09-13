@@ -1,7 +1,7 @@
 use gstreamer::{ClockTime, State};
 use serde::{Deserialize, Serialize};
 
-use crate::{player, player::queue::TrackListValue, service::Track};
+use crate::{player, player::queue::TrackListValue};
 
 pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
 pub type BroadcastSender = async_broadcast::Sender<Notification>;
@@ -22,9 +22,6 @@ pub enum Notification {
     },
     CurrentTrackList {
         list: TrackListValue,
-    },
-    CurrentTrack {
-        track: Track,
     },
     AudioQuality {
         bitdepth: u32,

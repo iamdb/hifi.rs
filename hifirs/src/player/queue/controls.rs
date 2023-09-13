@@ -81,6 +81,8 @@ impl PlayerState {
             if let Some(mut entry) = tracklist.queue.first_entry() {
                 let first_track = entry.get_mut();
 
+                first_track.status = TrackStatus::Playing;
+
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
@@ -126,6 +128,7 @@ impl PlayerState {
 
             if let Some(mut entry) = tracklist.queue.first_entry() {
                 let first_track = entry.get_mut();
+                first_track.status = TrackStatus::Playing;
 
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
