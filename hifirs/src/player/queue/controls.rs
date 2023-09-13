@@ -15,7 +15,7 @@ use tokio::sync::{
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
-    client: Arc<dyn MusicService>,
+    service: Arc<dyn MusicService>,
     current_track: Option<Track>,
     tracklist: TrackListValue,
     status: GstState,
@@ -70,7 +70,7 @@ impl From<PlayerState> for SavedState {
 
 impl PlayerState {
     pub async fn play_album(&mut self, album_id: String) -> Option<String> {
-        if let Some(album) = self.client.album(album_id.as_str()).await {
+        if let Some(album) = self.service.album(album_id.as_str()).await {
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
@@ -96,7 +96,7 @@ impl PlayerState {
         }
     }
     pub async fn play_track(&mut self, track_id: i32) -> Option<String> {
-        if let Some(mut track) = self.client.track(track_id).await {
+        if let Some(mut track) = self.service.track(track_id).await {
             track.status = TrackStatus::Playing;
 
             let mut queue = BTreeMap::new();
@@ -117,7 +117,7 @@ impl PlayerState {
         }
     }
     pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<String> {
-        if let Some(playlist) = self.client.playlist(playlist_id).await {
+        if let Some(playlist) = self.service.playlist(playlist_id).await {
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
 
             tracklist.set_playlist(playlist);
@@ -211,7 +211,7 @@ impl PlayerState {
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut Track) {
         debug!("fetching track url");
-        if let Some(track_url) = self.client.track_url(track.id as i32).await {
+        if let Some(track_url) = self.service.track_url(track.id as i32).await {
             debug!("attaching url information to track");
             track.track_url = Some(track_url);
         }
@@ -260,7 +260,7 @@ impl PlayerState {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
-                        if let Some(track_url) = self.client.track_url(t.id as i32).await {
+                        if let Some(track_url) = self.service.track_url(t.id as i32).await {
                             t.status = TrackStatus::Playing;
                             t.track_url = Some(track_url);
                             self.current_track = Some(t.clone());
@@ -283,25 +283,25 @@ impl PlayerState {
     }
 
     pub async fn search_all(&self, query: &str) -> Option<SearchResults> {
-        self.client.search(query).await
+        self.service.search(query).await
     }
 
     pub async fn fetch_artist_albums(&self, artist_id: i32) -> Option<Vec<Album>> {
-        match self.client.artist(artist_id).await {
+        match self.service.artist(artist_id).await {
             Some(results) => results.albums,
             None => None,
         }
     }
 
     pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Option<Vec<Track>> {
-        match self.client.playlist(playlist_id).await {
+        match self.service.playlist(playlist_id).await {
             Some(results) => Some(results.tracks.values().cloned().collect::<Vec<Track>>()),
             None => None,
         }
     }
 
     pub async fn fetch_user_playlists(&self) -> Option<Vec<Playlist>> {
-        self.client.user_playlists().await
+        self.service.user_playlists().await
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
@@ -335,7 +335,7 @@ impl PlayerState {
 
         Self {
             current_track: None,
-            client,
+            service: client,
             tracklist,
             status: gstreamer::State::Null,
             target_status: gstreamer::State::Null,
@@ -357,7 +357,7 @@ impl PlayerState {
 
             match entity_type {
                 TrackListType::Album => {
-                    if let Some(album) = self.client.album(&last_state.playback_entity_id).await {
+                    if let Some(album) = self.service.album(&last_state.playback_entity_id).await {
                         self.replace_list(TrackListValue::new(Some(album.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
@@ -375,7 +375,7 @@ impl PlayerState {
                 }
                 TrackListType::Playlist => {
                     if let Some(playlist) = self
-                        .client
+                        .service
                         .playlist(
                             last_state
                                 .playback_entity_id
@@ -404,7 +404,7 @@ impl PlayerState {
                         .playback_entity_id
                         .parse()
                         .expect("failed to parse track id");
-                    if let Some(mut track) = self.client.track(track_id).await {
+                    if let Some(mut track) = self.service.track(track_id).await {
                         track.status = TrackStatus::Playing;
 
                         let mut queue = BTreeMap::new();

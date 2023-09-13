@@ -15,8 +15,8 @@ use cached::proc_macro::cached;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use gst::{
-    prelude::*, Caps, ClockTime, Element, Message, MessageView, SeekFlags, State as GstState,
-    StateChangeSuccess, Structure,
+    prelude::*, Caps, ClockTime, Element, Message, MessageType, MessageView, SeekFlags,
+    State as GstState, StateChangeSuccess, Structure,
 };
 use gstreamer as gst;
 use hifirs_qobuz_api::client::{self, UrlType};
@@ -698,7 +698,11 @@ pub async fn player_loop() -> Result<()> {
                 tokio::spawn(async { handle_action(action).await.expect("error handling action") });
             }
             Some(msg) = messages.next() => {
-                tokio::spawn(async { handle_message(msg).await.expect("error handling message") });
+                if msg.type_() == MessageType::Buffering {
+                    handle_message(msg).await?;
+                } else {
+                    tokio::spawn(async { handle_message(msg).await.expect("error handling message") });
+                }
             }
         }
     }
