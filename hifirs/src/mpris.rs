@@ -67,6 +67,7 @@ pub async fn receive_notifications(conn: Connection) {
                 Notification::Quit => {
                     return;
                 }
+                Notification::Loading { is_loading: _ } => {}
                 Notification::Buffering {
                     is_buffering: _,
                     target_status: _,

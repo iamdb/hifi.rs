@@ -799,6 +799,7 @@ pub async fn receive_notifications() {
                     Notification::Quit => {
                         return;
                     }
+                    Notification::Loading { is_loading: _ } => {}
                     Notification::Status { status } => {
                         SINK.get()
                             .unwrap()

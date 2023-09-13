@@ -4,6 +4,7 @@
 		WS,
 		currentTrack,
 		isBuffering,
+		isLoading,
 		currentStatus,
 		connected,
 		coverImage,
@@ -79,13 +80,18 @@
 	</div>
 </div>
 
-{#if $isBuffering || !$connected}
+{#if $isBuffering || !$connected || $isLoading}
 	<div class="fixed top-8 right-8 z-10">
-		{#if $isBuffering}
-			<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">BUFFERING</h1>
-		{/if}
-		{#if !$connected}
-			<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">DISCONNECTED</h1>
-		{/if}
+		<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">
+			{#if $isBuffering}
+				BUFFERING
+			{/if}
+			{#if !$connected}
+				DISCONNECTED
+			{/if}
+			{#if $isLoading}
+				LOADING
+			{/if}
+		</h1>
 	</div>
 {/if}

@@ -185,6 +185,11 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
         }
         StateChangeSuccess::Async => {
             debug!("*** async state change ***");
+
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::Loading { is_loading: true })
+                .await?;
         }
         StateChangeSuccess::NoPreroll => {
             debug!("*** stream is live ***");
@@ -198,6 +203,13 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
         interval.tick().await;
     }
 
+    Ok(())
+}
+async fn broadcast_track_list(list: TrackListValue) -> Result<()> {
+    BROADCAST_CHANNELS
+        .tx
+        .broadcast(Notification::CurrentTrackList { list })
+        .await?;
     Ok(())
 }
 #[instrument]
@@ -364,6 +376,9 @@ pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
     ready().await?;
 
     if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
+        let list = state.track_list();
+        broadcast_track_list(list).await?;
+
         drop(state);
 
         if let Some(url) = &next_track_to_play.track_url {
@@ -410,14 +425,12 @@ pub async fn skip_to(index: u32) -> Result<()> {
 pub async fn play_track(track_id: i32) -> Result<()> {
     ready().await?;
 
-    if let Some(track_url) = QUEUE
-        .get()
-        .unwrap()
-        .write()
-        .await
-        .play_track(track_id)
-        .await
-    {
+    let mut state = QUEUE.get().unwrap().write().await;
+
+    if let Some(track_url) = state.play_track(track_id).await {
+        let list = state.track_list();
+        broadcast_track_list(list).await?;
+
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
         play().await?;
@@ -430,14 +443,12 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 pub async fn play_album(album_id: String) -> Result<()> {
     ready().await?;
 
-    if let Some(track_url) = QUEUE
-        .get()
-        .unwrap()
-        .write()
-        .await
-        .play_album(album_id)
-        .await
-    {
+    let mut state = QUEUE.get().unwrap().write().await;
+
+    if let Some(track_url) = state.play_album(album_id).await {
+        let list = state.track_list();
+        broadcast_track_list(list).await?;
+
         PLAYBIN.set_property("uri", Some(track_url));
 
         play().await?;
@@ -450,14 +461,11 @@ pub async fn play_album(album_id: String) -> Result<()> {
 pub async fn play_playlist(playlist_id: i64) -> Result<()> {
     ready().await?;
 
-    if let Some(track_url) = QUEUE
-        .get()
-        .unwrap()
-        .write()
-        .await
-        .play_playlist(playlist_id)
-        .await
-    {
+    let mut state = QUEUE.get().unwrap().write().await;
+    if let Some(track_url) = state.play_playlist(playlist_id).await {
+        let list = state.track_list();
+        broadcast_track_list(list).await?;
+
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
         play().await?;
@@ -753,19 +761,11 @@ async fn handle_message(msg: Message) -> Result<()> {
                 skip(SkipDirection::Backward, Some(1)).await?;
             }
         }
-        MessageView::AsyncDone(msg) => {
+        MessageView::AsyncDone(_) => {
             debug!("ASYNC DONE");
-            let position = if let Some(p) = msg.running_time() {
-                p
-            } else if let Some(p) = position() {
-                p
-            } else {
-                ClockTime::default()
-            };
-
             BROADCAST_CHANNELS
                 .tx
-                .broadcast(Notification::Position { clock: position })
+                .broadcast(Notification::Loading { is_loading: false })
                 .await?;
         }
         MessageView::PropertyNotify(el) => {
@@ -811,15 +811,6 @@ async fn handle_message(msg: Message) -> Result<()> {
                     }
                 }
             }
-        }
-        MessageView::StreamStart(_) => {
-            debug!("stream start");
-
-            let list = QUEUE.get().unwrap().read().await.track_list();
-            BROADCAST_CHANNELS
-                .tx
-                .broadcast(Notification::CurrentTrackList { list })
-                .await?;
         }
         MessageView::Buffering(buffering) => {
             if IS_LIVE.load(Ordering::Relaxed) {

@@ -3,6 +3,7 @@ import { derived, writable } from 'svelte/store';
 export const currentStatus = writable('Stopped');
 export const connected = writable(false);
 export const isBuffering = writable(false);
+export const isLoading = writable(false);
 export const searchResults = writable({
   albums: [],
   artists: [],
@@ -117,6 +118,8 @@ export class WS {
 
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);
+      } else if (Object.hasOwn(json, 'loading')) {
+        isLoading.set(json.loading.isLoading);
       } else if (Object.hasOwn(json, 'position')) {
         position.set(json.position.clock);
       } else if (Object.hasOwn(json, 'duration')) {

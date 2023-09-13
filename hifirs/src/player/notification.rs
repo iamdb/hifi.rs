@@ -28,6 +28,9 @@ pub enum Notification {
         sampling_rate: u32,
     },
     Quit,
+    Loading {
+        is_loading: bool,
+    },
     Error {
         error: player::error::Error,
     },
