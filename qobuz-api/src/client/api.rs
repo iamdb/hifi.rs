@@ -7,7 +7,7 @@ use crate::{
         track::Track,
         AudioQuality, TrackURL,
     },
-    Credentials, Error, Result,
+    Error, Result,
 };
 use base64::{engine::general_purpose, Engine as _};
 use clap::ValueEnum;
@@ -37,7 +37,6 @@ pub struct Client {
     secrets: HashMap<String, String>,
     active_secret: Option<String>,
     app_id: Option<String>,
-    credentials: Option<Credentials>,
     base_url: String,
     client: reqwest::Client,
     default_quality: AudioQuality,
@@ -79,7 +78,6 @@ pub async fn new(
         secrets: HashMap::new(),
         active_secret,
         user_token,
-        credentials: None,
         app_id,
         default_quality,
         base_url: "https://www.qobuz.com/api.json/0.2/".to_string(),
@@ -172,45 +170,39 @@ impl Client {
     }
 
     /// Login a user
-    pub async fn login(&mut self) -> Result<()> {
+    pub async fn login(&mut self, username: &str, password: &str) -> Result<()> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
 
-        if let Some(creds) = &self.credentials {
-            if let (Some(username), Some(password), Some(app_id)) =
-                (&creds.username, &creds.password, &self.app_id)
-            {
-                info!(
-                    "logging in with email ({}) and password **HIDDEN** for app_id {}",
-                    username, app_id
-                );
+        if let Some(app_id) = &self.app_id {
+            info!(
+                "logging in with email ({}) and password **HIDDEN** for app_id {}",
+                username, app_id
+            );
 
-                let params = vec![
-                    ("email", username.as_str()),
-                    ("password", password.as_str()),
-                    ("app_id", app_id.as_str()),
-                ];
+            let params = vec![
+                ("email", username),
+                ("password", password),
+                ("app_id", app_id.as_str()),
+            ];
 
-                match self.make_get_call(endpoint, Some(params)).await {
-                    Ok(response) => {
-                        let json: Value = serde_json::from_str(response.as_str()).unwrap();
-                        info!("Successfully logged in");
-                        debug!("{}", json);
-                        let mut token = json["user_auth_token"].to_string();
-                        token = token[1..token.len() - 1].to_string();
+            match self.make_get_call(endpoint, Some(params)).await {
+                Ok(response) => {
+                    let json: Value = serde_json::from_str(response.as_str()).unwrap();
+                    info!("Successfully logged in");
+                    debug!("{}", json);
+                    let mut token = json["user_auth_token"].to_string();
+                    token = token[1..token.len() - 1].to_string();
 
-                        self.user_token = Some(token);
-                        Ok(())
-                    }
-                    Err(err) => {
-                        error!("error logging into qobuz: {}", err);
-                        Err(Error::Login)
-                    }
+                    self.user_token = Some(token);
+                    Ok(())
                 }
-            } else {
-                Err(Error::Login)
+                Err(err) => {
+                    error!("error logging into qobuz: {}", err);
+                    Err(Error::Login)
+                }
             }
         } else {
-            Err(Error::NoCredentials)
+            Err(Error::Login)
         }
     }
 
@@ -536,11 +528,6 @@ impl Client {
         self.user_token = Some(token);
     }
 
-    // Set a username for authentication
-    pub fn set_credentials(&mut self, credentials: Credentials) {
-        self.credentials = Some(credentials);
-    }
-
     // Set an app_id for authentication
     pub fn set_app_id(&mut self, app_id: String) {
         self.app_id = Some(app_id);
@@ -756,18 +743,15 @@ async fn can_use_methods() {
     //pretty_env_logger::init();
     use insta::assert_yaml_snapshot;
 
-    let creds = Credentials {
-        username: Some(env!("QOBUZ_USERNAME").to_string()),
-        password: Some(env!("QOBUZ_PASSWORD").to_string()),
-    };
-
     let mut client = new(None, None, None, None)
         .await
         .expect("failed to create client");
 
-    client.set_credentials(creds);
     client.refresh().await.expect("failed to refresh config");
-    client.login().await.expect("failed to login");
+    client
+        .login(env!("QOBUZ_USERNAME"), env!("QOBUZ_PASSWORD"))
+        .await
+        .expect("failed to login");
     client.test_secrets().await.expect("failed to test secrets");
 
     assert_yaml_snapshot!(client

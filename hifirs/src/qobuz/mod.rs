@@ -3,13 +3,10 @@ use crate::{
     sql::db::{self},
 };
 use async_trait::async_trait;
-use hifirs_qobuz_api::{
-    client::{
-        api::{self, Client as QobuzClient},
-        search_results::SearchAllResults,
-        AudioQuality,
-    },
-    Credentials,
+use hifirs_qobuz_api::client::{
+    api::{self, Client as QobuzClient},
+    search_results::SearchAllResults,
+    AudioQuality,
 };
 
 pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
@@ -21,8 +18,8 @@ pub mod track;
 
 #[async_trait]
 impl MusicService for QobuzClient {
-    async fn login(&self) {
-        self.login().await;
+    async fn login(&self, username: &str, password: &str) {
+        self.login(username, password).await;
     }
 
     async fn album(&self, album_id: &str) -> Option<Album> {
@@ -81,20 +78,18 @@ impl MusicService for QobuzClient {
     }
 }
 
-pub async fn make_client(
-    username: Option<String>,
-    password: Option<String>,
-) -> Result<QobuzClient> {
+pub async fn make_client(username: Option<&str>, password: Option<&str>) -> Result<QobuzClient> {
     let mut client = api::new(None, None, None, None).await?;
-    if username.is_some() || password.is_some() {
-        client.set_credentials(Credentials { username, password });
-    }
 
-    setup_client(&mut client).await
+    setup_client(&mut client, username, password).await
 }
 
 /// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(client: &mut QobuzClient) -> Result<QobuzClient> {
+pub async fn setup_client(
+    client: &mut QobuzClient,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<QobuzClient> {
     info!("setting up the api client");
 
     if let Some(config) = db::get_config().await {
@@ -138,33 +133,37 @@ pub async fn setup_client(client: &mut QobuzClient) -> Result<QobuzClient> {
                     db::set_active_secret(secret).await;
                 }
             }
-        } else if let (Some(username), Some(password)) = (config.username, config.password) {
-            info!("setting auth using username and password from cache");
-            client.set_credentials(Credentials {
-                username: Some(username),
-                password: Some(password),
-            });
+        } else {
+            let (username, password): (Option<String>, Option<String>) =
+                if let (Some(u), Some(p)) = (username, password) {
+                    (Some(u.to_string()), Some(p.to_string()))
+                } else if let (Some(u), Some(p)) = (config.username, config.password) {
+                    (Some(u), Some(p))
+                } else {
+                    (None, None)
+                };
 
-            if refresh_config {
-                client.refresh().await?;
+            if let (Some(username), Some(password)) = (username, password) {
+                info!("setting auth using username and password from cache");
+                if refresh_config {
+                    client.refresh().await?;
 
-                if let Some(id) = client.get_app_id() {
-                    db::set_app_id(id).await;
+                    if let Some(id) = client.get_app_id() {
+                        db::set_app_id(id).await;
+                    }
+                }
+
+                client.login(&username, &password).await?;
+                client.test_secrets().await?;
+
+                if let Some(token) = client.get_token() {
+                    db::set_user_token(token).await;
+                }
+
+                if let Some(secret) = client.get_active_secret() {
+                    db::set_active_secret(secret).await;
                 }
             }
-
-            client.login().await?;
-            client.test_secrets().await?;
-
-            if let Some(token) = client.get_token() {
-                db::set_user_token(token).await;
-            }
-
-            if let Some(secret) = client.get_active_secret() {
-                db::set_active_secret(secret).await;
-            }
-        } else {
-            return Err(hifirs_qobuz_api::Error::NoCredentials);
         }
     }
 

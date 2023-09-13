@@ -323,7 +323,7 @@ impl PlayerState {
         self.resume = false;
     }
 
-    pub async fn new(username: Option<String>, password: Option<String>) -> Self {
+    pub async fn new(username: Option<&str>, password: Option<&str>) -> Self {
         let client = Arc::new(
             qobuz::make_client(username, password)
                 .await

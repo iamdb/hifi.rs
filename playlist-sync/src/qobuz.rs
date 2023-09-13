@@ -1,11 +1,8 @@
 use crate::Isrc;
-use hifirs_qobuz_api::{
-    client::{
-        api::Client,
-        playlist::Playlist,
-        track::{Track, Tracks},
-    },
-    Credentials as QobuzCredentials,
+use hifirs_qobuz_api::client::{
+    api::Client,
+    playlist::Playlist,
+    track::{Track, Tracks},
 };
 use indicatif::ProgressBar;
 use std::collections::HashSet;
@@ -16,28 +13,22 @@ pub struct Qobuz<'q> {
 }
 
 pub async fn new<'q>(progress: &'_ ProgressBar) -> Qobuz<'_> {
-    let creds = QobuzCredentials {
-        username: Some(env!("QOBUZ_USERNAME").to_string()),
-        password: Some(env!("QOBUZ_PASSWORD").to_string()),
-    };
-
-    let mut client = hifirs_qobuz_api::client::api::new(None, None, None, None)
+    let client = hifirs_qobuz_api::client::api::new(None, None, None, None)
         .await
         .unwrap_or_else(|err| {
             println!("There was a problem creating the api client.");
             println!("Message {err}");
             std::process::exit(1);
         });
-    client.set_credentials(creds);
 
     Qobuz { client, progress }
 }
 
 impl<'q> Qobuz<'q> {
-    pub async fn auth(&mut self) -> hifirs_qobuz_api::Result<()> {
+    pub async fn auth(&mut self, username: &str, password: &str) -> hifirs_qobuz_api::Result<()> {
         self.progress.set_message("signing into Qobuz");
         self.client.refresh().await?;
-        self.client.login().await?;
+        self.client.login(username, password).await?;
         self.client.test_secrets().await?;
         self.progress.set_message("signed into Qobuz");
 

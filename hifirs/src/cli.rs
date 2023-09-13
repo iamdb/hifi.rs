@@ -183,11 +183,11 @@ impl From<player::error::Error> for Error {
 
 async fn setup_player(
     quit_when_done: bool,
-    username: Option<String>,
-    password: Option<String>,
     resume: bool,
     web: bool,
     interface: SocketAddr,
+    username: Option<&str>,
+    password: Option<&str>,
 ) -> Result<Vec<JoinHandle<()>>, Error> {
     player::init(username, password, quit_when_done).await?;
 
@@ -250,11 +250,11 @@ pub async fn run() -> Result<(), Error> {
         Commands::Open {} => {
             let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 true,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
@@ -265,11 +265,11 @@ pub async fn run() -> Result<(), Error> {
         Commands::Play { url } => {
             let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
@@ -282,11 +282,11 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamTrack { track_id } => {
             let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
@@ -299,11 +299,11 @@ pub async fn run() -> Result<(), Error> {
         Commands::StreamAlbum { album_id } => {
             let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
@@ -319,7 +319,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_all(query, limit.unwrap_or_default()).await?;
 
                 output!(results, output_format);
@@ -331,7 +332,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_albums(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -343,7 +345,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_artists(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -351,28 +354,32 @@ pub async fn run() -> Result<(), Error> {
                 Ok(())
             }
             ApiCommands::Playlist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.playlist(id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Album { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.album(&id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Artist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.artist(id, Some(500)).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Track { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.track(id).await?;
                 output!(results, output_format);
