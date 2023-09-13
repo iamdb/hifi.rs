@@ -408,9 +408,7 @@ pub async fn skip_to(index: u32) -> Result<()> {
 #[instrument]
 /// Plays a single track.
 pub async fn play_track(track_id: i32) -> Result<()> {
-    if !is_ready() {
-        ready().await?;
-    }
+    ready().await?;
 
     if let Some(track_url) = QUEUE
         .get()
@@ -422,9 +420,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
     {
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
-        if !is_playing() {
-            play().await?;
-        }
+        play().await?;
     }
 
     Ok(())
@@ -432,9 +428,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 #[instrument]
 /// Plays a full album.
 pub async fn play_album(album_id: String) -> Result<()> {
-    if !is_ready() {
-        ready().await?;
-    }
+    ready().await?;
 
     if let Some(track_url) = QUEUE
         .get()
@@ -446,9 +440,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
     {
         PLAYBIN.set_property("uri", Some(track_url));
 
-        if !is_playing() {
-            play().await?;
-        }
+        play().await?;
     }
 
     Ok(())
@@ -456,9 +448,7 @@ pub async fn play_album(album_id: String) -> Result<()> {
 #[instrument]
 /// Plays all tracks in a playlist.
 pub async fn play_playlist(playlist_id: i64) -> Result<()> {
-    if !is_ready() {
-        ready().await?;
-    }
+    ready().await?;
 
     if let Some(track_url) = QUEUE
         .get()
@@ -470,9 +460,7 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
     {
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
-        if !is_playing() {
-            play().await?;
-        }
+        play().await?;
     }
 
     Ok(())
