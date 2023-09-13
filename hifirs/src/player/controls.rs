@@ -36,7 +36,7 @@ pub struct Controls {
 
 impl Controls {
     pub fn new() -> Controls {
-        let (action_tx, action_rx) = flume::unbounded::<Action>();
+        let (action_tx, action_rx) = flume::bounded::<Action>(10);
 
         Controls {
             action_rx,

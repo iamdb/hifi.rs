@@ -105,7 +105,7 @@ struct Broadcast {
 }
 
 static BROADCAST_CHANNELS: Lazy<Broadcast> = Lazy::new(|| {
-    let (mut tx, rx) = async_broadcast::broadcast(10);
+    let (mut tx, rx) = async_broadcast::broadcast(20);
     tx.set_overflow(true);
 
     Broadcast { rx, tx }
@@ -124,8 +124,8 @@ static ABOUT_TO_FINISH: Lazy<AboutToFinish> = Lazy::new(|| {
 static QUIT_WHEN_DONE: AtomicBool = AtomicBool::new(false);
 static IS_BUFFERING: AtomicBool = AtomicBool::new(false);
 static IS_LIVE: AtomicBool = AtomicBool::new(false);
-static SAMPLING_RATE: AtomicU32 = AtomicU32::new(0);
-static BIT_DEPTH: AtomicU32 = AtomicU32::new(0);
+static SAMPLING_RATE: AtomicU32 = AtomicU32::new(44100);
+static BIT_DEPTH: AtomicU32 = AtomicU32::new(16);
 static STATE: OnceCell<SafePlayerState> = OnceCell::new();
 static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
@@ -879,7 +879,7 @@ async fn handle_message(msg: Message) -> Result<()> {
                 IS_BUFFERING.store(false, Ordering::Relaxed);
             }
 
-            if percent.rem_euclid(5) == 0 {
+            if percent.rem_euclid(10) == 0 {
                 debug!("buffering {}%", percent);
                 BROADCAST_CHANNELS
                     .tx

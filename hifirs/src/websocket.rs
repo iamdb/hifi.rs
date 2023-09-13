@@ -93,7 +93,7 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 async fn handle_connection(socket: WebSocket) {
     debug!("new websocket connection");
     let (mut sender, mut receiver) = socket.split();
-    let (rt_sender, rt_receiver) = flume::unbounded::<Value>();
+    let (rt_sender, rt_receiver) = flume::bounded::<Value>(1);
 
     let mut send_task = tokio::spawn(async move {
         debug!("spawning send task");
