@@ -1553,7 +1553,6 @@ dependencies = [
  "md5",
  "mime_guess",
  "once_cell",
- "pkg-config",
  "rand",
  "regex",
  "serde",

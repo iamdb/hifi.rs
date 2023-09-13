@@ -4,7 +4,7 @@ use hifirs_qobuz_api::client::artist::Artist as QobuzArtist;
 impl From<QobuzArtist> for Artist {
     fn from(a: QobuzArtist) -> Self {
         Self {
-            id: a.id as usize,
+            id: a.id as u32,
             name: a.name,
             albums: a.albums.map(|a| {
                 a.items

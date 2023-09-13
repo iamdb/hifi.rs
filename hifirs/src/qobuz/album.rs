@@ -1,5 +1,5 @@
 use hifirs_qobuz_api::client::album::Album as QobuzAlbum;
-use std::{collections::VecDeque, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr};
 
 use crate::service::{Album, Track};
 
@@ -9,31 +9,25 @@ impl From<QobuzAlbum> for Album {
             .expect("failed to parse date")
             .format("%Y");
 
-        let tracks = if let Some(tracks) = &value.tracks {
+        let tracks = if let Some(tracks) = value.tracks {
             tracks
                 .items
-                .iter()
+                .into_iter()
                 .enumerate()
-                .map(|(i, t)| {
-                    let mut track: Track = t.clone().into();
-
-                    track.position = i + 1;
-
-                    track
-                })
-                .collect::<VecDeque<Track>>()
+                .map(|(i, t)| (i as u32, t.into()))
+                .collect::<BTreeMap<u32, Track>>()
         } else {
-            VecDeque::new()
+            BTreeMap::new()
         };
 
         Self {
             id: value.id,
             title: value.title,
             artist: value.artist.into(),
-            total_tracks: value.tracks_count as usize,
+            total_tracks: value.tracks_count as u32,
             release_year: year
                 .to_string()
-                .parse::<usize>()
+                .parse::<u32>()
                 .expect("error converting year"),
             hires_available: value.hires_streamable,
             explicit: value.parental_warning,

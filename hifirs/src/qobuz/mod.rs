@@ -193,7 +193,7 @@ impl From<SearchAllResults> for SearchResults {
                 .into_iter()
                 .map(|a| Artist {
                     name: a.name,
-                    id: a.id as usize,
+                    id: a.id as u32,
                     albums: None,
                 })
                 .collect::<Vec<Artist>>(),

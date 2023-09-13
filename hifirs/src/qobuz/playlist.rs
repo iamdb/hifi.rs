@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::BTreeMap;
 
 use hifirs_qobuz_api::client::playlist::Playlist as QobuzPlaylist;
 
@@ -10,10 +10,11 @@ impl From<QobuzPlaylist> for Playlist {
             tracks
                 .items
                 .into_iter()
-                .map(|t| t.into())
-                .collect::<VecDeque<Track>>()
+                .enumerate()
+                .map(|(i, t)| (i as u32, t.into()))
+                .collect::<BTreeMap<u32, Track>>()
         } else {
-            VecDeque::new()
+            BTreeMap::new()
         };
 
         let cover_art = if let Some(image) = value.image_rectangle.first() {
@@ -25,10 +26,10 @@ impl From<QobuzPlaylist> for Playlist {
         };
 
         Self {
-            id: value.id as usize,
+            id: value.id as u32,
             title: value.name,
-            duration_seconds: value.duration as usize,
-            tracks_count: value.tracks_count as usize,
+            duration_seconds: value.duration as u32,
+            tracks_count: value.tracks_count as u32,
             cover_art,
             tracks,
         }

@@ -246,7 +246,7 @@ pub struct MprisPlayer {
     position: ClockTime,
     position_ts: DateTime<Local>,
     current_track: Option<Track>,
-    total_tracks: usize,
+    total_tracks: u32,
     can_play: bool,
     can_pause: bool,
     can_stop: bool,
@@ -375,7 +375,7 @@ impl MprisTrackList {
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
-                if tracks.contains(&i.id.to_string()) {
+                if tracks.contains(&i.position.to_string()) {
                     Some(track_to_meta(i.clone()))
                 } else {
                     None
@@ -383,25 +383,29 @@ impl MprisTrackList {
             })
             .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
     }
-    async fn go_to(&self, track_id: String) {
-        if let Ok(id) = track_id.parse::<usize>() {
-            self.controls.skip_to_by_id(id).await;
+
+    async fn go_to(&self, position: String) {
+        if let Ok(p) = position.parse::<u32>() {
+            self.controls.skip_to(p).await;
         }
     }
+
     #[dbus_interface(signal, name = "TrackListReplaced")]
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<String>,
         current: String,
     ) -> zbus::Result<()>;
+
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
         self.track_list
             .unplayed_tracks()
             .iter()
-            .map(|i| i.id.to_string())
+            .map(|i| i.position.to_string())
             .collect::<Vec<String>>()
     }
+
     #[dbus_interface(property, name = "CanEditTracks")]
     async fn can_edit_tracks(&self) -> bool {
         false

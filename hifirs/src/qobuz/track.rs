@@ -12,7 +12,7 @@ impl From<QobuzTrack> for Track {
 
         let artist = if let Some(p) = &value.performer {
             Some(Artist {
-                id: p.id as usize,
+                id: p.id as u32,
                 name: p.name.clone(),
                 albums: None,
             })
@@ -29,22 +29,22 @@ impl From<QobuzTrack> for Track {
         };
 
         Self {
-            id: value.id as usize,
-            number: value.track_number as usize,
+            id: value.id as u32,
+            number: value.track_number as u32,
             title: value.title,
             album,
             artist,
-            duration_seconds: value.duration as usize,
+            duration_seconds: value.duration as u32,
             explicit: value.parental_warning,
             hires_available: value.hires_streamable,
             sampling_rate: value.maximum_sampling_rate as f32,
-            bit_depth: value.maximum_bit_depth as usize,
+            bit_depth: value.maximum_bit_depth as u32,
             status,
             track_url: None,
             available: value.streamable,
-            position: value.position.unwrap_or(value.track_number as usize),
+            position: value.position.unwrap_or(value.track_number as usize) as u32,
             cover_art,
-            media_number: value.media_number as usize,
+            media_number: value.media_number as u32,
         }
     }
 }

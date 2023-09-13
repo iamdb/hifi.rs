@@ -22,7 +22,6 @@ use gstreamer as gst;
 use hifirs_qobuz_api::client::{self, UrlType};
 use once_cell::sync::{Lazy, OnceCell};
 use std::{
-    collections::VecDeque,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, AtomicU32, Ordering},
@@ -41,6 +40,8 @@ pub mod queue;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+static VERSION: Lazy<(u32, u32, u32, u32)> = Lazy::new(gstreamer::version);
+
 static PLAYBIN: Lazy<Element> = Lazy::new(|| {
     gst::init().expect("error initializing gstreamer");
 
@@ -49,15 +50,17 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
         .expect("error building playbin element");
 
     playbin.set_property_from_str("flags", "audio+buffering");
-    playbin.connect("element-setup", false, |value| {
-        let element = &value[1].get::<gst::Element>().unwrap();
+    if VERSION.1 >= 22 {
+        playbin.connect("element-setup", false, |value| {
+            let element = &value[1].get::<gst::Element>().unwrap();
 
-        if element.name().contains("urisourcebin") {
-            element.set_property("parse-streams", true);
-        }
+            if element.name().contains("urisourcebin") {
+                element.set_property("parse-streams", true);
+            }
 
-        None
-    });
+            None
+        });
+    }
     playbin.connect("source-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
@@ -139,6 +142,8 @@ pub async fn init(
     quit_when_done: bool,
 ) -> Result<()> {
     let state = Arc::new(RwLock::new(PlayerState::new(username, password).await));
+    let version = gstreamer::version();
+    debug!(?version);
 
     STATE.set(state).expect("error setting player state");
     QUIT_WHEN_DONE.store(quit_when_done, Ordering::Relaxed);
@@ -349,7 +354,7 @@ pub async fn jump_backward() -> Result<()> {
 }
 #[instrument]
 /// Skip to the next, previous or specific track in the playlist.
-pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
+pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
     // Typical previous skip functionality where if,
     // the track is greater than 1 second into playing,
     // then it goes to the beginning. If triggered again
@@ -390,7 +395,7 @@ pub async fn skip(direction: SkipDirection, num: Option<usize>) -> Result<()> {
 #[instrument]
 /// Skip to a specific track in the current playlist
 /// by its index in the list.
-pub async fn skip_to(index: usize) -> Result<()> {
+pub async fn skip_to(index: u32) -> Result<()> {
     let state = STATE.get().unwrap().read().await;
 
     if let Some(current_track) = state.current_track() {
@@ -411,16 +416,6 @@ pub async fn skip_to(index: usize) -> Result<()> {
             );
             skip(SkipDirection::Backward, Some(index)).await?;
         }
-    }
-
-    Ok(())
-}
-#[instrument]
-/// Skip to a specific track in the current playlist, by the
-/// track id.
-pub async fn skip_to_by_id(track_id: usize) -> Result<()> {
-    if let Some(track_number) = STATE.get().unwrap().read().await.track_index(track_id) {
-        skip_to(track_number).await?;
     }
 
     Ok(())
@@ -600,7 +595,7 @@ pub async fn artist_albums(artist_id: i32) -> Vec<Album> {
 #[instrument]
 #[cached(size = 10, time = 600)]
 /// Fetch the tracks for a specific playlist.
-pub async fn playlist_tracks(playlist_id: i64) -> VecDeque<Track> {
+pub async fn playlist_tracks(playlist_id: i64) -> Vec<Track> {
     if let Some(tracks) = STATE
         .get()
         .unwrap()
@@ -611,7 +606,7 @@ pub async fn playlist_tracks(playlist_id: i64) -> VecDeque<Track> {
     {
         tracks
     } else {
-        VecDeque::new()
+        Vec::new()
     }
 }
 
@@ -755,9 +750,6 @@ async fn handle_action(action: Action) -> Result<()> {
         Action::Quit => STATE.get().unwrap().read().await.quit(),
         Action::SkipTo { num } => {
             skip_to(num).await?;
-        }
-        Action::SkipToById { track_id } => {
-            skip_to_by_id(track_id).await?;
         }
         Action::Search { query } => {
             search(&query).await;

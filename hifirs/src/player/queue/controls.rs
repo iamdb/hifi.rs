@@ -7,7 +7,7 @@ use crate::{
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use std::{collections::VecDeque, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     RwLock,
@@ -78,7 +78,9 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            if let Some(first_track) = tracklist.queue.front_mut() {
+            if let Some(mut entry) = tracklist.queue.first_entry() {
+                let first_track = entry.get_mut();
+
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
@@ -95,8 +97,8 @@ impl PlayerState {
         if let Some(mut track) = self.client.track(track_id).await {
             track.status = TrackStatus::Playing;
 
-            let mut queue = VecDeque::new();
-            queue.push_front(track.clone());
+            let mut queue = BTreeMap::new();
+            queue.entry(track.position).or_insert_with(|| track.clone());
 
             let mut tracklist = TrackListValue::new(Some(queue));
             tracklist.set_list_type(TrackListType::Track);
@@ -122,7 +124,9 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            if let Some(first_track) = tracklist.queue.front_mut() {
+            if let Some(mut entry) = tracklist.queue.first_entry() {
+                let first_track = entry.get_mut();
+
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
@@ -189,15 +193,7 @@ impl PlayerState {
         self.tracklist.clone()
     }
 
-    pub fn track_index(&self, track_id: usize) -> Option<usize> {
-        if let Some(track) = self.tracklist.find_track(track_id) {
-            Some(track.position)
-        } else {
-            None
-        }
-    }
-
-    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
+    pub fn set_track_status(&mut self, position: u32, status: TrackStatus) {
         self.tracklist.set_track_status(position, status);
     }
 
@@ -220,7 +216,7 @@ impl PlayerState {
 
     pub async fn skip_track(
         &mut self,
-        index: Option<usize>,
+        index: Option<u32>,
         direction: SkipDirection,
     ) -> Option<Track> {
         let next_track_index = if let Some(i) = index {
@@ -255,7 +251,7 @@ impl PlayerState {
         if let Some(index) = next_track_index {
             let mut current_track = None;
 
-            for t in self.tracklist.queue.iter_mut() {
+            for t in self.tracklist.queue.values_mut() {
                 match t.position.cmp(&index) {
                     std::cmp::Ordering::Less => {
                         t.status = TrackStatus::Played;
@@ -294,9 +290,9 @@ impl PlayerState {
         }
     }
 
-    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Option<VecDeque<Track>> {
+    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Option<Vec<Track>> {
         match self.client.playlist(playlist_id).await {
-            Some(results) => Some(results.tracks),
+            Some(results) => Some(results.tracks.values().cloned().collect::<Vec<Track>>()),
             None => None,
         }
     }
@@ -364,7 +360,7 @@ impl PlayerState {
                         self.tracklist.set_album(album);
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;
@@ -390,7 +386,7 @@ impl PlayerState {
                         self.tracklist.set_playlist(playlist);
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;
@@ -408,8 +404,8 @@ impl PlayerState {
                     if let Some(mut track) = self.client.track(track_id).await {
                         track.status = TrackStatus::Playing;
 
-                        let mut queue = VecDeque::new();
-                        queue.push_front(track.clone());
+                        let mut queue = BTreeMap::new();
+                        queue.entry(track.position).or_insert_with(|| track);
 
                         let mut tracklist = TrackListValue::new(Some(queue));
                         tracklist.set_list_type(TrackListType::Track);
@@ -418,7 +414,7 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Track);
 
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;

@@ -1,12 +1,8 @@
 pub mod controls;
 
 use crate::service::{Album, Playlist, Track, TrackStatus};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::{vec_deque::Drain, VecDeque},
-    fmt::Display,
-    ops::RangeBounds,
-};
+use serde::{Deserialize, Serialize, Serializer};
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TrackListType {
@@ -39,10 +35,19 @@ impl From<&str> for TrackListType {
     }
 }
 
+fn serialize_btree<S>(queue: &BTreeMap<u32, Track>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let vec_values: Vec<_> = queue.values().collect();
+    vec_values.serialize(s)
+}
+
 /// A tracklist is a list of tracks.
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TrackListValue {
-    queue: VecDeque<Track>,
+    #[serde(serialize_with = "serialize_btree")]
+    queue: BTreeMap<u32, Track>,
     album: Option<Album>,
     playlist: Option<Playlist>,
     list_type: TrackListType,
@@ -50,11 +55,11 @@ pub struct TrackListValue {
 
 impl TrackListValue {
     #[instrument]
-    pub fn new(queue: Option<VecDeque<Track>>) -> TrackListValue {
+    pub fn new(queue: Option<BTreeMap<u32, Track>>) -> TrackListValue {
         let queue = if let Some(q) = queue {
             q
         } else {
-            VecDeque::new()
+            BTreeMap::new()
         };
 
         TrackListValue {
@@ -65,13 +70,13 @@ impl TrackListValue {
         }
     }
 
-    pub fn total(&self) -> usize {
+    pub fn total(&self) -> u32 {
         if let Some(album) = &self.album {
             album.total_tracks
         } else if let Some(list) = &self.playlist {
             list.tracks_count
         } else {
-            self.queue.len()
+            self.queue.len() as u32
         }
     }
 
@@ -118,26 +123,19 @@ impl TrackListValue {
     }
 
     #[instrument(skip(self))]
-    pub fn find_track(&self, track_id: usize) -> Option<Track> {
-        self.queue.iter().find(|t| t.id == track_id).cloned()
+    pub fn find_track_by_index(&self, index: u32) -> Option<&Track> {
+        self.queue.get(&index)
     }
 
     #[instrument(skip(self))]
-    pub fn find_track_by_index(&self, index: usize) -> Option<Track> {
-        self.queue.iter().find(|t| t.position == index).cloned()
-    }
-
-    #[instrument(skip(self))]
-    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
-        if let Some(track) = self.queue.iter_mut().find(|t| t.position == position) {
-            track.status = status;
-        }
+    pub fn set_track_status(&mut self, position: u32, status: TrackStatus) {
+        self.queue.entry(position).and_modify(|e| e.status = status);
     }
 
     #[instrument(skip(self))]
     pub fn unplayed_tracks(&self) -> Vec<&Track> {
         self.queue
-            .iter()
+            .values()
             .filter(|t| t.status == TrackStatus::Unplayed)
             .collect::<Vec<&Track>>()
     }
@@ -145,18 +143,18 @@ impl TrackListValue {
     #[instrument(skip(self))]
     pub fn played_tracks(&self) -> Vec<&Track> {
         self.queue
-            .iter()
+            .values()
             .filter(|t| t.status == TrackStatus::Played)
             .collect::<Vec<&Track>>()
     }
 
     #[instrument(skip(self))]
-    pub fn track_index(&self, track_id: usize) -> Option<usize> {
-        let mut index: Option<usize> = None;
+    pub fn track_index(&self, track_id: u32) -> Option<u32> {
+        let mut index: Option<u32> = None;
 
-        self.queue.iter().enumerate().for_each(|(i, t)| {
+        self.queue.iter().for_each(|(i, t)| {
             if t.id == track_id {
-                index = Some(i);
+                index = Some(*i);
             }
         });
 
@@ -164,7 +162,7 @@ impl TrackListValue {
     }
 
     pub fn current_track(&self) -> Option<Track> {
-        for track in &self.queue {
+        for track in self.queue.values() {
             if track.status == TrackStatus::Playing {
                 return Some(track.clone());
             }
@@ -173,57 +171,9 @@ impl TrackListValue {
         None
     }
 
-    #[instrument(skip(self))]
-    pub fn vec(&self) -> VecDeque<Track> {
-        self.queue.clone()
-    }
-
-    pub fn drain<R>(&mut self, range: R) -> Drain<Track>
-    where
-        R: RangeBounds<usize>,
-    {
-        self.queue.drain(range)
-    }
-
-    pub fn append(&mut self, mut items: VecDeque<Track>) {
-        self.queue.append(&mut items)
-    }
-
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-
-    pub fn front(&self) -> Option<&Track> {
-        self.queue.front()
-    }
-
-    pub fn back(&self) -> Option<&Track> {
-        self.queue.back()
-    }
-
-    pub fn pop_front(&mut self) -> Option<Track> {
-        self.queue.pop_front()
-    }
-
-    pub fn pop_back(&mut self) -> Option<Track> {
-        self.queue.pop_back()
-    }
-
-    pub fn push_front(&mut self, track: Track) {
-        self.queue.push_front(track);
-    }
-
-    pub fn push_back(&mut self, track: Track) {
-        self.queue.push_back(track);
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
     pub fn cursive_list(&self) -> Vec<(String, i32)> {
         self.queue
-            .iter()
+            .values()
             .map(|i| (i.title.clone(), i.id as i32))
             .collect::<Vec<(String, i32)>>()
     }

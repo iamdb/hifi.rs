@@ -170,7 +170,7 @@ impl CursiveUI {
 
         track_list.set_on_submit(move |_s, item| {
             let i = item.to_owned();
-            tokio::spawn(async move { CONTROLS.skip_to(i).await });
+            tokio::spawn(async move { CONTROLS.skip_to(i as u32).await });
         });
 
         let mut layout = LinearLayout::new(Orientation::Vertical).child(
@@ -250,7 +250,7 @@ impl CursiveUI {
             user_playlists.add_item(p.title.clone(), p.id);
         });
 
-        user_playlists.set_on_submit(move |s: &mut Cursive, item: &usize| {
+        user_playlists.set_on_submit(move |s: &mut Cursive, item: &u32| {
             if item == &0 {
                 s.call_on_name("play_button", |button: &mut Button| {
                     button.disable();
@@ -591,7 +591,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     search_results.set_on_submit(move |s: &mut Cursive, item: &String| {
                         let layout = submit_playlist(
                             s,
-                            item.parse::<usize>().expect("failed to parse string"),
+                            item.parse::<u32>().expect("failed to parse string"),
                         );
 
                         let event_panel =
@@ -608,7 +608,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
     }
 }
 
-fn submit_playlist(_s: &mut Cursive, item: usize) -> LinearLayout {
+fn submit_playlist(_s: &mut Cursive, item: u32) -> LinearLayout {
     let mut layout = LinearLayout::vertical();
 
     let playlist_tracks = block_on(async { player::playlist_tracks(item as i64).await });
@@ -832,7 +832,7 @@ pub async fn receive_notifications() {
                                     };
 
                                     track_title.set_content(track.title.trim());
-                                    progress.set_max(track.duration_seconds);
+                                    progress.set_max(track.duration_seconds as usize);
                                 }
 
                                 if let Some(artist) = track.artist {
@@ -869,14 +869,14 @@ pub async fn receive_notifications() {
                                             list.unplayed_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), false),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
 
                                             list.played_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), true),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
                                         }
@@ -917,14 +917,14 @@ pub async fn receive_notifications() {
                                             list.unplayed_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), false),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
 
                                             list.played_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), true),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
                                         }
@@ -938,7 +938,7 @@ pub async fn receive_notifications() {
                                             s.find_name::<TextView>("total_tracks"),
                                         ) {
                                             entity_title.set_content(playlist.title.clone());
-                                            total_tracks.set_content(format!("{:03}", list.len()));
+                                            total_tracks.set_content(format!("{:03}", list.total()));
                                         }
                                     }))
                                     .expect("failed to send update");

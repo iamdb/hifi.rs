@@ -72,6 +72,7 @@ export const positionString = derived(position, (p) => {
 })
 
 export const durationString = derived(currentTrack, (d) => {
+  console.log(d)
   const durationMinutes = Math.floor(d.durationSeconds / 60);
   const durationSeconds = d.durationSeconds - durationMinutes * 60;
 

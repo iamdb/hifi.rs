@@ -39,6 +39,3 @@ include_dir = "0.7"
 mime_guess = "2.0"
 cached = { version = "0.45", features = ["async", "serde", "serde_json"]} 
 async-trait = "0.1.73"
-
-[build-dependencies]
-pkg-config = "0.3"

@@ -108,6 +108,7 @@ async fn handle_connection(socket: WebSocket) {
         if let Ok(ct) = serde_json::to_string(&Notification::CurrentTrackList {
             list: player::current_tracklist().await,
         }) {
+            debug!(?ct);
             sender.send(Message::Text(ct)).await.expect("error");
         }
 
@@ -168,9 +169,6 @@ async fn handle_connection(socket: WebSocket) {
                                 Action::Stop => controls.stop().await,
                                 Action::Quit => controls.quit().await,
                                 Action::SkipTo { num } => controls.skip_to(num).await,
-                                Action::SkipToById { track_id } => {
-                                    controls.skip_to_by_id(track_id).await
-                                }
                                 Action::JumpForward => controls.jump_forward().await,
                                 Action::JumpBackward => controls.jump_backward().await,
                                 Action::PlayAlbum { album_id } => {

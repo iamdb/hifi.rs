@@ -6,7 +6,7 @@ use cursive::{
 };
 use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, fmt::Debug};
+use std::{collections::BTreeMap, fmt::Debug};
 
 #[async_trait]
 pub trait MusicService: Send + Sync + Debug {
@@ -32,23 +32,23 @@ pub enum TrackStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Track {
-    pub id: usize,
-    pub number: usize,
+    pub id: u32,
+    pub number: u32,
     pub title: String,
     pub album: Option<Album>,
     pub artist: Option<Artist>,
-    pub duration_seconds: usize,
+    pub duration_seconds: u32,
     pub explicit: bool,
     pub hires_available: bool,
     pub sampling_rate: f32,
-    pub bit_depth: usize,
+    pub bit_depth: u32,
     pub status: TrackStatus,
     #[serde(skip)]
     pub track_url: Option<String>,
     pub available: bool,
     pub cover_art: Option<String>,
-    pub position: usize,
-    pub media_number: usize,
+    pub position: u32,
+    pub media_number: u32,
 }
 
 impl CursiveFormat for Track {
@@ -122,11 +122,11 @@ pub struct Album {
     pub id: String,
     pub title: String,
     pub artist: Artist,
-    pub release_year: usize,
+    pub release_year: u32,
     pub hires_available: bool,
     pub explicit: bool,
-    pub total_tracks: usize,
-    pub tracks: VecDeque<Track>,
+    pub total_tracks: u32,
+    pub tracks: BTreeMap<u32, Track>,
     pub available: bool,
     pub cover_art: String,
 }
@@ -171,7 +171,7 @@ pub struct SearchResults {
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Artist {
-    pub id: usize,
+    pub id: u32,
     pub name: String,
     pub albums: Option<Vec<Album>>,
 }
@@ -180,11 +180,11 @@ pub struct Artist {
 #[serde(rename_all = "camelCase")]
 pub struct Playlist {
     pub title: String,
-    pub duration_seconds: usize,
-    pub tracks_count: usize,
-    pub id: usize,
+    pub duration_seconds: u32,
+    pub tracks_count: u32,
+    pub id: u32,
     pub cover_art: Option<String>,
-    pub tracks: VecDeque<Track>,
+    pub tracks: BTreeMap<u32, Track>,
 }
 
 impl CursiveFormat for Artist {
