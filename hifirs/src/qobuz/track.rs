@@ -1,46 +1,5 @@
-use crate::{
-    cursive::CursiveFormat,
-    qobuz::{album::Album, Artist},
-    state::TrackListType,
-};
-use cursive::{
-    theme::{Effect, Style},
-    utils::markup::StyledString,
-};
-use gstreamer::ClockTime;
+use crate::service::{Album, Artist, Track, TrackStatus};
 use hifirs_qobuz_api::client::track::Track as QobuzTrack;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
-pub enum TrackStatus {
-    Played,
-    Playing,
-    #[default]
-    Unplayed,
-    Unplayable,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Track {
-    pub id: usize,
-    pub number: usize,
-    pub title: String,
-    pub album: Option<Album>,
-    pub artist: Option<Artist>,
-    pub duration_seconds: usize,
-    pub explicit: bool,
-    pub hires_available: bool,
-    pub sampling_rate: f32,
-    pub bit_depth: usize,
-    pub status: TrackStatus,
-    #[serde(skip)]
-    pub track_url: Option<String>,
-    pub available: bool,
-    pub cover_art: Option<String>,
-    pub position: usize,
-    pub media_number: usize,
-}
 
 impl From<QobuzTrack> for Track {
     fn from(value: QobuzTrack) -> Self {
@@ -53,8 +12,9 @@ impl From<QobuzTrack> for Track {
 
         let artist = if let Some(p) = &value.performer {
             Some(Artist {
-                id: p.id as usize,
+                id: p.id as u32,
                 name: p.name.clone(),
+                albums: None,
             })
         } else {
             value.album.as_ref().map(|a| a.artist.clone().into())
@@ -69,87 +29,22 @@ impl From<QobuzTrack> for Track {
         };
 
         Self {
-            id: value.id as usize,
-            number: value.track_number as usize,
+            id: value.id as u32,
+            number: value.track_number as u32,
             title: value.title,
             album,
             artist,
-            duration_seconds: value.duration as usize,
+            duration_seconds: value.duration as u32,
             explicit: value.parental_warning,
             hires_available: value.hires_streamable,
-            sampling_rate: 0.,
-            bit_depth: 0,
+            sampling_rate: value.maximum_sampling_rate as f32,
+            bit_depth: value.maximum_bit_depth as u32,
             status,
             track_url: None,
             available: value.streamable,
-            position: value.position.unwrap_or(value.track_number as usize),
+            position: value.position.unwrap_or(value.track_number as usize) as u32,
             cover_art,
-            media_number: value.media_number as usize,
+            media_number: value.media_number as u32,
         }
-    }
-}
-
-impl CursiveFormat for Track {
-    fn list_item(&self) -> StyledString {
-        let mut style = Style::none();
-
-        if !self.available {
-            style = style.combine(Effect::Dim).combine(Effect::Strikethrough);
-        }
-
-        let mut title = StyledString::styled(self.title.trim(), style.combine(Effect::Bold));
-
-        if let Some(artist) = &self.artist {
-            title.append_styled(" by ", style);
-            title.append_styled(&artist.name, style);
-        }
-
-        let duration = ClockTime::from_seconds(self.duration_seconds as u64)
-            .to_string()
-            .as_str()[2..7]
-            .to_string();
-        title.append_plain(" ");
-        title.append_styled(duration, style.combine(Effect::Dim));
-        title.append_plain(" ");
-
-        if self.explicit {
-            title.append_styled("e", style.combine(Effect::Dim));
-        }
-
-        if self.hires_available {
-            title.append_styled("*", style.combine(Effect::Dim));
-        }
-
-        title
-    }
-    fn track_list_item(&self, list_type: &TrackListType, inactive: bool) -> StyledString {
-        let mut style = Style::none();
-
-        if inactive || !self.available {
-            style = style
-                .combine(Effect::Dim)
-                .combine(Effect::Italic)
-                .combine(Effect::Strikethrough);
-        }
-
-        let num = match list_type {
-            TrackListType::Album => self.number,
-            TrackListType::Playlist => self.position,
-            TrackListType::Track => self.number,
-            TrackListType::Unknown => self.position,
-        };
-
-        let mut item = StyledString::styled(format!("{:02} ", num), style);
-        item.append_styled(self.title.trim(), style.combine(Effect::Simple));
-        item.append_plain(" ");
-
-        let duration = ClockTime::from_seconds(self.duration_seconds as u64)
-            .to_string()
-            .as_str()[2..7]
-            .to_string();
-
-        item.append_styled(duration, style.combine(Effect::Dim));
-
-        item
     }
 }

@@ -86,7 +86,9 @@ pub async fn run() -> Result<(), Error> {
     prog.add(qobuz_prog.clone());
 
     let mut qobuz = qobuz::new(&qobuz_prog).await;
-    qobuz.auth().await?;
+    qobuz
+        .auth(env!("QOBUZ_USERNAME"), env!("QOBUZ_PASSWORD"))
+        .await?;
 
     let spotify_playlist = spotify
         .playlist(

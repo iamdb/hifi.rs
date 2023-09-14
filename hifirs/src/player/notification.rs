@@ -1,36 +1,43 @@
-use serde::{Deserialize, Serialize};
+use gstreamer::{ClockTime, State};
+use serde::{Deserialize, Serialize, Serializer};
 
-use crate::{
-    player,
-    qobuz::track::Track,
-    state::{ClockValue, StatusValue, TrackListValue},
-};
+use crate::{player, player::queue::TrackListValue};
 
 pub type BroadcastReceiver = async_broadcast::Receiver<Notification>;
 pub type BroadcastSender = async_broadcast::Sender<Notification>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+fn serialize_clocktime<S>(clock: &ClockTime, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    clock.seconds().serialize(s)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum Notification {
     Buffering {
         is_buffering: bool,
-        percent: i32,
-        target_status: StatusValue,
+        percent: u32,
+        target_status: State,
     },
     Status {
-        status: StatusValue,
+        status: State,
     },
     Position {
-        clock: ClockValue,
-    },
-    Duration {
-        clock: ClockValue,
+        #[serde(serialize_with = "serialize_clocktime")]
+        clock: ClockTime,
     },
     CurrentTrackList {
         list: TrackListValue,
     },
-    CurrentTrack {
-        track: Track,
+    AudioQuality {
+        bitdepth: u32,
+        sampling_rate: u32,
+    },
+    Quit,
+    Loading {
+        is_loading: bool,
     },
     Error {
         error: player::error::Error,

@@ -1,7 +1,6 @@
-use crate::qobuz::track::Track;
 use crate::{
-    player::{self, controls::Controls, notification::Notification},
-    state::{ClockValue, StatusValue, TrackListValue},
+    player::{self, controls::Controls, notification::Notification, queue::TrackListValue},
+    service::Track,
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
@@ -19,11 +18,11 @@ pub async fn init(controls: Controls) -> Connection {
     };
     let mpris_player = MprisPlayer {
         controls: controls.clone(),
-        status: GstState::Null.into(),
+        status: GstState::Null,
         current_track: None,
-        position: ClockValue::default(),
-        position_ts: chrono::offset::Local::now(),
         total_tracks: 0,
+        position: ClockTime::default(),
+        position_ts: chrono::offset::Local::now(),
         can_play: true,
         can_pause: true,
         can_stop: true,
@@ -65,6 +64,10 @@ pub async fn receive_notifications(conn: Connection) {
     loop {
         if let Ok(notification) = receiver.recv().await {
             match notification {
+                Notification::Quit => {
+                    return;
+                }
+                Notification::Loading { is_loading: _ } => {}
                 Notification::Buffering {
                     is_buffering: _,
                     target_status: _,
@@ -89,9 +92,9 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to get object server");
 
                     let mut iface = iface_ref.get_mut().await;
-                    iface.status = status.clone();
+                    iface.status = status;
 
-                    match status.into() {
+                    match status {
                         GstState::Null => {
                             iface.can_play = true;
                             iface.can_pause = true;
@@ -129,35 +132,43 @@ pub async fn receive_notifications(conn: Connection) {
                     let mut iface = iface_ref.get_mut().await;
                     let now = chrono::offset::Local::now();
                     let diff = now.signed_duration_since(iface.position_ts);
-                    let position_secs = clock.inner_clocktime().seconds();
+                    let position_secs = clock.seconds();
 
                     if diff.num_seconds() != position_secs as i64 {
                         debug!("mpris clock drift, sending new position");
                         iface.position_ts =
                             chrono::offset::Local::now() - Duration::seconds(position_secs as i64);
 
-                        MprisPlayer::seeked(
-                            iface_ref.signal_context(),
-                            clock.inner_clocktime().useconds() as i64,
-                        )
-                        .await
-                        .expect("failed to send seeked signal");
+                        MprisPlayer::seeked(iface_ref.signal_context(), clock.useconds() as i64)
+                            .await
+                            .expect("failed to send seeked signal");
                     }
-                }
-                Notification::Duration { clock: _ } => {
-                    let iface_ref = object_server
-                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                        .await
-                        .expect("failed to get object server");
-
-                    let iface = iface_ref.get().await;
-                    iface
-                        .metadata_changed(iface_ref.signal_context())
-                        .await
-                        .expect("failed to signal metadata change");
                 }
                 Notification::CurrentTrackList { list } => {
                     if let Some(current) = list.current_track() {
+                        let player_ref = object_server
+                            .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
+                            .await
+                            .expect("failed to get object server");
+
+                        let mut player_iface = player_ref.get_mut().await;
+
+                        player_iface.can_previous = current.position != 0;
+
+                        player_iface.can_next = !(player_iface.total_tracks != 0
+                            && current.position == player_iface.total_tracks - 1);
+
+                        if let Some(album) = &current.album {
+                            player_iface.total_tracks = album.total_tracks;
+                        }
+
+                        player_iface.current_track = Some(current.clone());
+
+                        player_iface
+                            .metadata_changed(player_ref.signal_context())
+                            .await
+                            .expect("failed to signal metadata change");
+
                         let list_ref = object_server
                             .interface::<_, MprisTrackList>("/org/mpris/MediaPlayer2")
                             .await
@@ -181,31 +192,11 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to send track list replaced signal");
                     }
                 }
-                Notification::CurrentTrack { track } => {
-                    let iface_ref = object_server
-                        .interface::<_, MprisPlayer>("/org/mpris/MediaPlayer2")
-                        .await
-                        .expect("failed to get object server");
-
-                    let mut iface = iface_ref.get_mut().await;
-
-                    iface.can_previous = track.position != 0;
-
-                    iface.can_next =
-                        !(iface.total_tracks != 0 && track.position == iface.total_tracks - 1);
-
-                    if let Some(album) = &track.album {
-                        iface.total_tracks = album.total_tracks;
-                    }
-
-                    iface.current_track = Some(track);
-
-                    iface
-                        .metadata_changed(iface_ref.signal_context())
-                        .await
-                        .expect("failed to signal metadata change");
-                }
                 Notification::Error { error: _ } => {}
+                Notification::AudioQuality {
+                    bitdepth: _,
+                    sampling_rate: _,
+                } => {}
             }
         }
     }
@@ -251,11 +242,11 @@ impl Mpris {
 #[derive(Debug)]
 pub struct MprisPlayer {
     controls: Controls,
-    status: StatusValue,
-    position: ClockValue,
+    status: GstState,
+    position: ClockTime,
     position_ts: DateTime<Local>,
+    total_tracks: u32,
     current_track: Option<Track>,
-    total_tracks: usize,
     can_play: bool,
     can_pause: bool,
     can_stop: bool,
@@ -288,7 +279,13 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> String {
-        self.status.as_str().to_string()
+        match self.status {
+            GstState::Playing => "Playing".to_string(),
+            GstState::Paused => "Paused".to_string(),
+            GstState::Null => "Stopped".to_string(),
+            GstState::VoidPending => "Stopped".to_string(),
+            GstState::Ready => "Ready".to_string(),
+        }
     }
     #[dbus_interface(property, name = "LoopStatus")]
     fn loop_status(&self) -> &'static str {
@@ -317,7 +314,7 @@ impl MprisPlayer {
     }
     #[dbus_interface(property, name = "Position")]
     async fn position(&self) -> i64 {
-        self.position.inner_clocktime().useconds() as i64
+        self.position.useconds() as i64
     }
     #[dbus_interface(signal, name = "Seeked")]
     pub async fn seeked(
@@ -378,7 +375,7 @@ impl MprisTrackList {
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
-                if tracks.contains(&i.id.to_string()) {
+                if tracks.contains(&i.position.to_string()) {
                     Some(track_to_meta(i.clone()))
                 } else {
                     None
@@ -386,25 +383,29 @@ impl MprisTrackList {
             })
             .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
     }
-    async fn go_to(&self, track_id: String) {
-        if let Ok(id) = track_id.parse::<usize>() {
-            self.controls.skip_to_by_id(id).await;
+
+    async fn go_to(&self, position: String) {
+        if let Ok(p) = position.parse::<u32>() {
+            self.controls.skip_to(p).await;
         }
     }
+
     #[dbus_interface(signal, name = "TrackListReplaced")]
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<String>,
         current: String,
     ) -> zbus::Result<()>;
+
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
         self.track_list
             .unplayed_tracks()
             .iter()
-            .map(|i| i.id.to_string())
+            .map(|i| i.position.to_string())
             .collect::<Vec<String>>()
     }
+
     #[dbus_interface(property, name = "CanEditTracks")]
     async fn can_edit_tracks(&self) -> bool {
         false

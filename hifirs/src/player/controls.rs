@@ -1,4 +1,4 @@
-use crate::{action, action_blocking};
+use crate::action;
 use flume::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +12,7 @@ pub enum Action {
     Previous,
     Stop,
     Quit,
-    SkipTo { num: usize },
-    SkipToById { track_id: usize },
+    SkipTo { num: u32 },
     JumpForward,
     JumpBackward,
     PlayAlbum { album_id: String },
@@ -36,7 +35,7 @@ pub struct Controls {
 
 impl Controls {
     pub fn new() -> Controls {
-        let (action_tx, action_rx) = flume::unbounded::<Action>();
+        let (action_tx, action_rx) = flume::bounded::<Action>(10);
 
         Controls {
             action_rx,
@@ -61,20 +60,14 @@ impl Controls {
     pub async fn quit(&self) {
         action!(self, Action::Quit)
     }
-    pub fn quit_blocking(&self) {
-        action_blocking!(self, Action::Quit)
-    }
     pub async fn next(&self) {
         action!(self, Action::Next);
     }
     pub async fn previous(&self) {
         action!(self, Action::Previous);
     }
-    pub async fn skip_to(&self, num: usize) {
+    pub async fn skip_to(&self, num: u32) {
         action!(self, Action::SkipTo { num });
-    }
-    pub async fn skip_to_by_id(&self, track_id: usize) {
-        action!(self, Action::SkipToById { track_id })
     }
     pub async fn jump_forward(&self) {
         action!(self, Action::JumpForward);

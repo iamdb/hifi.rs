@@ -7,9 +7,8 @@ use std::{
 };
 
 use crate::{
-    player::{self, controls::Controls, notification::Notification},
-    qobuz::SearchResults,
-    state::TrackListType,
+    player::{self, controls::Controls, notification::Notification, queue::TrackListType},
+    service::{SearchResults, Track, TrackStatus},
 };
 use cursive::{
     align::HAlign,
@@ -171,7 +170,7 @@ impl CursiveUI {
 
         track_list.set_on_submit(move |_s, item| {
             let i = item.to_owned();
-            tokio::spawn(async move { CONTROLS.skip_to(i).await });
+            tokio::spawn(async move { CONTROLS.skip_to(i as u32).await });
         });
 
         let mut layout = LinearLayout::new(Orientation::Vertical).child(
@@ -200,7 +199,6 @@ impl CursiveUI {
         self.root.set_on_pre_event(Event::CtrlChar('c'), move |s| {
             let dialog = Dialog::text("Do you want to quit?")
                 .button("Yes", move |s: &mut Cursive| {
-                    CONTROLS.quit_blocking();
                     s.quit();
                 })
                 .dismiss_button("No");
@@ -252,7 +250,7 @@ impl CursiveUI {
             user_playlists.add_item(p.title.clone(), p.id);
         });
 
-        user_playlists.set_on_submit(move |s: &mut Cursive, item: &usize| {
+        user_playlists.set_on_submit(move |s: &mut Cursive, item: &u32| {
             if item == &0 {
                 s.call_on_name("play_button", |button: &mut Button| {
                     button.disable();
@@ -593,7 +591,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     search_results.set_on_submit(move |s: &mut Cursive, item: &String| {
                         let layout = submit_playlist(
                             s,
-                            item.parse::<usize>().expect("failed to parse string"),
+                            item.parse::<u32>().expect("failed to parse string"),
                         );
 
                         let event_panel =
@@ -610,7 +608,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
     }
 }
 
-fn submit_playlist(_s: &mut Cursive, item: usize) -> LinearLayout {
+fn submit_playlist(_s: &mut Cursive, item: u32) -> LinearLayout {
     let mut layout = LinearLayout::vertical();
 
     let playlist_tracks = block_on(async { player::playlist_tracks(item as i64).await });
@@ -618,8 +616,8 @@ fn submit_playlist(_s: &mut Cursive, item: usize) -> LinearLayout {
     let mut list = CursiveUI::results_list("playlist_items");
     let mut playlist_items = list.get_inner_mut().get_mut();
 
-    for (i, t) in playlist_tracks.iter().enumerate() {
-        let mut row = StyledString::plain(format!("{:02} ", i));
+    for t in &playlist_tracks {
+        let mut row = StyledString::plain(format!("{:02} ", t.position));
 
         row.append(t.list_item());
 
@@ -663,33 +661,35 @@ fn submit_playlist(_s: &mut Cursive, item: usize) -> LinearLayout {
 fn submit_artist(s: &mut Cursive, item: i32) {
     let artist_albums = block_on(async { player::artist_albums(item).await });
 
-    let mut tree = cursive::menu::Tree::new();
+    if !artist_albums.is_empty() {
+        let mut tree = cursive::menu::Tree::new();
 
-    for a in artist_albums {
-        if !a.available {
-            continue;
+        for a in artist_albums {
+            if !a.available {
+                continue;
+            }
+
+            tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
+                let id = a.id.clone();
+                tokio::spawn(async move { CONTROLS.play_album(id).await });
+
+                s.call_on_name(
+                    "screens",
+                    |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                        screens.set_active_screen(0);
+                    },
+                );
+            });
         }
 
-        tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
-            let id = a.id.clone();
-            tokio::spawn(async move { CONTROLS.play_album(id).await });
+        let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
 
-            s.call_on_name(
-                "screens",
-                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                    screens.set_active_screen(0);
-                },
-            );
-        });
+        let events = album_list
+            .scrollable()
+            .resized(SizeConstraint::Full, SizeConstraint::Free);
+
+        s.screen_mut().add_layer(events);
     }
-
-    let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
-
-    let events = album_list
-        .scrollable()
-        .resized(SizeConstraint::Full, SizeConstraint::Free);
-
-    s.screen_mut().add_layer(events);
 }
 
 fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
@@ -751,20 +751,63 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
     s.screen_mut().add_layer(album_or_track);
 }
 
+fn set_current_track(s: &mut Cursive, track: &Track, lt: &TrackListType) {
+    if let (Some(mut track_num), Some(mut track_title), Some(mut progress)) = (
+        s.find_name::<TextView>("current_track_number"),
+        s.find_name::<TextView>("current_track_title"),
+        s.find_name::<ProgressBar>("progress"),
+    ) {
+        match lt {
+            TrackListType::Album => {
+                track_num.set_content(format!("{:03}", track.number));
+            }
+            TrackListType::Playlist => {
+                track_num.set_content(format!("{:03}", track.position));
+            }
+            TrackListType::Track => {
+                track_num.set_content(format!("{:03}", track.number));
+            }
+            TrackListType::Unknown => {
+                track_num.set_content(format!("{:03}", track.position));
+            }
+        };
+
+        track_title.set_content(track.title.trim());
+        progress.set_max(track.duration_seconds as usize);
+    }
+
+    if let Some(artist) = &track.artist {
+        s.call_on_name("artist_name", |view: &mut TextView| {
+            view.set_content(artist.name.clone());
+        });
+    }
+
+    if let (Some(mut bit_depth), Some(mut sample_rate)) = (
+        s.find_name::<TextView>("bit_depth"),
+        s.find_name::<TextView>("sample_rate"),
+    ) {
+        bit_depth.set_content(format!("{} bits", track.bit_depth));
+        sample_rate.set_content(format!("{} kHz", track.sampling_rate));
+    }
+}
+
 pub async fn receive_notifications() {
     let mut receiver = player::notify_receiver();
-    let mut list_type = TrackListType::Unknown;
 
     loop {
         select! {
             Some(notification) = receiver.next() => {
                 match notification {
+                    Notification::Quit => {
+                        return;
+                    }
+                    Notification::Loading { is_loading: _ } => {}
                     Notification::Status { status } => {
                         SINK.get()
                             .unwrap()
-                            .send(Box::new(|s| {
+                            .send(Box::new(move |s| {
                                 if let Some(mut view) = s.find_name::<TextView>("player_status") {
-                                    match status.into() {
+                                    match status {
                                         GstState::Playing => {
                                             view.set_content(format!(" {}", '\u{23f5}'));
                                         }
@@ -796,73 +839,12 @@ pub async fn receive_notifications() {
                             .unwrap()
                             .send(Box::new(move |s| {
                                 if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                    progress.set_value(clock.inner_clocktime().seconds() as usize);
-                                }
-                            }))
-                            .expect("failed to send update");
-                    }
-                    Notification::Duration { clock } => {
-                        SINK.get()
-                            .unwrap()
-                            .send(Box::new(move |s| {
-                                if let Some(mut progress) = s.find_name::<ProgressBar>("progress") {
-                                    progress.set_max(clock.inner_clocktime().seconds() as usize);
-                                }
-                            }))
-                            .expect("failed to send update");
-                    }
-                    Notification::CurrentTrack { track } => {
-                        let lt = list_type.clone();
-                        SINK.get()
-                            .unwrap()
-                            .send(Box::new(move |s| {
-                                if let (
-                                    Some(mut track_num),
-                                    Some(mut track_title),
-                                    Some(mut progress),
-                                ) = (
-                                    s.find_name::<TextView>("current_track_number"),
-                                    s.find_name::<TextView>("current_track_title"),
-                                    s.find_name::<ProgressBar>("progress"),
-                                ) {
-                                    match lt {
-                                        TrackListType::Album => {
-                                            track_num.set_content(format!("{:03}", track.number));
-                                        }
-                                        TrackListType::Playlist => {
-                                            track_num.set_content(format!("{:03}", track.position));
-                                        }
-                                        TrackListType::Track => {
-                                            track_num.set_content(format!("{:03}", track.number));
-                                        }
-                                        TrackListType::Unknown => {
-                                            track_num.set_content(format!("{:03}", track.position));
-                                        }
-                                    };
-
-                                    track_title.set_content(track.title.trim());
-                                    progress.set_max(track.duration_seconds);
-                                }
-
-                                if let Some(artist) = track.artist {
-                                    s.call_on_name("artist_name", |view: &mut TextView| {
-                                        view.set_content(artist.name);
-                                    });
-                                }
-
-                                if let (Some(mut bit_depth), Some(mut sample_rate)) = (
-                                    s.find_name::<TextView>("bit_depth"),
-                                    s.find_name::<TextView>("sample_rate"),
-                                ) {
-                                    bit_depth.set_content(format!("{} bits", track.bit_depth));
-                                    sample_rate.set_content(format!("{} kHz", track.sampling_rate));
+                                    progress.set_value(clock.seconds() as usize);
                                 }
                             }))
                             .expect("failed to send update");
                     }
                     Notification::CurrentTrackList { list } => {
-                        list_type = list.list_type().clone();
-
                         match list.list_type() {
                             TrackListType::Album => {
                                 SINK.get()
@@ -878,14 +860,14 @@ pub async fn receive_notifications() {
                                             list.unplayed_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), false),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
 
                                             list.played_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), true),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
                                         }
@@ -909,6 +891,13 @@ pub async fn receive_notifications() {
                                             total_tracks
                                                 .set_content(format!("{:03}", album.total_tracks));
                                         }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
+                                        }
                                     }))
                                     .expect("failed to send update");
                             }
@@ -926,14 +915,14 @@ pub async fn receive_notifications() {
                                             list.unplayed_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), false),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
 
                                             list.played_tracks().iter().for_each(|i| {
                                                 list_view.get_inner_mut().add_item(
                                                     i.track_list_item(list.list_type(), true),
-                                                    i.position,
+                                                    i.position as usize,
                                                 );
                                             });
                                         }
@@ -946,8 +935,19 @@ pub async fn receive_notifications() {
                                             s.find_name::<TextView>("entity_title"),
                                             s.find_name::<TextView>("total_tracks"),
                                         ) {
+                                            if let Some(first) = playlist.tracks.first_key_value() {
+                                                set_current_track(s, first.1, list.list_type());
+                                            }
+
                                             entity_title.set_content(playlist.title.clone());
-                                            total_tracks.set_content(format!("{:03}", list.len()));
+                                            total_tracks.set_content(format!("{:03}", list.total()));
+                                        }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
                                         }
                                     }))
                                     .expect("failed to send update");
@@ -974,6 +974,13 @@ pub async fn receive_notifications() {
                                         {
                                             total_tracks.set_content("001");
                                         }
+
+                                        for t in list.queue.values() {
+                                            if t.status == TrackStatus::Playing {
+                                                set_current_track(s, t, list.list_type());
+                                                break;
+                                            }
+                                        }
                                     }))
                                     .expect("failed to send update");
                             }
@@ -992,7 +999,7 @@ pub async fn receive_notifications() {
                                     if is_buffering {
                                         view.set_content(format!("{}%", percent));
                                     } else {
-                                        match target_status.into() {
+                                        match target_status {
                                             GstState::Playing => {
                                                 view.set_content(format!(" {}", '\u{23f5}'));
                                             }
@@ -1011,6 +1018,19 @@ pub async fn receive_notifications() {
                                 });
                             }))
                             .expect("failed to send update");
+                    }
+                    Notification::AudioQuality { bitdepth, sampling_rate} => {
+                        SINK.get().unwrap().send(Box::new(move |s| {
+                            s.call_on_name("bit_depth", |view: &mut TextView| {
+                                view.set_content(format!("{bitdepth} bits"));
+                            });
+                        })).expect("failed to send update");
+
+                        SINK.get().unwrap().send(Box::new(move |s| {
+                            s.call_on_name("sample_rate", |view: &mut TextView| {
+                                view.set_content(format!("{} kHz", sampling_rate as f32 / 1000.));
+                            });
+                        })).expect("failed to send update");
                     }
                     Notification::Error { error: _ } => {}
                 }

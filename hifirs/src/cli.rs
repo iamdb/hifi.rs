@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 #[cfg(target_os = "linux")]
 use crate::mpris;
@@ -14,6 +14,7 @@ use comfy_table::{presets::UTF8_FULL, Table};
 use dialoguer::{Confirm, Input, Password};
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
+use tokio::task::JoinHandle;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{fmt, prelude::*};
 
@@ -42,7 +43,6 @@ struct Cli {
 
     #[clap(long, default_value = "0.0.0.0:9888")]
     /// Specify a different interface and port for the web server to listen on.
-    /// (default 0.0.0.0:9888)
     pub interface: SocketAddr,
 
     #[clap(subcommand)]
@@ -68,6 +68,7 @@ enum Commands {
         #[clap(value_parser)]
         album_id: String,
     },
+    /// Retreive data from the Qobuz API
     Api {
         #[clap(subcommand)]
         command: ApiCommands,
@@ -182,21 +183,23 @@ impl From<player::error::Error> for Error {
 
 async fn setup_player(
     quit_when_done: bool,
-    username: Option<String>,
-    password: Option<String>,
     resume: bool,
     web: bool,
     interface: SocketAddr,
-) -> Result<(), Error> {
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<Vec<JoinHandle<()>>, Error> {
     player::init(username, password, quit_when_done).await?;
 
+    let mut handles: Vec<JoinHandle<()>> = Vec::new();
+
     if resume {
-        tokio::spawn(async move {
+        handles.push(tokio::spawn(async move {
             match player::resume(false).await {
                 Ok(_) => debug!("resume success"),
                 Err(error) => debug!("resume error {error}"),
             }
-        });
+        }));
     }
 
     #[cfg(target_os = "linux")]
@@ -204,18 +207,25 @@ async fn setup_player(
         let controls = player::controls();
         let conn = mpris::init(controls).await;
 
-        tokio::spawn(async {
+        handles.push(tokio::spawn(async {
             mpris::receive_notifications(conn).await;
-        });
+        }));
     }
 
     if web {
-        tokio::spawn(async move { websocket::init(interface).await });
+        handles.push(tokio::spawn(
+            async move { websocket::init(interface).await },
+        ));
     }
 
-    tokio::spawn(async { player::player_loop().await });
+    handles.push(tokio::spawn(async {
+        match player::player_loop().await {
+            Ok(_) => debug!("player loop exited successfully"),
+            Err(error) => debug!("player loop error {error}"),
+        }
+    }));
 
-    Ok(())
+    Ok(handles)
 }
 
 pub async fn run() -> Result<(), Error> {
@@ -238,68 +248,68 @@ pub async fn run() -> Result<(), Error> {
     // CLI COMMANDS
     match cli.command {
         Commands::Open {} => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 true,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::Play { url } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
             player::play_uri(url).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamTrack { track_id } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
             player::play_track(track_id).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
         Commands::StreamAlbum { album_id } => {
-            setup_player(
+            let mut handles = setup_player(
                 cli.quit_when_done,
-                cli.username.to_owned(),
-                cli.password.to_owned(),
                 false,
                 cli.web,
                 cli.interface,
+                cli.username.as_deref(),
+                cli.password.as_deref(),
             )
             .await?;
 
             player::play_album(album_id).await?;
 
-            wait!(cli.disable_tui);
+            wait!(mut handles, cli.disable_tui);
 
             Ok(())
         }
@@ -309,7 +319,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_all(query, limit.unwrap_or_default()).await?;
 
                 output!(results, output_format);
@@ -321,7 +332,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_albums(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -333,7 +345,8 @@ pub async fn run() -> Result<(), Error> {
                 limit,
                 output_format,
             } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
                 let results = client.search_artists(query.clone(), limit).await?;
 
                 output!(results, output_format);
@@ -341,28 +354,32 @@ pub async fn run() -> Result<(), Error> {
                 Ok(())
             }
             ApiCommands::Playlist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.playlist(id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Album { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.album(&id).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Artist { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.artist(id, Some(500)).await?;
                 output!(results, output_format);
                 Ok(())
             }
             ApiCommands::Track { id, output_format } => {
-                let client = qobuz::make_client(cli.username, cli.password).await?;
+                let client =
+                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
 
                 let results = client.track(id).await?;
                 output!(results, output_format);
@@ -425,11 +442,25 @@ pub async fn run() -> Result<(), Error> {
 
 #[macro_export]
 macro_rules! wait {
-    ($disable_tui: expr) => {
+    (mut $handles: expr, $disable_tui: expr) => {
         if !$disable_tui {
             let mut tui = CursiveUI::new();
-            tokio::spawn(async { cursive::receive_notifications().await });
+
+            $handles.push(tokio::spawn(async {
+                cursive::receive_notifications().await
+            }));
+
             tui.run().await;
+
+            debug!("tui exited, quitting");
+            player::controls().quit().await;
+
+            for h in $handles {
+                match h.await {
+                    Ok(_) => debug!("task exited"),
+                    Err(error) => debug!("task error {error}"),
+                };
+            }
         } else {
             debug!("waiting for ctrlc");
             tokio::signal::ctrl_c()
@@ -439,7 +470,12 @@ macro_rules! wait {
             debug!("ctrlc received, quitting");
             player::controls().quit().await;
 
-            std::thread::sleep(Duration::from_secs(1));
+            for h in $handles {
+                match h.await {
+                    Ok(_) => debug!("task exited"),
+                    Err(error) => debug!("task error {error}"),
+                };
+            }
         }
     };
 }

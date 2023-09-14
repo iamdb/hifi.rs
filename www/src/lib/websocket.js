@@ -2,8 +2,8 @@ import { derived, writable } from 'svelte/store';
 
 export const currentStatus = writable('Stopped');
 export const connected = writable(false);
-export const currentTrack = writable(null);
 export const isBuffering = writable(false);
+export const isLoading = writable(false);
 export const searchResults = writable({
   albums: [],
   artists: [],
@@ -15,6 +15,9 @@ export const userPlaylists = writable([])
 const position = writable(0);
 const duration = writable(0);
 const currentTrackList = writable(null);
+export const currentTrack = derived(currentTrackList, (list) => {
+  return list?.queue.find((l) => l.status === "Playing")
+});
 
 export const queue = derived(currentTrackList, (v) => {
   return v?.queue || []
@@ -65,15 +68,15 @@ export const secsToTimecode = (secs) => {
 }
 
 export const positionString = derived(position, (p) => {
-  const positionMinutes = Math.floor(p / 1000 / 1000 / 1000 / 60);
-  const positionSeconds = Math.floor(p / 1000 / 1000 / 1000) - positionMinutes * 60;
+  const positionMinutes = Math.floor(p / 60);
+  const positionSeconds = p - positionMinutes * 60;
 
   return `${positionMinutes.toString(10).padStart(2, 0)}:${positionSeconds.toString(10).padStart(2, 0)}`
 })
 
-export const durationString = derived(duration, (d) => {
-  const durationMinutes = Math.floor(d / 1000 / 1000 / 1000 / 60);
-  const durationSeconds = Math.floor(d / 1000 / 1000 / 1000) - durationMinutes * 60;
+export const durationString = derived(currentTrack, (d) => {
+  const durationMinutes = Math.floor(d.durationSeconds / 60);
+  const durationSeconds = d.durationSeconds - durationMinutes * 60;
 
   return `${durationMinutes.toString(10).padStart(2, 0)}:${durationSeconds.toString(10).padStart(2, 0)}`
 })
@@ -115,14 +118,14 @@ export class WS {
 
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);
+      } else if (Object.hasOwn(json, 'loading')) {
+        isLoading.set(json.loading.isLoading);
       } else if (Object.hasOwn(json, 'position')) {
         position.set(json.position.clock);
       } else if (Object.hasOwn(json, 'duration')) {
         duration.set(json.duration.clock);
       } else if (Object.hasOwn(json, 'status')) {
         currentStatus.set(json.status.status);
-      } else if (Object.hasOwn(json, 'currentTrack')) {
-        currentTrack.set(json.currentTrack.track);
       } else if (Object.hasOwn(json, 'currentTrackList')) {
         currentTrackList.set(json.currentTrackList?.list);
       } else if (Object.hasOwn(json, 'searchResults')) {
@@ -133,6 +136,14 @@ export class WS {
         playlistTracks.set(json.playlistTracks);
       } else if (Object.hasOwn(json, 'userPlaylists')) {
         userPlaylists.set(json.userPlaylists)
+      } else if (Object.hasOwn(json, 'audioQuality')) {
+        currentTrack.update((track) => {
+          if (track) {
+            track.bitDepth = json.audioQuality.bitdepth
+            track.samplingRate = json.audioQuality.sampling_rate / 1000
+          }
+          return track
+        })
       }
     };
 

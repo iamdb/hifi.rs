@@ -1,9 +1,17 @@
-use crate::cursive::CursiveFormat;
-use cursive::utils::markup::StyledString;
-use hifirs_qobuz_api::client::artist::Artist;
+use crate::service::{Album, Artist};
+use hifirs_qobuz_api::client::artist::Artist as QobuzArtist;
 
-impl CursiveFormat for Artist {
-    fn list_item(&self) -> StyledString {
-        StyledString::plain(self.name.clone())
+impl From<QobuzArtist> for Artist {
+    fn from(a: QobuzArtist) -> Self {
+        Self {
+            id: a.id as u32,
+            name: a.name,
+            albums: a.albums.map(|a| {
+                a.items
+                    .into_iter()
+                    .map(|a| a.into())
+                    .collect::<Vec<Album>>()
+            }),
+        }
     }
 }

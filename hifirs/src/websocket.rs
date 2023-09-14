@@ -1,5 +1,3 @@
-use std::{net::SocketAddr, path::PathBuf, str::FromStr};
-
 use axum::{
     body::Body,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -12,6 +10,7 @@ use futures::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
 use mime_guess::{mime::HTML, MimeGuess};
 use serde_json::{json, Value};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 use tokio::select;
 
 use crate::player::{self, controls::Action, notification::Notification};
@@ -26,10 +25,23 @@ pub async fn init(binding_interface: SocketAddr) {
 
     debug!("listening on {}", binding_interface);
 
-    axum::Server::bind(&binding_interface)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let server = axum::Server::bind(&binding_interface).serve(app.into_make_service());
+
+    let graceful = server.with_graceful_shutdown(async {
+        let mut broadcast_receiver = player::notify_receiver();
+
+        loop {
+            if let Some(message) = broadcast_receiver.next().await {
+                if message == Notification::Quit {
+                    break;
+                }
+            }
+        }
+    });
+
+    if let Err(e) = graceful.await {
+        debug!(?e)
+    }
 }
 
 async fn static_handler(req: Request<Body>) -> impl IntoResponse {
@@ -81,17 +93,11 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 async fn handle_connection(socket: WebSocket) {
     debug!("new websocket connection");
     let (mut sender, mut receiver) = socket.split();
-    let (rt_sender, rt_receiver) = flume::unbounded::<Value>();
+    let (rt_sender, rt_receiver) = flume::bounded::<Value>(1);
 
     let mut send_task = tokio::spawn(async move {
         debug!("spawning send task");
         let mut broadcast_receiver = player::notify_receiver();
-
-        if let Some(track) = player::current_track().await {
-            let ct = serde_json::to_string(&Notification::CurrentTrack { track })
-                .expect("error making json");
-            sender.send(Message::Text(ct)).await.expect("error");
-        }
 
         if let Ok(ct) = serde_json::to_string(&Notification::CurrentTrackList {
             list: player::current_tracklist().await,
@@ -102,12 +108,6 @@ async fn handle_connection(socket: WebSocket) {
         if let Some(position) = player::position() {
             if let Ok(p) = serde_json::to_string(&Notification::Position { clock: position }) {
                 sender.send(Message::Text(p)).await.expect("error");
-            }
-        }
-
-        if let Some(duration) = player::duration() {
-            if let Ok(d) = serde_json::to_string(&Notification::Duration { clock: duration }) {
-                sender.send(Message::Text(d)).await.expect("error");
             }
         }
 
@@ -162,9 +162,6 @@ async fn handle_connection(socket: WebSocket) {
                                 Action::Stop => controls.stop().await,
                                 Action::Quit => controls.quit().await,
                                 Action::SkipTo { num } => controls.skip_to(num).await,
-                                Action::SkipToById { track_id } => {
-                                    controls.skip_to_by_id(track_id).await
-                                }
                                 Action::JumpForward => controls.jump_forward().await,
                                 Action::JumpBackward => controls.jump_backward().await,
                                 Action::PlayAlbum { album_id } => {

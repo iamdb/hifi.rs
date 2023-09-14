@@ -4,7 +4,7 @@ use snafu::prelude::*;
 
 use crate::player::notification::Notification;
 
-#[derive(Snafu, Debug, Clone, Serialize, Deserialize)]
+#[derive(Snafu, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Error {
     #[snafu(display("{message}"))]
     FailedToPlay {

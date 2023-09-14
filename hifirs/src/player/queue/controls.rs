@@ -1,17 +1,13 @@
 use crate::{
-    qobuz::{
-        self,
-        album::Album,
-        playlist::Playlist,
-        track::{Track, TrackStatus},
-    },
+    player,
+    player::queue::{TrackListType, TrackListValue},
+    qobuz,
+    service::{Album, MusicService, Playlist, SearchResults, Track, TrackStatus},
     sql::db,
-    state::{ClockValue, StatusValue, TrackListType, TrackListValue},
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use hifirs_qobuz_api::client::{api::Client, search_results::SearchAllResults};
-use std::{collections::VecDeque, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     RwLock,
@@ -19,13 +15,12 @@ use tokio::sync::{
 
 #[derive(Debug, Clone)]
 pub struct PlayerState {
-    client: Client,
+    service: Arc<dyn MusicService>,
     current_track: Option<Track>,
     tracklist: TrackListValue,
-    position: ClockValue,
-    status: StatusValue,
+    status: GstState,
     resume: bool,
-    target_status: StatusValue,
+    target_status: GstState,
     quit_sender: BroadcastSender<bool>,
 }
 
@@ -46,7 +41,7 @@ impl From<PlayerState> for SavedState {
         if let Some(current_track) = state.current_track() {
             let playback_track_index = current_track.position as i64;
             let playback_track_id = current_track.id as i64;
-            let playback_position = state.position().inner_clocktime().mseconds() as i64;
+            let playback_position = player::position().unwrap_or_default().mseconds() as i64;
             let playback_entity_type = state.list_type();
             let playback_entity_id = match playback_entity_type {
                 TrackListType::Album => state.album().expect("failed to get album id").id.clone(),
@@ -74,10 +69,8 @@ impl From<PlayerState> for SavedState {
 }
 
 impl PlayerState {
-    pub async fn play_album(&mut self, album_id: String) -> Option<Track> {
-        if let Ok(album) = self.client.album(album_id.as_str()).await {
-            let album: Album = album.into();
-
+    pub async fn play_album(&mut self, album_id: String) -> Option<String> {
+        if let Some(album) = self.service.album(album_id.as_str()).await {
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
@@ -85,12 +78,14 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            if let Some(first_track) = tracklist.queue.front_mut() {
+            if let Some(mut entry) = tracklist.queue.first_entry() {
+                let first_track = entry.get_mut();
+
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
 
-                Some(first_track.clone())
+                first_track.track_url.clone()
             } else {
                 None
             }
@@ -98,13 +93,13 @@ impl PlayerState {
             None
         }
     }
-    pub async fn play_track(&mut self, track_id: i32) -> Option<Track> {
-        if let Ok(new_track) = self.client.track(track_id).await {
-            let mut track: Track = new_track.into();
+    pub async fn play_track(&mut self, track_id: i32) -> Option<String> {
+        if let Some(mut track) = self.service.track(track_id).await {
             track.status = TrackStatus::Playing;
+            track.number = 1;
 
-            let mut queue = VecDeque::new();
-            queue.push_front(track.clone());
+            let mut queue = BTreeMap::new();
+            queue.entry(track.position).or_insert_with(|| track.clone());
 
             let mut tracklist = TrackListValue::new(Some(queue));
             tracklist.set_list_type(TrackListType::Track);
@@ -115,15 +110,13 @@ impl PlayerState {
             self.set_current_track(track.clone());
             self.set_target_status(GstState::Playing);
 
-            Some(track)
+            track.track_url.clone()
         } else {
             None
         }
     }
-    pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<Track> {
-        if let Ok(playlist) = self.client.playlist(playlist_id).await {
-            let playlist: Playlist = playlist.into();
-
+    pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<String> {
+        if let Some(playlist) = self.service.playlist(playlist_id).await {
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
 
             tracklist.set_playlist(playlist);
@@ -132,12 +125,14 @@ impl PlayerState {
 
             self.replace_list(tracklist.clone());
 
-            if let Some(first_track) = tracklist.queue.front_mut() {
+            if let Some(mut entry) = tracklist.queue.first_entry() {
+                let first_track = entry.get_mut();
+
                 self.attach_track_url(first_track).await;
                 self.set_current_track(first_track.clone());
                 self.set_target_status(GstState::Playing);
 
-                Some(first_track.clone())
+                first_track.track_url.clone()
             } else {
                 None
             }
@@ -146,24 +141,16 @@ impl PlayerState {
         }
     }
 
-    pub fn set_status(&mut self, status: StatusValue) {
+    pub fn set_status(&mut self, status: GstState) {
         self.status = status;
     }
 
-    pub fn status(&self) -> StatusValue {
-        self.status.clone()
+    pub fn status(&self) -> GstState {
+        self.status
     }
 
     pub fn set_current_track(&mut self, track: Track) {
         self.current_track = Some(track);
-    }
-
-    pub fn set_position(&mut self, position: ClockValue) {
-        self.position = position;
-    }
-
-    pub fn position(&self) -> ClockValue {
-        self.position.clone()
     }
 
     pub fn set_resume(&mut self, resume: bool) {
@@ -207,40 +194,30 @@ impl PlayerState {
         self.tracklist.clone()
     }
 
-    pub fn track_index(&self, track_id: usize) -> Option<usize> {
-        if let Some(track) = self.tracklist.find_track(track_id) {
-            Some(track.position)
-        } else {
-            None
-        }
-    }
-
-    pub fn set_track_status(&mut self, position: usize, status: TrackStatus) {
+    pub fn set_track_status(&mut self, position: u32, status: TrackStatus) {
         self.tracklist.set_track_status(position, status);
     }
 
-    pub fn target_status(&self) -> StatusValue {
-        self.target_status.clone()
+    pub fn target_status(&self) -> GstState {
+        self.target_status
     }
 
     pub fn set_target_status(&mut self, target: GstState) {
-        self.target_status = target.into();
+        self.target_status = target;
     }
 
     /// Attach a `TrackURL` to the given track.
     pub async fn attach_track_url(&mut self, track: &mut Track) {
         debug!("fetching track url");
-        if let Ok(track_url) = self.client.track_url(track.id as i32, None, None).await {
+        if let Some(track_url) = self.service.track_url(track.id as i32).await {
             debug!("attaching url information to track");
-            track.track_url = Some(track_url.url);
-            track.sampling_rate = track_url.sampling_rate as f32;
-            track.bit_depth = track_url.bit_depth as usize;
+            track.track_url = Some(track_url);
         }
     }
 
     pub async fn skip_track(
         &mut self,
-        index: Option<usize>,
+        index: Option<u32>,
         direction: SkipDirection,
     ) -> Option<Track> {
         let next_track_index = if let Some(i) = index {
@@ -275,18 +252,15 @@ impl PlayerState {
         if let Some(index) = next_track_index {
             let mut current_track = None;
 
-            for t in self.tracklist.queue.iter_mut() {
+            for t in self.tracklist.queue.values_mut() {
                 match t.position.cmp(&index) {
                     std::cmp::Ordering::Less => {
                         t.status = TrackStatus::Played;
                     }
                     std::cmp::Ordering::Equal => {
-                        if let Ok(track_url) = self.client.track_url(t.id as i32, None, None).await
-                        {
+                        if let Some(track_url) = self.service.track_url(t.id as i32).await {
                             t.status = TrackStatus::Playing;
-                            t.track_url = Some(track_url.url);
-                            t.bit_depth = track_url.bit_depth as usize;
-                            t.sampling_rate = track_url.sampling_rate as f32;
+                            t.track_url = Some(track_url);
                             self.current_track = Some(t.clone());
                             current_track = Some(t.clone());
                         } else {
@@ -306,58 +280,26 @@ impl PlayerState {
         }
     }
 
-    pub async fn search_all(&self, query: &str) -> Option<SearchAllResults> {
-        match self.client.search_all(query.to_string(), 100).await {
-            Ok(results) => Some(results),
-            Err(_) => None,
+    pub async fn search_all(&self, query: &str) -> Option<SearchResults> {
+        self.service.search(query).await
+    }
+
+    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Option<Vec<Album>> {
+        match self.service.artist(artist_id).await {
+            Some(results) => results.albums,
+            None => None,
         }
     }
 
-    pub async fn fetch_artist_albums(&self, artist_id: i32) -> Vec<Album> {
-        match self.client.artist(artist_id, None).await {
-            Ok(results) => {
-                if let Some(albums) = results.albums {
-                    albums
-                        .items
-                        .into_iter()
-                        .map(|a| a.into())
-                        .collect::<Vec<Album>>()
-                } else {
-                    Vec::new()
-                }
-            }
-            Err(_) => Vec::new(),
+    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Option<Vec<Track>> {
+        match self.service.playlist(playlist_id).await {
+            Some(results) => Some(results.tracks.values().cloned().collect::<Vec<Track>>()),
+            None => None,
         }
     }
 
-    pub async fn fetch_playlist_tracks(&self, playlist_id: i64) -> Vec<Track> {
-        match self.client.playlist(playlist_id).await {
-            Ok(results) => {
-                if let Some(tracks) = results.tracks {
-                    tracks
-                        .items
-                        .into_iter()
-                        .map(|t| t.into())
-                        .collect::<Vec<Track>>()
-                } else {
-                    Vec::new()
-                }
-            }
-            Err(_) => Vec::new(),
-        }
-    }
-
-    pub async fn fetch_user_playlists(&self) -> Vec<Playlist> {
-        if let Ok(playlists) = self.client.user_playlists().await {
-            playlists
-                .playlists
-                .items
-                .into_iter()
-                .map(|p| p.into())
-                .collect::<Vec<Playlist>>()
-        } else {
-            Vec::new()
-        }
+    pub async fn fetch_user_playlists(&self) -> Option<Vec<Playlist>> {
+        self.service.user_playlists().await
     }
 
     pub fn quitter(&self) -> BroadcastReceiver<bool> {
@@ -375,26 +317,26 @@ impl PlayerState {
     pub fn reset(&mut self) {
         self.tracklist.clear();
         self.current_track = None;
-        self.position = ClockValue::default();
-        self.status = gstreamer::State::Null.into();
+        self.status = gstreamer::State::Null;
         self.resume = false;
     }
 
-    pub async fn new(username: Option<String>, password: Option<String>) -> Self {
-        let client = qobuz::make_client(username, password)
-            .await
-            .expect("error making client");
+    pub async fn new(username: Option<&str>, password: Option<&str>) -> Self {
+        let client = Arc::new(
+            qobuz::make_client(username, password)
+                .await
+                .expect("error making client"),
+        );
 
         let tracklist = TrackListValue::new(None);
         let (quit_sender, _) = tokio::sync::broadcast::channel::<bool>(1);
 
         Self {
             current_track: None,
-            client,
+            service: client,
             tracklist,
-            position: ClockValue::default(),
-            status: StatusValue(gstreamer::State::Null),
-            target_status: StatusValue(gstreamer::State::Null),
+            status: gstreamer::State::Null,
+            target_status: gstreamer::State::Null,
             resume: false,
             quit_sender,
         }
@@ -407,36 +349,31 @@ impl PlayerState {
         }
     }
 
-    pub async fn load_last_state(&mut self) -> bool {
+    pub async fn load_last_state(&mut self) -> Option<ClockTime> {
         if let Some(last_state) = db::get_last_state().await {
             let entity_type: TrackListType = last_state.playback_entity_type.as_str().into();
 
             match entity_type {
                 TrackListType::Album => {
-                    if let Ok(album) = self.client.album(&last_state.playback_entity_id).await {
-                        let album: Album = album.into();
-
+                    if let Some(album) = self.service.album(&last_state.playback_entity_id).await {
                         self.replace_list(TrackListValue::new(Some(album.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-
-                        self.set_position(position.into());
-
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position);
                     }
                 }
                 TrackListType::Playlist => {
-                    if let Ok(playlist) = self
-                        .client
+                    if let Some(playlist) = self
+                        .service
                         .playlist(
                             last_state
                                 .playback_entity_id
@@ -445,23 +382,19 @@ impl PlayerState {
                         )
                         .await
                     {
-                        let playlist: Playlist = playlist.into();
-
                         self.replace_list(TrackListValue::new(Some(playlist.tracks.clone())));
                         self.tracklist.set_list_type(TrackListType::Playlist);
                         self.tracklist.set_playlist(playlist);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-                        self.set_position(position.into());
-
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position);
                     }
                 }
                 TrackListType::Track => {
@@ -469,12 +402,12 @@ impl PlayerState {
                         .playback_entity_id
                         .parse()
                         .expect("failed to parse track id");
-                    if let Ok(track) = self.client.track(track_id).await {
-                        let mut track: Track = track.into();
+                    if let Some(mut track) = self.service.track(track_id).await {
                         track.status = TrackStatus::Playing;
+                        track.number = 1;
 
-                        let mut queue = VecDeque::new();
-                        queue.push_front(track.clone());
+                        let mut queue = BTreeMap::new();
+                        queue.entry(track.position).or_insert_with(|| track);
 
                         let mut tracklist = TrackListValue::new(Some(queue));
                         tracklist.set_list_type(TrackListType::Track);
@@ -482,25 +415,22 @@ impl PlayerState {
                         self.replace_list(tracklist);
                         self.tracklist.set_list_type(TrackListType::Track);
 
-                        let position =
-                            ClockTime::from_mseconds(last_state.playback_position as u64);
-
-                        self.set_position(position.into());
-
                         self.skip_track(
-                            Some(last_state.playback_track_index as usize),
+                            Some(last_state.playback_track_index as u32),
                             SkipDirection::Forward,
                         )
                         .await;
 
-                        return true;
+                        let position =
+                            ClockTime::from_mseconds(last_state.playback_position as u64);
+                        return Some(position);
                     }
                 }
                 TrackListType::Unknown => unreachable!(),
             }
         }
 
-        false
+        None
     }
 }
 
