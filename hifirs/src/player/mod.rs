@@ -761,11 +761,30 @@ async fn handle_message(msg: Message) -> Result<()> {
                 skip(SkipDirection::Backward, Some(1)).await?;
             }
         }
-        MessageView::AsyncDone(_) => {
+        MessageView::StreamStart(_) => {
+            if is_playing() {
+                let list = QUEUE.get().unwrap().read().await.track_list();
+                broadcast_track_list(list).await?;
+            }
+        }
+        MessageView::AsyncDone(msg) => {
             debug!("ASYNC DONE");
             BROADCAST_CHANNELS
                 .tx
                 .broadcast(Notification::Loading { is_loading: false })
+                .await?;
+
+            let position = if let Some(p) = msg.running_time() {
+                p
+            } else if let Some(p) = position() {
+                p
+            } else {
+                ClockTime::default()
+            };
+
+            BROADCAST_CHANNELS
+                .tx
+                .broadcast(Notification::Position { clock: position })
                 .await?;
         }
         MessageView::PropertyNotify(el) => {

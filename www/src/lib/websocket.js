@@ -68,8 +68,8 @@ export const secsToTimecode = (secs) => {
 }
 
 export const positionString = derived(position, (p) => {
-  const positionMinutes = Math.floor(p / 1000 / 1000 / 1000 / 60);
-  const positionSeconds = Math.floor(p / 1000 / 1000 / 1000) - positionMinutes * 60;
+  const positionMinutes = Math.floor(p / 60);
+  const positionSeconds = p - positionMinutes * 60;
 
   return `${positionMinutes.toString(10).padStart(2, 0)}:${positionSeconds.toString(10).padStart(2, 0)}`
 })
