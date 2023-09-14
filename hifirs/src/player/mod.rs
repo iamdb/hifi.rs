@@ -197,12 +197,6 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
         }
     }
 
-    let mut interval = tokio::time::interval(Duration::from_millis(100));
-    while current_state() != state {
-        debug!("waiting for player to change state");
-        interval.tick().await;
-    }
-
     Ok(())
 }
 async fn broadcast_track_list(list: TrackListValue) -> Result<()> {
@@ -379,6 +373,13 @@ pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
         let list = state.track_list();
         broadcast_track_list(list).await?;
 
+        BROADCAST_CHANNELS
+            .tx
+            .broadcast(Notification::Position {
+                clock: ClockTime::default(),
+            })
+            .await?;
+
         drop(state);
 
         if let Some(url) = &next_track_to_play.track_url {
@@ -431,6 +432,8 @@ pub async fn play_track(track_id: i32) -> Result<()> {
         let list = state.track_list();
         broadcast_track_list(list).await?;
 
+        drop(state);
+
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
         play().await?;
@@ -449,6 +452,8 @@ pub async fn play_album(album_id: String) -> Result<()> {
         let list = state.track_list();
         broadcast_track_list(list).await?;
 
+        drop(state);
+
         PLAYBIN.set_property("uri", Some(track_url));
 
         play().await?;
@@ -465,6 +470,8 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
     if let Some(track_url) = state.play_playlist(playlist_id).await {
         let list = state.track_list();
         broadcast_track_list(list).await?;
+
+        drop(state);
 
         PLAYBIN.set_property("uri", Some(track_url.as_str()));
 
@@ -695,9 +702,16 @@ pub async fn player_loop() -> Result<()> {
             }
             Some(msg) = messages.next() => {
                 if msg.type_() == MessageType::Buffering {
-                    handle_message(msg).await?;
+                    match handle_message(msg).await {
+                        Ok(_) => {},
+                        Err(error) => debug!(?error),
+                    };
                 } else {
-                    tokio::spawn(async { handle_message(msg).await.expect("error handling message") });
+                    tokio::spawn(async { match handle_message(msg).await {
+                            Ok(()) => {}
+                            Err(error) => {debug!(?error);}
+                        }
+                    });
                 }
             }
         }

@@ -129,7 +129,9 @@ impl TrackListValue {
 
     #[instrument(skip(self))]
     pub fn set_track_status(&mut self, position: u32, status: TrackStatus) {
-        self.queue.entry(position).and_modify(|e| e.status = status);
+        if let Some(track) = self.queue.get_mut(&position) {
+            track.status = status;
+        }
     }
 
     #[instrument(skip(self))]

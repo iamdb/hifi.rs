@@ -616,8 +616,8 @@ fn submit_playlist(_s: &mut Cursive, item: u32) -> LinearLayout {
     let mut list = CursiveUI::results_list("playlist_items");
     let mut playlist_items = list.get_inner_mut().get_mut();
 
-    for (i, t) in playlist_tracks.iter().enumerate() {
-        let mut row = StyledString::plain(format!("{:02} ", i));
+    for t in &playlist_tracks {
+        let mut row = StyledString::plain(format!("{:02} ", t.position));
 
         row.append(t.list_item());
 
@@ -661,33 +661,35 @@ fn submit_playlist(_s: &mut Cursive, item: u32) -> LinearLayout {
 fn submit_artist(s: &mut Cursive, item: i32) {
     let artist_albums = block_on(async { player::artist_albums(item).await });
 
-    let mut tree = cursive::menu::Tree::new();
+    if !artist_albums.is_empty() {
+        let mut tree = cursive::menu::Tree::new();
 
-    for a in artist_albums {
-        if !a.available {
-            continue;
+        for a in artist_albums {
+            if !a.available {
+                continue;
+            }
+
+            tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
+                let id = a.id.clone();
+                tokio::spawn(async move { CONTROLS.play_album(id).await });
+
+                s.call_on_name(
+                    "screens",
+                    |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
+                        screens.set_active_screen(0);
+                    },
+                );
+            });
         }
 
-        tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
-            let id = a.id.clone();
-            tokio::spawn(async move { CONTROLS.play_album(id).await });
+        let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
 
-            s.call_on_name(
-                "screens",
-                |screens: &mut ScreensView<ResizedView<LinearLayout>>| {
-                    screens.set_active_screen(0);
-                },
-            );
-        });
+        let events = album_list
+            .scrollable()
+            .resized(SizeConstraint::Full, SizeConstraint::Free);
+
+        s.screen_mut().add_layer(events);
     }
-
-    let album_list: MenuPopup = MenuPopup::new(Rc::new(tree));
-
-    let events = album_list
-        .scrollable()
-        .resized(SizeConstraint::Full, SizeConstraint::Free);
-
-    s.screen_mut().add_layer(events);
 }
 
 fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {

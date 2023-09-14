@@ -10,17 +10,24 @@ impl From<QobuzAlbum> for Album {
             .format("%Y");
 
         let tracks = if let Some(tracks) = value.tracks {
+            let mut position = 1_u32;
+
             tracks
                 .items
                 .into_iter()
-                .enumerate()
-                .map(|(i, t)| {
-                    let mut track: Track = t.into();
+                .filter_map(|t| {
+                    if t.streamable {
+                        let mut track: Track = t.into();
 
-                    let position = (i + 1) as u32;
-                    track.position = position;
+                        let next_position = position;
+                        track.position = next_position;
 
-                    (position, track)
+                        position += 1;
+
+                        Some((next_position, track))
+                    } else {
+                        None
+                    }
                 })
                 .collect::<BTreeMap<u32, Track>>()
         } else {
