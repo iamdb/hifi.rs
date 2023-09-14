@@ -96,6 +96,7 @@ impl PlayerState {
     pub async fn play_track(&mut self, track_id: i32) -> Option<String> {
         if let Some(mut track) = self.service.track(track_id).await {
             track.status = TrackStatus::Playing;
+            track.number = 1;
 
             let mut queue = BTreeMap::new();
             queue.entry(track.position).or_insert_with(|| track.clone());
@@ -403,6 +404,7 @@ impl PlayerState {
                         .expect("failed to parse track id");
                     if let Some(mut track) = self.service.track(track_id).await {
                         track.status = TrackStatus::Playing;
+                        track.number = 1;
 
                         let mut queue = BTreeMap::new();
                         queue.entry(track.position).or_insert_with(|| track);
