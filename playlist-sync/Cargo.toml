@@ -13,7 +13,7 @@ indicatif = "0.17"
 log = "0.4"
 pretty_env_logger = "0.5"
 hifirs-qobuz-api = { version = "0.1.0", path = "../qobuz-api" }
-rspotify = { version = "0.11", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] } 
+rspotify = { version = "0.12", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] } 
 snafu = "0.7"
 tokio = { version = "1.0", features = ["full"] }
 warp = { version = "0.3", features = ["tokio-rustls"] }
