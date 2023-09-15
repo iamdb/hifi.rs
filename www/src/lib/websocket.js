@@ -119,7 +119,7 @@ export class WS {
       if (Object.hasOwn(json, 'buffering')) {
         isBuffering.set(json.buffering.is_buffering);
       } else if (Object.hasOwn(json, 'loading')) {
-        isLoading.set(json.loading.isLoading);
+        isLoading.set(json.loading.is_loading);
       } else if (Object.hasOwn(json, 'position')) {
         position.set(json.position.clock);
       } else if (Object.hasOwn(json, 'duration')) {
