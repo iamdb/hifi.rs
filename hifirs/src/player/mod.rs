@@ -4,7 +4,7 @@ use crate::{
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
         queue::{
-            controls::{PlayerState, SafePlayerState, SkipDirection},
+            controls::{PlayerState, SafePlayerState},
             TrackListValue,
         },
     },
@@ -345,14 +345,17 @@ pub async fn jump_backward() -> Result<()> {
 }
 #[instrument]
 /// Skip to the next, previous or specific track in the playlist.
-pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
+pub async fn skip(new_position: u32) -> Result<()> {
+    let mut state = QUEUE.get().unwrap().write().await;
+    let current_position = state.current_track_position();
+
     // Typical previous skip functionality where if,
     // the track is greater than 1 second into playing,
     // then it goes to the beginning. If triggered again
     // within a second after playing, it will skip to the previous track.
-    if direction == SkipDirection::Backward {
+    if new_position < current_position {
         if let Some(current_position) = position() {
-            if current_position.seconds() > 1 && num.is_none() {
+            if current_position.seconds() > 1 {
                 debug!("current track position >1s, seeking to start of track");
 
                 let zero_clock = ClockTime::default();
@@ -364,15 +367,15 @@ pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
         }
     }
 
-    let mut state = QUEUE.get().unwrap().write().await;
     let target_status = state.target_status();
 
     ready().await?;
 
-    if let Some(next_track_to_play) = state.skip_track(num, direction.clone()).await {
+    if let Some(next_track_to_play) = state.skip_track(new_position).await {
         let list = state.track_list();
-        broadcast_track_list(list).await?;
+        drop(state);
 
+        broadcast_track_list(list).await?;
         BROADCAST_CHANNELS
             .tx
             .broadcast(Notification::Position {
@@ -380,10 +383,8 @@ pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
             })
             .await?;
 
-        drop(state);
-
         if let Some(url) = &next_track_to_play.track_url {
-            debug!("skipping {direction} to next track");
+            debug!("skipping to next track");
 
             PLAYBIN.set_property("uri", Some(url.clone()));
 
@@ -396,26 +397,26 @@ pub async fn skip(direction: SkipDirection, num: Option<u32>) -> Result<()> {
 #[instrument]
 /// Skip to a specific track in the current playlist
 /// by its index in the list.
-pub async fn skip_to(index: u32) -> Result<()> {
+pub async fn skip_to(new_position: u32) -> Result<()> {
     let state = QUEUE.get().unwrap().read().await;
 
     if let Some(current_track) = state.current_track() {
         drop(state);
 
-        let current_index = current_track.position;
+        let current_position = current_track.position;
 
-        if index > current_index {
+        if new_position > current_position {
             debug!(
                 "skipping forward from track {} to track {}",
-                current_index, index
+                current_position, new_position
             );
-            skip(SkipDirection::Forward, Some(index)).await?;
+            skip(new_position).await?;
         } else {
             debug!(
                 "skipping backward from track {} to track {}",
-                current_index, index
+                current_position, new_position
             );
-            skip(SkipDirection::Backward, Some(index)).await?;
+            skip(new_position).await?;
         }
     }
 
@@ -510,7 +511,8 @@ pub async fn play_uri(uri: String) -> Result<()> {
 async fn prep_next_track() -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
 
-    if let Some(next_track) = state.skip_track(None, SkipDirection::Forward).await {
+    let current_position = state.current_track_position();
+    if let Some(next_track) = state.skip_track(current_position + 1).await {
         drop(state);
 
         debug!("received new track, adding to player");
@@ -725,13 +727,21 @@ async fn handle_action(action: Action) -> Result<()> {
         Action::JumpBackward => jump_backward().await?,
         Action::JumpForward => jump_forward().await?,
         Action::Next => {
-            skip(SkipDirection::Forward, None).await?;
+            let state = QUEUE.get().unwrap().read().await;
+
+            let current_position = state.current_track_position();
+            drop(state);
+            skip(current_position + 1).await?;
         }
         Action::Pause => pause().await?,
         Action::Play => play().await?,
         Action::PlayPause => play_pause().await?,
         Action::Previous => {
-            skip(SkipDirection::Backward, None).await?;
+            let state = QUEUE.get().unwrap().read().await;
+
+            let current_position = state.current_track_position();
+            drop(state);
+            skip(current_position - 1).await?;
         }
         Action::Stop => stop().await?,
         Action::PlayAlbum { album_id } => {
@@ -772,7 +782,7 @@ async fn handle_message(msg: Message) -> Result<()> {
                 state.set_target_status(GstState::Paused);
                 drop(state);
 
-                skip(SkipDirection::Backward, Some(1)).await?;
+                skip(1).await?;
             }
         }
         MessageView::StreamStart(_) => {
