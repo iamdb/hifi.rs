@@ -344,7 +344,7 @@ pub async fn jump_backward() -> Result<()> {
     Ok(())
 }
 #[instrument]
-/// Skip to the next, previous or specific track in the playlist.
+/// Skip to a specific track in the playlist.
 pub async fn skip(new_position: u32) -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
     let current_position = state.current_track_position();
@@ -354,8 +354,8 @@ pub async fn skip(new_position: u32) -> Result<()> {
     // then it goes to the beginning. If triggered again
     // within a second after playing, it will skip to the previous track.
     if new_position < current_position {
-        if let Some(current_position) = position() {
-            if current_position.seconds() > 1 {
+        if let Some(current_player_position) = position() {
+            if current_player_position.seconds() > 1 {
                 debug!("current track position >1s, seeking to start of track");
 
                 let zero_clock = ClockTime::default();
@@ -389,34 +389,6 @@ pub async fn skip(new_position: u32) -> Result<()> {
             PLAYBIN.set_property("uri", Some(url.clone()));
 
             set_player_state(target_status).await?;
-        }
-    }
-
-    Ok(())
-}
-#[instrument]
-/// Skip to a specific track in the current playlist
-/// by its index in the list.
-pub async fn skip_to(new_position: u32) -> Result<()> {
-    let state = QUEUE.get().unwrap().read().await;
-
-    if let Some(current_track) = state.current_track() {
-        drop(state);
-
-        let current_position = current_track.position;
-
-        if new_position > current_position {
-            debug!(
-                "skipping forward from track {} to track {}",
-                current_position, new_position
-            );
-            skip(new_position).await?;
-        } else {
-            debug!(
-                "skipping backward from track {} to track {}",
-                current_position, new_position
-            );
-            skip(new_position).await?;
         }
     }
 
@@ -758,7 +730,7 @@ async fn handle_action(action: Action) -> Result<()> {
         }
         Action::Quit => QUEUE.get().unwrap().read().await.quit(),
         Action::SkipTo { num } => {
-            skip_to(num).await?;
+            skip(num).await?;
         }
         Action::Search { query } => {
             search(&query).await;
