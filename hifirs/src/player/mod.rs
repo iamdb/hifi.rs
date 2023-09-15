@@ -290,6 +290,13 @@ pub async fn resume(autoplay: bool) -> Result<()> {
                 ready().await?;
                 pause().await?;
 
+                let mut interval = tokio::time::interval(Duration::from_millis(100));
+
+                while !is_paused() {
+                    debug!("wait for paused state");
+                    interval.tick().await;
+                }
+
                 seek(last_position, None).await?;
 
                 return Ok(());
