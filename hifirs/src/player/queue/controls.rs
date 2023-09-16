@@ -223,8 +223,8 @@ impl PlayerState {
         }
     }
 
-    pub async fn skip_track(&mut self, index: u32) -> Option<Track> {
-        let mut current_track = None;
+    pub async fn skip_track(&mut self, index: u32) -> Option<String> {
+        let mut track_url = None;
 
         for t in self.tracklist.queue.values_mut() {
             match t.position.cmp(&index) {
@@ -232,11 +232,11 @@ impl PlayerState {
                     t.status = TrackStatus::Played;
                 }
                 std::cmp::Ordering::Equal => {
-                    if let Some(track_url) = self.service.track_url(t.id as i32).await {
+                    if let Some(url) = self.service.track_url(t.id as i32).await {
                         t.status = TrackStatus::Playing;
-                        t.track_url = Some(track_url);
+                        t.track_url = Some(url.clone());
+                        track_url = Some(url);
                         self.current_track = Some(t.clone());
-                        current_track = Some(t.clone());
                     } else {
                         t.status = TrackStatus::Unplayable;
                     }
@@ -247,7 +247,7 @@ impl PlayerState {
             }
         }
 
-        current_track
+        track_url
     }
 
     pub async fn search_all(&self, query: &str) -> Option<SearchResults> {

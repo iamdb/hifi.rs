@@ -188,7 +188,10 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
 
             BROADCAST_CHANNELS
                 .tx
-                .broadcast(Notification::Loading { is_loading: true })
+                .broadcast(Notification::Loading {
+                    is_loading: true,
+                    target_state: state,
+                })
                 .await?;
         }
         StateChangeSuccess::NoPreroll => {
@@ -355,12 +358,14 @@ pub async fn jump_backward() -> Result<()> {
 pub async fn skip(new_position: u32) -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
     let current_position = state.current_track_position();
+    let total_tracks = state.track_list().total();
 
     // Typical previous skip functionality where if,
     // the track is greater than 1 second into playing,
     // then it goes to the beginning. If triggered again
     // within a second after playing, it will skip to the previous track.
-    if new_position < current_position {
+    // Ignore if going from the last track to the first (EOS).
+    if new_position < current_position && total_tracks != current_position && new_position != 1 {
         if let Some(current_player_position) = position() {
             if current_player_position.seconds() > 1 {
                 debug!("current track position >1s, seeking to start of track");
@@ -374,12 +379,12 @@ pub async fn skip(new_position: u32) -> Result<()> {
         }
     }
 
-    let target_status = state.target_status();
-
     ready().await?;
 
     if let Some(next_track_to_play) = state.skip_track(new_position).await {
         let list = state.track_list();
+        let target_status = state.target_status();
+
         drop(state);
 
         broadcast_track_list(list).await?;
@@ -390,13 +395,10 @@ pub async fn skip(new_position: u32) -> Result<()> {
             })
             .await?;
 
-        if let Some(url) = &next_track_to_play.track_url {
-            debug!("skipping to next track");
+        debug!("skipping to next track");
 
-            PLAYBIN.set_property("uri", Some(url.clone()));
-
-            set_player_state(target_status).await?;
-        }
+        PLAYBIN.set_property("uri", next_track_to_play);
+        set_player_state(target_status).await?;
     }
 
     Ok(())
@@ -490,16 +492,15 @@ pub async fn play_uri(uri: String) -> Result<()> {
 async fn prep_next_track() -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
 
+    let total_tracks = state.track_list().total();
     let current_position = state.current_track_position();
-    if let Some(next_track) = state.skip_track(current_position + 1).await {
+
+    if total_tracks == current_position {
+        debug!("no more tracks left");
+    } else if let Some(next_track_url) = state.skip_track(current_position + 1).await {
         drop(state);
 
-        debug!("received new track, adding to player");
-        if let Some(next_playlist_track_url) = &next_track.track_url {
-            PLAYBIN.set_property("uri", Some(next_playlist_track_url.clone()));
-        }
-    } else {
-        debug!("no more tracks left");
+        PLAYBIN.set_property("uri", next_track_url);
     }
 
     Ok(())
@@ -757,9 +758,9 @@ async fn handle_message(msg: Message) -> Result<()> {
             if QUIT_WHEN_DONE.load(Ordering::Relaxed) {
                 QUEUE.get().unwrap().read().await.quit();
             } else {
-                let mut state = QUEUE.get().unwrap().write().await;
-                state.set_target_status(GstState::Paused);
-                drop(state);
+                let mut q = QUEUE.get().unwrap().write().await;
+                q.set_target_status(GstState::Paused);
+                drop(q);
 
                 skip(1).await?;
             }
@@ -774,7 +775,10 @@ async fn handle_message(msg: Message) -> Result<()> {
             debug!("ASYNC DONE");
             BROADCAST_CHANNELS
                 .tx
-                .broadcast(Notification::Loading { is_loading: false })
+                .broadcast(Notification::Loading {
+                    is_loading: false,
+                    target_state: QUEUE.get().unwrap().read().await.target_status(),
+                })
                 .await?;
 
             let position = if let Some(p) = msg.running_time() {
@@ -845,7 +849,6 @@ async fn handle_message(msg: Message) -> Result<()> {
 
             if percent < 100 && !is_paused() && !IS_BUFFERING.load(Ordering::Relaxed) {
                 pause().await?;
-
                 IS_BUFFERING.store(true, Ordering::Relaxed);
             } else if percent > 99 && IS_BUFFERING.load(Ordering::Relaxed) && is_paused() {
                 set_player_state(target_status).await?;
@@ -858,7 +861,7 @@ async fn handle_message(msg: Message) -> Result<()> {
                     .tx
                     .broadcast(Notification::Buffering {
                         is_buffering: percent < 99,
-                        target_status,
+                        target_state: target_status,
                         percent: percent as u32,
                     })
                     .await?;
@@ -871,12 +874,12 @@ async fn handle_message(msg: Message) -> Result<()> {
                 .get::<GstState>()
                 .unwrap();
 
-            let mut state = QUEUE.get().unwrap().write().await;
+            let mut q = QUEUE.get().unwrap().write().await;
 
-            if state.status() != current_state && state.target_status() == current_state {
+            if q.status() != current_state && q.target_status() == current_state {
                 debug!("player state changed {:?}", current_state);
-                state.set_status(current_state);
-                drop(state);
+                q.set_status(current_state);
+                drop(q);
 
                 BROADCAST_CHANNELS
                     .tx
