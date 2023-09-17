@@ -83,14 +83,12 @@
 {#if $isBuffering || !$connected || $isLoading}
 	<div class="fixed top-8 right-8 z-10">
 		<h1 class="font-semi text-4xl bg-amber-800 leading-none p-2">
-			{#if $isBuffering}
-				BUFFERING
-			{/if}
 			{#if !$connected}
 				DISCONNECTED
-			{/if}
-			{#if $isLoading}
+			{:else if $isLoading}
 				LOADING
+			{:else if $isBuffering}
+				BUFFERING
 			{/if}
 		</h1>
 	</div>

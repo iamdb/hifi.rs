@@ -19,7 +19,7 @@ pub enum Notification {
     Buffering {
         is_buffering: bool,
         percent: u32,
-        target_status: State,
+        target_state: State,
     },
     Status {
         status: State,
@@ -38,6 +38,7 @@ pub enum Notification {
     Quit,
     Loading {
         is_loading: bool,
+        target_state: State,
     },
     Error {
         error: player::error::Error,

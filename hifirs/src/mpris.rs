@@ -67,10 +67,13 @@ pub async fn receive_notifications(conn: Connection) {
                 Notification::Quit => {
                     return;
                 }
-                Notification::Loading { is_loading: _ } => {}
+                Notification::Loading {
+                    is_loading: _,
+                    target_state: _,
+                } => {}
                 Notification::Buffering {
                     is_buffering: _,
-                    target_status: _,
+                    target_state: _,
                     percent: _,
                 } => {
                     let iface_ref = object_server

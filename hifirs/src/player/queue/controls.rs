@@ -7,7 +7,7 @@ use crate::{
 };
 use futures::executor;
 use gstreamer::{ClockTime, State as GstState};
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{
     broadcast::{Receiver as BroadcastReceiver, Sender as BroadcastSender},
     RwLock,
@@ -165,6 +165,14 @@ impl PlayerState {
         self.current_track.clone()
     }
 
+    pub fn current_track_position(&self) -> u32 {
+        if let Some(track) = &self.current_track {
+            track.position
+        } else {
+            0
+        }
+    }
+
     pub fn unplayed_tracks(&self) -> Vec<&Track> {
         self.tracklist.unplayed_tracks()
     }
@@ -215,69 +223,31 @@ impl PlayerState {
         }
     }
 
-    pub async fn skip_track(
-        &mut self,
-        index: Option<u32>,
-        direction: SkipDirection,
-    ) -> Option<Track> {
-        let next_track_index = if let Some(i) = index {
-            if i <= self.tracklist.total() {
-                Some(i)
-            } else {
-                None
-            }
-        } else if let Some(current_track) = self.current_track() {
-            let current_track_index = current_track.position;
+    pub async fn skip_track(&mut self, index: u32) -> Option<String> {
+        let mut track_url = None;
 
-            match direction {
-                SkipDirection::Forward => {
-                    if current_track_index < self.tracklist.total() {
-                        Some(current_track_index + 1)
+        for t in self.tracklist.queue.values_mut() {
+            match t.position.cmp(&index) {
+                std::cmp::Ordering::Less => {
+                    t.status = TrackStatus::Played;
+                }
+                std::cmp::Ordering::Equal => {
+                    if let Some(url) = self.service.track_url(t.id as i32).await {
+                        t.status = TrackStatus::Playing;
+                        t.track_url = Some(url.clone());
+                        track_url = Some(url);
+                        self.current_track = Some(t.clone());
                     } else {
-                        None
+                        t.status = TrackStatus::Unplayable;
                     }
                 }
-                SkipDirection::Backward => {
-                    if current_track_index > 1 {
-                        Some(current_track_index - 1)
-                    } else {
-                        Some(0)
-                    }
+                std::cmp::Ordering::Greater => {
+                    t.status = TrackStatus::Unplayed;
                 }
             }
-        } else {
-            None
-        };
-
-        if let Some(index) = next_track_index {
-            let mut current_track = None;
-
-            for t in self.tracklist.queue.values_mut() {
-                match t.position.cmp(&index) {
-                    std::cmp::Ordering::Less => {
-                        t.status = TrackStatus::Played;
-                    }
-                    std::cmp::Ordering::Equal => {
-                        if let Some(track_url) = self.service.track_url(t.id as i32).await {
-                            t.status = TrackStatus::Playing;
-                            t.track_url = Some(track_url);
-                            self.current_track = Some(t.clone());
-                            current_track = Some(t.clone());
-                        } else {
-                            t.status = TrackStatus::Unplayable;
-                        }
-                    }
-                    std::cmp::Ordering::Greater => {
-                        t.status = TrackStatus::Unplayed;
-                    }
-                }
-            }
-
-            current_track
-        } else {
-            debug!("no more tracks");
-            None
         }
+
+        track_url
     }
 
     pub async fn search_all(&self, query: &str) -> Option<SearchResults> {
@@ -360,11 +330,8 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
-                        self.skip_track(
-                            Some(last_state.playback_track_index as u32),
-                            SkipDirection::Forward,
-                        )
-                        .await;
+                        self.skip_track(last_state.playback_track_index as u32)
+                            .await;
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
@@ -386,11 +353,8 @@ impl PlayerState {
                         self.tracklist.set_list_type(TrackListType::Playlist);
                         self.tracklist.set_playlist(playlist);
 
-                        self.skip_track(
-                            Some(last_state.playback_track_index as u32),
-                            SkipDirection::Forward,
-                        )
-                        .await;
+                        self.skip_track(last_state.playback_track_index as u32)
+                            .await;
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
@@ -415,11 +379,8 @@ impl PlayerState {
                         self.replace_list(tracklist);
                         self.tracklist.set_list_type(TrackListType::Track);
 
-                        self.skip_track(
-                            Some(last_state.playback_track_index as u32),
-                            SkipDirection::Forward,
-                        )
-                        .await;
+                        self.skip_track(last_state.playback_track_index as u32)
+                            .await;
 
                         let position =
                             ClockTime::from_mseconds(last_state.playback_position as u64);
@@ -431,20 +392,5 @@ impl PlayerState {
         }
 
         None
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SkipDirection {
-    Forward,
-    Backward,
-}
-
-impl Display for SkipDirection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SkipDirection::Forward => f.write_str("forward"),
-            SkipDirection::Backward => f.write_str("backward"),
-        }
     }
 }

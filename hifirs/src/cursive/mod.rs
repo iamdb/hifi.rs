@@ -791,6 +791,24 @@ fn set_current_track(s: &mut Cursive, track: &Track, lt: &TrackListType) {
     }
 }
 
+fn get_state_icon(state: GstState) -> String {
+    match state {
+        GstState::Playing => {
+            format!(" {}", '\u{23f5}')
+        }
+        GstState::Paused => {
+            format!(" {}", '\u{23f8}')
+        }
+        GstState::Ready => {
+            format!(" {}", '\u{23f9}')
+        }
+        GstState::Null => {
+            format!(" {}", '\u{23f9}')
+        }
+        _ => format!(" {}", '\u{23f9}'),
+    }
+}
+
 pub async fn receive_notifications() {
     let mut receiver = player::notify_receiver();
 
@@ -799,31 +817,33 @@ pub async fn receive_notifications() {
             Some(notification) = receiver.next() => {
                 match notification {
                     Notification::Quit => {
+                        debug!("exiting tui notification thread");
                         return;
                     }
-                    Notification::Loading { is_loading: _ } => {}
+                    Notification::Loading { is_loading, target_state } => {
+                        SINK.get().unwrap().send(Box::new(move |s| {
+                                if let Some(mut view) = s.find_name::<TextView>("player_status") {
+                                    if is_loading {
+                                        view.set_content(format!(" {}", '\u{2B71}'));
+                                    } else {
+                                        view.set_content(get_state_icon(target_state));
+                                    }
+                                }
+                        })).expect("failed to send update");
+                    }
                     Notification::Status { status } => {
                         SINK.get()
                             .unwrap()
                             .send(Box::new(move |s| {
                                 if let Some(mut view) = s.find_name::<TextView>("player_status") {
+                                    view.set_content(get_state_icon(status));
                                     match status {
-                                        GstState::Playing => {
-                                            view.set_content(format!(" {}", '\u{23f5}'));
-                                        }
-                                        GstState::Paused => {
-                                            view.set_content(format!(" {}", '\u{23f8}'));
-                                        }
                                         GstState::Ready => {
-                                            view.set_content(format!(" {}", '\u{23f9}'));
-
                                             s.call_on_name("progress", |progress: &mut ProgressBar| {
                                                 progress.set_value(0);
                                             });
                                         }
                                         GstState::Null => {
-                                            view.set_content(format!(" {}", '\u{23f9}'));
-
                                             s.call_on_name("progress", |progress: &mut ProgressBar| {
                                                 progress.set_value(0);
                                             });
@@ -989,7 +1009,7 @@ pub async fn receive_notifications() {
                     }
                     Notification::Buffering {
                         is_buffering,
-                        target_status,
+                        target_state,
                         percent,
                     } => {
                         SINK.get()
@@ -999,21 +1019,7 @@ pub async fn receive_notifications() {
                                     if is_buffering {
                                         view.set_content(format!("{}%", percent));
                                     } else {
-                                        match target_status {
-                                            GstState::Playing => {
-                                                view.set_content(format!(" {}", '\u{23f5}'));
-                                            }
-                                            GstState::Paused => {
-                                                view.set_content(format!(" {}", '\u{23f8}'));
-                                            }
-                                            GstState::Ready => {
-                                                view.set_content(format!(" {}", '\u{23f9}'));
-                                            }
-                                            GstState::Null => {
-                                                view.set_content(format!(" {}", '\u{23f9}'));
-                                            }
-                                            _ => {}
-                                        }
+                                        view.set_content(get_state_icon(target_state));
                                     }
                                 });
                             }))
