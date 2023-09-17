@@ -5,7 +5,8 @@
 		numOfTracks,
 		entityTitle,
 		positionString,
-		durationString
+		durationString,
+		position
 	} from '$lib/websocket';
 	import { writable } from 'svelte/store';
 
@@ -20,6 +21,8 @@
 			enableMarquee.set(false);
 		}
 	});
+
+	$: progress = ($position / $currentTrack.durationSeconds) * 100;
 </script>
 
 <div class="flex flex-col items-center">
@@ -38,7 +41,7 @@
 <div
 	bind:offsetWidth={titleWrapperWidth}
 	class:justify-center={!$enableMarquee}
-	class="bg-amber-900 overflow-hidden flex flex-row"
+	class="bg-amber-900 flex flex-row relative"
 >
 	<div
 		class:marquee={$enableMarquee}
@@ -79,6 +82,10 @@
 			{/if}
 		</div>
 	{/if}
+	<div
+		style:width="{progress}%"
+		class="absolute top-full left-0 w-full h-1 bg-blue-600/75 z-50"
+	></div>
 </div>
 
 <div class="flex flex-col gap-y-4 max-w-xs mx-auto">

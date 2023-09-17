@@ -12,8 +12,7 @@ export const searchResults = writable({
 });
 export const userPlaylists = writable([])
 
-const position = writable(0);
-const duration = writable(0);
+export const position = writable(0);
 const currentTrackList = writable(null);
 export const currentTrack = derived(currentTrackList, (list) => {
   return list?.queue.find((l) => l.status === "Playing")
@@ -62,7 +61,7 @@ export const entityTitle = derived([currentTrackList, currentTrack], ([tl, c]) =
 
 export const secsToTimecode = (secs) => {
   const minutes = Math.floor(secs / 60);
-  const seconds = Math.floor(secs - (minutes * 60));
+  const seconds = secs - minutes * 60;
 
   return `${minutes.toString(10).padStart(2, 0)}:${seconds.toString(10).padStart(2, 0)}`
 }
