@@ -5,6 +5,10 @@ on:
       - "**.rs"
       - "**/Cargo.lock"
       - "**/Cargo.toml"
+      - "**/package.json"
+      - "**.svelte"
+      - "**.js"
+      - "**.ts"
     branches:
       - main
 env:
@@ -17,7 +21,17 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-latest]
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
         rust: [stable]
+        exclude:
+          - os: ubuntu-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-unknown-linux-gnu
     env:
       RUST_BACKTRACE: full
     steps:
@@ -25,23 +39,33 @@ jobs:
         uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-rust-cache
-      - name: Install gstreamer (ubuntu-latest)
-        if: matrix.os == 'ubuntu-latest'
+          shared-key: ${{ runner.target }}-rust-cache
+      - name: Install ${{ matrix.target }} packages (ubuntu-latest)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
-      - name: Install gstreamer (macos-latest)
+      - name: Install ${{ matrix.target }} packages (ubuntu-latest)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sed -i -e 's/deb-src/deb-src [arch=amd64]/g' /etc/apt/sources.list
+          sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
+          apt-add-repository 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
+          dpkg --add-architecture arm64
+          apt-get update
+          apt-get install -y curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64
+      - name: Install packages (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
-          brew update
-          brew install gstreamer 
+          brew install gstreamer
       - name: Install Rust Toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
+          target: ${{ matrix.target }}
           components: rustfmt, clippy
+          override: true
       - name: Install Cargo Plugins
         run: cargo install cargo-make cargo-insta sqlx-cli
       - name: Create db file

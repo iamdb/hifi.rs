@@ -50,6 +50,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
         .expect("error building playbin element");
 
     playbin.set_property_from_str("flags", "audio+buffering");
+
     if VERSION.1 >= 22 {
         playbin.connect("element-setup", false, |value| {
             let element = &value[1].get::<gst::Element>().unwrap();
@@ -61,6 +62,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
             None
         });
     }
+
     playbin.connect("source-setup", false, |value| {
         let element = &value[1].get::<gst::Element>().unwrap();
 
@@ -84,6 +86,7 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
         None
     });
+
     playbin.add_property_deep_notify_watch(Some("caps"), true);
 
     // Connects to the `about-to-finish` signal so the player
@@ -202,7 +205,7 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
 
     Ok(())
 }
-async fn broadcast_track_list(list: TrackListValue) -> Result<()> {
+async fn broadcast_track_list<'a>(list: TrackListValue) -> Result<()> {
     BROADCAST_CHANNELS
         .tx
         .broadcast(Notification::CurrentTrackList { list })

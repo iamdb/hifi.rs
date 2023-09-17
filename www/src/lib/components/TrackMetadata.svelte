@@ -84,7 +84,7 @@
 	{/if}
 	<div
 		style:width="{progress}%"
-		class="absolute top-full left-0 w-full h-1 bg-blue-600/75 z-50"
+		class="absolute top-full left-0 w-full h-1 bg-blue-600/75 z-10"
 	></div>
 </div>
 

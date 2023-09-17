@@ -70,35 +70,12 @@ impl Album {
             self.tracks = album.tracks;
         }
     }
-
-    pub fn columns(&self) -> Vec<String> {
-        let hires_icon = if self.hires_streamable { "*" } else { "" };
-        let parental_icon = if self.parental_warning { "e" } else { "" };
-
-        vec![
-            format!("{} {}{}", self.title, hires_icon, parental_icon),
-            self.artist.name.clone(),
-            self.release_date_original.as_str()[0..4].to_string(),
-        ]
-    }
-}
-
-impl From<Box<Album>> for Vec<Vec<String>> {
-    fn from(album: Box<Album>) -> Self {
-        vec![album.columns()]
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AlbumSearchResults {
     pub query: String,
     pub albums: Albums,
-}
-
-impl From<AlbumSearchResults> for Vec<Vec<String>> {
-    fn from(results: AlbumSearchResults) -> Self {
-        results.albums.into()
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -122,16 +99,6 @@ impl Albums {
                     .unwrap(),
                 )
         });
-    }
-}
-
-impl From<Albums> for Vec<Vec<String>> {
-    fn from(albums: Albums) -> Self {
-        albums
-            .items
-            .into_iter()
-            .map(|album| album.columns())
-            .collect::<Vec<Vec<String>>>()
     }
 }
 
