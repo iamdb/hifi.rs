@@ -45,7 +45,7 @@ To get started:
 ```shell
 hifi-rs config username # enter username at prompt
 hifi-rs config password # enter password at prompt
-hifi-rs config default-quality # enter quality at prompt (mp3, cd, hifi96 or hifi192)
+hifi-rs config default-quality <quality> # replace <quality> with either mp3, cd, hifi96 or hifi192
 
 # play from the command line
 hifi-rs play --url <Qobuz Album, Playlist or Track URL>
