@@ -137,16 +137,28 @@ impl TrackListValue {
     #[instrument(skip(self))]
     pub fn unplayed_tracks(&self) -> Vec<&Track> {
         self.queue
-            .values()
-            .filter(|t| t.status == TrackStatus::Unplayed)
+            .iter()
+            .filter_map(|t| {
+                if t.1.status == TrackStatus::Unplayed {
+                    Some(t.1)
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<&Track>>()
     }
 
     #[instrument(skip(self))]
     pub fn played_tracks(&self) -> Vec<&Track> {
         self.queue
-            .values()
-            .filter(|t| t.status == TrackStatus::Played)
+            .iter()
+            .filter_map(|t| {
+                if t.1.status == TrackStatus::Played {
+                    Some(t.1)
+                } else {
+                    None
+                }
+            })
             .collect::<Vec<&Track>>()
     }
 
@@ -163,14 +175,10 @@ impl TrackListValue {
         index
     }
 
-    pub fn current_track(&self) -> Option<Track> {
-        for track in self.queue.values() {
-            if track.status == TrackStatus::Playing {
-                return Some(track.clone());
-            }
-        }
-
-        None
+    pub fn current_track(&self) -> Option<&Track> {
+        self.queue
+            .values()
+            .find(|&track| track.status == TrackStatus::Playing)
     }
 
     pub fn cursive_list(&self) -> Vec<(String, i32)> {
