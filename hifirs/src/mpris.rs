@@ -166,7 +166,6 @@ pub async fn receive_notifications(conn: Connection) {
                         }
 
                         player_iface.current_track = Some(current.clone());
-                        player_iface.current_album = list.get_album().cloned();
 
                         player_iface
                             .metadata_changed(player_ref.signal_context())
