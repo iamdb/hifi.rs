@@ -1,6 +1,6 @@
 use crate::{
     player::{self, controls::Controls, notification::Notification, queue::TrackListValue},
-    service::Track,
+    service::{Album, Track},
 };
 use chrono::{DateTime, Duration, Local};
 use gstreamer::{ClockTime, State as GstState};
@@ -184,15 +184,15 @@ pub async fn receive_notifications(conn: Connection) {
                             .collect::<Vec<String>>();
                         let mut list_iface = list_ref.get_mut().await;
 
-                        list_iface.track_list = list;
-
                         MprisTrackList::track_list_replaced(
                             list_ref.signal_context(),
                             tracks,
-                            current.title,
+                            &current.title,
                         )
                         .await
                         .expect("failed to send track list replaced signal");
+
+                        list_iface.track_list = list;
                     }
                 }
                 Notification::Error { error: _ } => {}
@@ -306,7 +306,7 @@ impl MprisPlayer {
     async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
         debug!("signal metadata refresh");
         if let Some(current_track) = &self.current_track {
-            track_to_meta(current_track.clone())
+            track_to_meta(current_track, current_track.album.as_ref())
         } else {
             HashMap::default()
         }
@@ -374,12 +374,14 @@ impl MprisTrackList {
         &self,
         tracks: Vec<String>,
     ) -> Vec<HashMap<&'static str, zvariant::Value>> {
+        debug!("get tracks metadata");
+
         self.track_list
             .unplayed_tracks()
             .into_iter()
             .filter_map(|i| {
                 if tracks.contains(&i.position.to_string()) {
-                    Some(track_to_meta(i.clone()))
+                    Some(track_to_meta(i, self.track_list.get_album()))
                 } else {
                     None
                 }
@@ -397,7 +399,7 @@ impl MprisTrackList {
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<String>,
-        current: String,
+        current: &str,
     ) -> zbus::Result<()>;
 
     #[dbus_interface(property, name = "Tracks")]
@@ -415,7 +417,10 @@ impl MprisTrackList {
     }
 }
 
-fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value<'static>> {
+fn track_to_meta(
+    playlist_track: &Track,
+    album: Option<&Album>,
+) -> HashMap<&'static str, zvariant::Value<'static>> {
     let mut meta = HashMap::new();
 
     meta.insert(
@@ -441,15 +446,18 @@ fn track_to_meta(playlist_track: Track) -> HashMap<&'static str, zvariant::Value
         ),
     );
 
-    if let Some(artist) = playlist_track.artist {
+    if let Some(artist) = &playlist_track.artist {
         meta.insert(
             "xesam:artist",
             zvariant::Value::new(artist.name.trim().to_string()),
         );
     }
 
-    if let Some(album) = playlist_track.album {
-        meta.insert("mpris:artUrl", zvariant::Value::new(album.cover_art));
+    if let Some(album) = album {
+        meta.insert(
+            "mpris:artUrl",
+            zvariant::Value::new(album.cover_art.clone()),
+        );
         meta.insert(
             "xesam:album",
             zvariant::Value::new(album.title.trim().to_string()),

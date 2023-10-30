@@ -3,12 +3,11 @@ use hifirs_qobuz_api::client::track::Track as QobuzTrack;
 
 impl From<QobuzTrack> for Track {
     fn from(value: QobuzTrack) -> Self {
-        let album = if let Some(album) = &value.album {
-            let a: Album = album.clone().into();
-            Some(a)
-        } else {
-            None
-        };
+        let album = value.album.as_ref().map(|a| {
+            let album: Album = a.clone().into();
+
+            album
+        });
 
         let artist = if let Some(p) = &value.performer {
             Some(Artist {

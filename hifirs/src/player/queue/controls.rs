@@ -70,6 +70,8 @@ impl From<PlayerState> for SavedState {
 
 impl PlayerState {
     pub async fn play_album(&mut self, album_id: String) -> Option<String> {
+        debug!("setting up album to play");
+
         if let Some(album) = self.service.album(album_id.as_str()).await {
             let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
             tracklist.set_album(album);
@@ -94,6 +96,8 @@ impl PlayerState {
         }
     }
     pub async fn play_track(&mut self, track_id: i32) -> Option<String> {
+        debug!("setting up track to play");
+
         if let Some(mut track) = self.service.track(track_id).await {
             track.status = TrackStatus::Playing;
             track.number = 1;
@@ -116,6 +120,8 @@ impl PlayerState {
         }
     }
     pub async fn play_playlist(&mut self, playlist_id: i64) -> Option<String> {
+        debug!("setting up playlist to play");
+
         if let Some(playlist) = self.service.playlist(playlist_id).await {
             let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
 
