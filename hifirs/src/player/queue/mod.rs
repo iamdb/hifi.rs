@@ -98,7 +98,15 @@ impl TrackListValue {
 
     #[instrument(skip(self))]
     pub fn get_album(&self) -> Option<&Album> {
-        self.album.as_ref()
+        if let Some(c) = self.current_track() {
+            if let Some(album) = &c.album {
+                Some(album)
+            } else {
+                self.album.as_ref()
+            }
+        } else {
+            self.album.as_ref()
+        }
     }
 
     #[instrument(skip(self))]
