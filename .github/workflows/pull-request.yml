@@ -48,9 +48,9 @@ jobs:
       - name: Install ${{ matrix.target }} packages (ubuntu-latest)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          # sudo sed -i -e 's/deb-src/deb-src [arch=amd64]/g' /etc/apt/sources.list
-          # sudo sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
-          # sudo apt-add-repository -s 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
+          sudo sed -i -e 's/deb-src/deb-src [arch=amd64]/g' /etc/apt/sources.list
+          sudo sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
+          sudo apt-add-repository -s 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
           sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install --fix-broken -y curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64
