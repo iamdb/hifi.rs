@@ -17,7 +17,7 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-latest]
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
+        target: [x86_64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
         rust: [stable]
         exclude:
           - os: ubuntu-latest
@@ -26,8 +26,6 @@ jobs:
             target: aarch64-apple-darwin
           - os: macos-latest
             target: x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: aarch64-unknown-linux-gnu
     env:
       RUST_BACKTRACE: full
     steps:
@@ -47,15 +45,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
-      - name: Install ${{ matrix.target }} packages (ubuntu-latest)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo sed -i -e 's/deb-src/deb-src [arch=amd64]/g' /etc/apt/sources.list
-          sudo sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
-          sudo apt-add-repository 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64
       - name: Install packages (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
@@ -80,7 +69,6 @@ jobs:
           PKG_CONFIG_ALL_STATIC: true
           DATABASE_URL: "sqlite:///tmp/data.db"
         with:
-          use-cross: true
           command: build
           args: --bin hifi-rs --release --target=${{ matrix.target }}
       - name: Tar hifi-rs-${{ matrix.target }}.tar.gz
