@@ -52,8 +52,8 @@ jobs:
           sudo sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
           sudo apt-add-repository -s 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
           sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install --fix-broken -y curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross zlib1g:arm64 libunwind-dev:arm64 python3:arm64 libdbus-1-3:arm64 libunwind8:arm64 libglib2.0:arm64 libglib2.0-dev:arm64 libc6:arm64 libc-dev:arm64 libnsl2:arm64 libtirpc-dev:arm64 libnss-nis:arm64 libnss-nisplus:arm64 linux-libc-dev:arm64 zlib1g-dev:arm64
+          sudo apt-get update && sudo apt-get dist-upgrade
+          sudo apt-get install -y curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64
       - name: Install packages (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
