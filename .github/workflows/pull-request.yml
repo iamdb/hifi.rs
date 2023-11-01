@@ -45,20 +45,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
-      - name: Install ${{ matrix.target }} packages (ubuntu-latest)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo sed -i -e 's/deb-src/deb-src [arch=amd64]/g' /etc/apt/sources.list
-          sudo sed -i -e 's/deb/deb [arch=amd64]/g' /etc/apt/sources.list
-          sudo apt-add-repository -s 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ jammy main restricted universe multiverse'
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update 
-          sudo apt-get install -y -f curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64
       - name: Install packages (macos-latest)
         if: matrix.os == 'macos-latest'
         run: |
           brew install gstreamer
       - name: Install Rust Toolchain
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -67,12 +59,15 @@ jobs:
           components: rustfmt, clippy
           override: true
       - name: Install Cargo Plugins
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         run: cargo install cargo-make cargo-insta sqlx-cli
       - name: Create db file
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
         env: 
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Run CI Flow
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
         uses: actions-rs/cargo@v1
         env:
           QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
@@ -81,3 +76,24 @@ jobs:
         with:
           command: make
           args: ci-flow
+      - name: Check arm64
+        uses: pguyot/arm-runner-action@v2
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        env:
+          QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
+          QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
+          DATABASE_URL: "sqlite:///tmp/data.db"
+        with:
+          base_image: raspios_lite_arm64:latest
+          import_github_env: true
+          commands: |
+            apt-get update -y --allow-releaseinfo-change
+            apt-get install --no-install-recommends -y libunwind-dev libgstreamer1.0-dev
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+            echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+            export PATH="$HOME/.cargo/bin:${PATH}"
+            rustup target add aarch64-unknown-linux-gnu
+            rustup toolchain install stable-aarch64-unknown-linux-gnu
+            cargo binstall --no-confirm cargo-make cargo-insta sqlx-cli
+            touch /tmp/data.db && cargo sqlx database reset --source ./hifirs/migrations -y
+            cargo make ci-flow
