@@ -22,7 +22,7 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 
 ## Requirements
 
-- [GStreamer v1.20+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (comes with most/all current Linux and MacOS versions)
+- [GStreamer v1.18+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (comes with most/all current Linux and MacOS versions)
 
 ## Installation
 
@@ -32,9 +32,9 @@ Download the tar.gz file for your OS from the [releases page](https://github.com
 
 ### Build from source
 
-To make building from source easier, there is a `Dockerfile` to compile the project for Linux into a container.
+To make building from source easier, there is a `Dockerfile` and `Dockerfile.arm64` to compile the project for Linux x86 and arm64 into a container.
 
-Run `build_linux.sh` to automatically build the app in Docker and output the file.
+Run `build_linux.sh` or `build_arm64.sh` to automatically build the app in Docker and output the file.
 
 ## Get started
 
@@ -45,7 +45,7 @@ To get started:
 ```shell
 hifi-rs config username # enter username at prompt
 hifi-rs config password # enter password at prompt
-hifi-rs config default-quality # enter quality at prompt (mp3, cd, hifi96 or hifi192)
+hifi-rs config default-quality <quality> # mp3, cd, hifi96 or hifi192
 
 # play from the command line
 hifi-rs play --url <Qobuz Album, Playlist or Track URL>
@@ -116,11 +116,3 @@ Skip To Track:
 { "skipTo": { "num": "<track index>"} }
 ```
 For more options, see the [`Action`](hifirs/src/player/controls.rs#L7) enum.
-
-## Known Issues
-
-- UI will freeze during loading of long lists and then works fine. The issue is there is no feedback alerting the user that something is happening in the background and signifying it is normal behavior. Probably best solved when switching to Cursive.
-
-## Todo
-
-- Sortable lists

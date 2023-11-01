@@ -31,7 +31,7 @@ pub async fn init(controls: Controls) -> Connection {
     };
     let mpris_tracklist = MprisTrackList {
         controls,
-        track_list: TrackListValue::new(None),
+        track_list: TrackListValue::default(),
     };
 
     let conn = ConnectionBuilder::session()
@@ -224,15 +224,15 @@ impl Mpris {
         false
     }
     #[dbus_interface(property, name = "SupportedMimeTypes")]
-    fn supported_mime_types(&self) -> Vec<&'static str> {
+    fn supported_mime_types(&self) -> Vec<&str> {
         vec!["audio/mpeg", "audio/x-flac", "audio/flac"]
     }
     #[dbus_interface(property, name = "SupportedUriSchemes")]
-    fn supported_uri_schemes(&self) -> Vec<&'static str> {
+    fn supported_uri_schemes(&self) -> Vec<&str> {
         vec!["http"]
     }
     #[dbus_interface(property)]
-    fn identity(&self) -> &'static str {
+    fn identity(&self) -> &str {
         "hifi-rs"
     }
     #[dbus_interface(property)]
@@ -290,7 +290,7 @@ impl MprisPlayer {
         }
     }
     #[dbus_interface(property, name = "LoopStatus")]
-    fn loop_status(&self) -> &'static str {
+    fn loop_status(&self) -> &str {
         "None"
     }
     #[dbus_interface(property, name = "Rate")]
@@ -302,7 +302,7 @@ impl MprisPlayer {
         false
     }
     #[dbus_interface(property, name = "Metadata")]
-    async fn metadata(&self) -> HashMap<&'static str, zvariant::Value> {
+    async fn metadata(&self) -> HashMap<&str, zvariant::Value> {
         debug!("signal metadata refresh");
         if let Some(current_track) = &self.track_list.current_track() {
             track_to_meta(current_track, self.track_list.get_album())
@@ -372,11 +372,11 @@ impl MprisTrackList {
     async fn get_tracks_metadata(
         &self,
         tracks: Vec<String>,
-    ) -> Vec<HashMap<&'static str, zvariant::Value>> {
+    ) -> Vec<HashMap<&str, zvariant::Value>> {
         debug!("get tracks metadata");
 
         self.track_list
-            .unplayed_tracks()
+            .all_tracks()
             .into_iter()
             .filter_map(|i| {
                 if tracks.contains(&i.position.to_string()) {
@@ -385,7 +385,7 @@ impl MprisTrackList {
                     None
                 }
             })
-            .collect::<Vec<HashMap<&'static str, zvariant::Value>>>()
+            .collect::<Vec<HashMap<&str, zvariant::Value>>>()
     }
 
     async fn go_to(&self, position: String) {
@@ -416,10 +416,10 @@ impl MprisTrackList {
     }
 }
 
-fn track_to_meta(
-    playlist_track: &Track,
-    album: Option<&Album>,
-) -> HashMap<&'static str, zvariant::Value<'static>> {
+fn track_to_meta<'a>(
+    playlist_track: &'a Track,
+    album: Option<&'a Album>,
+) -> HashMap<&'a str, zvariant::Value<'a>> {
     let mut meta = HashMap::new();
 
     meta.insert(

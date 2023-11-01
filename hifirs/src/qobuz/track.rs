@@ -16,7 +16,7 @@ impl From<QobuzTrack> for Track {
                 albums: None,
             })
         } else {
-            value.album.as_ref().map(|a| a.artist.clone().into())
+            value.album.as_ref().map(|a| a.clone().artist.into())
         };
 
         let cover_art = value.album.as_ref().map(|a| a.image.large.clone());

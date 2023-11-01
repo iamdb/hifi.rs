@@ -143,6 +143,11 @@ impl TrackListValue {
     }
 
     #[instrument(skip(self))]
+    pub fn all_tracks(&self) -> Vec<&Track> {
+        self.queue.values().collect::<Vec<&Track>>()
+    }
+
+    #[instrument(skip(self))]
     pub fn unplayed_tracks(&self) -> Vec<&Track> {
         self.queue
             .iter()

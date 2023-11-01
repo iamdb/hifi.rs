@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "hifi-rs"
-version = "0.3.5"
+version = "0.3.6"
 license-file = "../LICENSE"
 repository = "https://github.com/iamdb/hifi.rs"
 
@@ -17,7 +17,7 @@ dirs = "5"
 enum-as-inner = "0.6"
 flume = "0.11"
 futures = "0.3"
-gstreamer = { version = "0.21", features = ["serde", "v1_20"] }
+gstreamer = { version = "0.21", features = ["serde", "v1_16"] }
 md5 = "0.7.0"
 hifirs-qobuz-api = { version = "*", path = "../qobuz-api" }
 rand = "0.8"
@@ -39,3 +39,7 @@ include_dir = "0.7"
 mime_guess = "2.0"
 cached = { version = "0.46", features = ["async", "serde", "serde_json"]} 
 async-trait = "0.1.73"
+
+[dependencies.rusqlite]
+version = "0.29"
+features = ["bundled"]

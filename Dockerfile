@@ -1,4 +1,4 @@
-FROM node:18-bookworm as www
+FROM node:18-bullseye as www
 
 RUN mkdir /app
 
@@ -8,7 +8,7 @@ COPY www .
 
 RUN npm install && npm run build
 
-FROM rust:1-bookworm as build
+FROM rust:1-bullseye as build
 
 RUN apt-get update && apt-get install -y curl libgstreamer1.0-dev
 
