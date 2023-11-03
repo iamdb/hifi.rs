@@ -959,7 +959,7 @@ pub async fn receive_notifications() {
                                                 set_current_track(s, first.1, list.list_type());
                                             }
 
-                                            entity_title.set_content(playlist.title.clone());
+                                            entity_title.set_content(&playlist.title);
                                             total_tracks.set_content(format!("{:03}", list.total()));
                                         }
 

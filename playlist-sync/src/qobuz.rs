@@ -45,9 +45,9 @@ impl<'q> Qobuz<'q> {
         Ok(QobuzPlaylist(playlist))
     }
 
-    pub async fn search(&self, query: String) -> Vec<Track> {
+    pub async fn search(&self, query: &str) -> Vec<Track> {
         self.progress.set_message(format!("{query} searching"));
-        let results = self.client.search_all(query.clone(), 100).await.unwrap();
+        let results = self.client.search_all(query, 100).await.unwrap();
 
         if results.tracks.items.is_empty() {
             self.progress.set_message(format!("{query} not found"));

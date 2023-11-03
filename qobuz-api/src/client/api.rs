@@ -17,7 +17,7 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 const BUNDLE_REGEX: &str =
     r#"<script src="(/resources/\d+\.\d+\.\d+-[a-z0-9]\d{3}/bundle\.js)"></script>"#;
@@ -106,9 +106,9 @@ enum Endpoint {
     Search,
 }
 
-impl Endpoint {
-    fn as_str(&self) -> &str {
-        match self {
+impl Display for Endpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let endpoint = match self {
             Endpoint::Album => "album/get",
             Endpoint::Artist => "artist/get",
             Endpoint::Login => "user/login",
@@ -124,7 +124,9 @@ impl Endpoint {
             Endpoint::Track => "track/get",
             Endpoint::TrackURL => "track/getFileUrl",
             Endpoint::UserPlaylist => "playlist/getUserPlaylists",
-        }
+        };
+
+        f.write_str(endpoint)
     }
 }
 
@@ -161,8 +163,8 @@ macro_rules! post {
 }
 
 impl Client {
-    pub fn quality(&self) -> AudioQuality {
-        self.default_quality.clone()
+    pub fn quality(&self) -> &AudioQuality {
+        &self.default_quality
     }
 
     pub fn signed_in(&self) -> bool {
@@ -171,7 +173,7 @@ impl Client {
 
     /// Login a user
     pub async fn login(&mut self, username: &str, password: &str) -> Result<()> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Login.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::Login);
 
         if let Some(app_id) = &self.app_id {
             info!(
@@ -185,7 +187,7 @@ impl Client {
                 ("app_id", app_id.as_str()),
             ];
 
-            match self.make_get_call(endpoint, Some(params)).await {
+            match self.make_get_call(&endpoint, Some(&params)).await {
                 Ok(response) => {
                     let json: Value = serde_json::from_str(response.as_str()).unwrap();
                     info!("Successfully logged in");
@@ -208,15 +210,15 @@ impl Client {
 
     /// Retrieve a list of the user's playlists
     pub async fn user_playlists(&self) -> Result<UserPlaylistsResult> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::UserPlaylist);
         let params = vec![("limit", "500"), ("extra", "tracks"), ("offset", "0")];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     /// Retrieve a playlist
     pub async fn playlist(&self, playlist_id: i64) -> Result<Playlist> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::Playlist);
         let id_string = playlist_id.to_string();
         let params = vec![
             ("limit", "500"),
@@ -224,16 +226,12 @@ impl Client {
             ("playlist_id", id_string.as_str()),
             ("offset", "0"),
         ];
-        let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params.clone()));
+        let playlist: Result<Playlist> = get!(self, &endpoint, Some(&params));
 
         if let Ok(mut playlist) = playlist {
-            if let Ok(all_items_playlist) = self.playlist_items(&mut playlist, endpoint).await {
-                Ok(all_items_playlist.clone())
-            } else {
-                Err(Error::Api {
-                    message: "error fetching playlist".to_string(),
-                })
-            }
+            self.playlist_items(&mut playlist, &endpoint).await?;
+
+            Ok(playlist)
         } else {
             Err(Error::Api {
                 message: "error fetching playlist".to_string(),
@@ -241,21 +239,14 @@ impl Client {
         }
     }
 
-    async fn playlist_items<'p>(
-        &self,
-        playlist: &'p mut Playlist,
-        endpoint: String,
-    ) -> Result<&'p Playlist> {
+    async fn playlist_items<'p>(&self, playlist: &'p mut Playlist, endpoint: &str) -> Result<()> {
         let total_tracks = playlist.tracks_count as usize;
-        let mut all_tracks: Vec<Track> = Vec::new();
 
-        if let Some(mut tracks) = playlist.tracks.clone() {
-            all_tracks.append(&mut tracks.items);
-
-            while all_tracks.len() < total_tracks {
+        if let Some(tracks) = playlist.tracks.as_mut() {
+            while tracks.items.len() < total_tracks {
                 let id = playlist.id.to_string();
-                let limit_string = (total_tracks - all_tracks.len()).to_string();
-                let offset_string = all_tracks.len().to_string();
+                let limit_string = (total_tracks - tracks.items.len()).to_string();
+                let offset_string = tracks.items.len().to_string();
 
                 let params = vec![
                     ("limit", limit_string.as_str()),
@@ -264,26 +255,21 @@ impl Client {
                     ("offset", offset_string.as_str()),
                 ];
 
-                let playlist: Result<Playlist> = get!(self, endpoint.clone(), Some(params));
+                let playlist: Result<Playlist> = get!(self, endpoint, Some(&params));
 
                 match &playlist {
                     Ok(playlist) => {
                         debug!("appending tracks to playlist");
                         if let Some(new_tracks) = &playlist.tracks {
-                            all_tracks.append(&mut new_tracks.clone().items);
+                            tracks.items.append(&mut new_tracks.clone().items);
                         }
                     }
                     Err(error) => error!("{}", error.to_string()),
                 }
             }
-
-            if !all_tracks.is_empty() {
-                tracks.items = all_tracks;
-                playlist.set_tracks(tracks);
-            }
         }
 
-        Ok(playlist)
+        Ok(())
     }
 
     pub async fn create_playlist(
@@ -293,7 +279,7 @@ impl Client {
         description: Option<String>,
         is_collaborative: Option<bool>,
     ) -> Result<Playlist> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistCreate.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistCreate);
 
         let mut form_data = HashMap::new();
         form_data.insert("name", name.as_str());
@@ -318,16 +304,16 @@ impl Client {
         };
         form_data.insert("description", description.as_str());
 
-        post!(self, endpoint, form_data)
+        post!(self, &endpoint, form_data)
     }
 
     pub async fn delete_playlist(&self, playlist_id: String) -> Result<SuccessfulResponse> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDelete.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDelete);
 
         let mut form_data = HashMap::new();
         form_data.insert("playlist_id", playlist_id.as_str());
 
-        post!(self, endpoint, form_data)
+        post!(self, &endpoint, form_data)
     }
 
     /// Add new track to playlist
@@ -336,7 +322,7 @@ impl Client {
         playlist_id: String,
         track_ids: Vec<String>,
     ) -> Result<Playlist> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks);
 
         let track_ids = track_ids.join(",");
 
@@ -345,7 +331,7 @@ impl Client {
         form_data.insert("track_ids", track_ids.as_str());
         form_data.insert("no_duplicate", "true");
 
-        post!(self, endpoint, form_data)
+        post!(self, &endpoint, form_data)
     }
 
     /// Add new track to playlist
@@ -354,11 +340,7 @@ impl Client {
         playlist_id: String,
         playlist_track_ids: Vec<String>,
     ) -> Result<Playlist> {
-        let endpoint = format!(
-            "{}{}",
-            self.base_url,
-            Endpoint::PlaylistDeleteTracks.as_str()
-        );
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistDeleteTracks);
 
         let playlist_track_ids = playlist_track_ids.join(",");
 
@@ -366,7 +348,7 @@ impl Client {
         form_data.insert("playlist_id", playlist_id.as_str());
         form_data.insert("playlist_track_ids", playlist_track_ids.as_str());
 
-        post!(self, endpoint, form_data)
+        post!(self, &endpoint, form_data)
     }
 
     /// Update track position in playlist
@@ -376,11 +358,7 @@ impl Client {
         playlist_id: String,
         track_id: String,
     ) -> Result<Playlist> {
-        let endpoint = format!(
-            "{}{}",
-            self.base_url,
-            Endpoint::PlaylistUpdatePosition.as_str()
-        );
+        let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistUpdatePosition);
 
         let index = index.to_string();
 
@@ -389,31 +367,31 @@ impl Client {
         form_data.insert("playlist_track_ids", track_id.as_str());
         form_data.insert("insert_before", index.as_str());
 
-        post!(self, endpoint, form_data)
+        post!(self, &endpoint, form_data)
     }
 
     /// Retrieve track information
     pub async fn track(&self, track_id: i32) -> Result<Track> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Track.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::Track);
         let track_id_string = track_id.to_string();
         let params = vec![("track_id", track_id_string.as_str())];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     /// Retrieve url information for a track's audio file
     pub async fn track_url(
         &self,
         track_id: i32,
-        fmt_id: Option<AudioQuality>,
-        sec: Option<String>,
+        fmt_id: Option<&AudioQuality>,
+        sec: Option<&str>,
     ) -> Result<TrackURL> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::TrackURL.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::TrackURL);
         let now = format!("{}", chrono::Utc::now().timestamp());
         let secret = if let Some(secret) = sec {
             secret
         } else if let Some(s) = &self.active_secret {
-            s.clone()
+            s
         } else {
             return Err(Error::ActiveSecret);
         };
@@ -444,46 +422,46 @@ impl Client {
             ("intent", "stream"),
         ];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
-    pub async fn search_all(&self, query: String, limit: i32) -> Result<SearchAllResults> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Search.as_str());
+    pub async fn search_all(&self, query: &str, limit: i32) -> Result<SearchAllResults> {
+        let endpoint = format!("{}{}", self.base_url, Endpoint::Search);
         let limit = limit.to_string();
-        let params = vec![("query", query.as_str()), ("limit", &limit)];
+        let params = vec![("query", query), ("limit", &limit)];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     // Retrieve information about an album
     pub async fn album(&self, album_id: &str) -> Result<Album> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::Album.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::Album);
         let params = vec![("album_id", album_id)];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     // Search the database for albums
     pub async fn search_albums(
         &self,
-        query: String,
+        query: &str,
         limit: Option<i32>,
     ) -> Result<AlbumSearchResults> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::SearchAlbums.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::SearchAlbums);
         let limit = if let Some(limit) = limit {
             limit.to_string()
         } else {
             100.to_string()
         };
-        let params = vec![("query", query.as_str()), ("limit", limit.as_str())];
+        let params = vec![("query", query), ("limit", limit.as_str())];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     // Retrieve information about an artist
     pub async fn artist(&self, artist_id: i32, limit: Option<i32>) -> Result<Artist> {
         if let Some(app_id) = &self.app_id {
-            let endpoint = format!("{}{}", self.base_url, Endpoint::Artist.as_str());
+            let endpoint = format!("{}{}", self.base_url, Endpoint::Artist);
             let limit = if let Some(limit) = limit {
                 limit.to_string()
             } else {
@@ -500,7 +478,7 @@ impl Client {
                 ("extra", "albums"),
             ];
 
-            get!(self, endpoint, Some(params))
+            get!(self, &endpoint, Some(&params))
         } else {
             Err(Error::AppID)
         }
@@ -509,18 +487,18 @@ impl Client {
     // Search the database for artists
     pub async fn search_artists(
         &self,
-        query: String,
+        query: &str,
         limit: Option<i32>,
     ) -> Result<ArtistSearchResults> {
-        let endpoint = format!("{}{}", self.base_url, Endpoint::SearchArtists.as_str());
+        let endpoint = format!("{}{}", self.base_url, Endpoint::SearchArtists);
         let limit = if let Some(limit) = limit {
             limit.to_string()
         } else {
             100.to_string()
         };
-        let params = vec![("query", query.as_str()), ("limit", &limit)];
+        let params = vec![("query", query), ("limit", &limit)];
 
-        get!(self, endpoint, Some(params))
+        get!(self, &endpoint, Some(&params))
     }
 
     // Set a user access token for authentication
@@ -542,16 +520,16 @@ impl Client {
         self.default_quality = quality;
     }
 
-    pub fn get_token(&self) -> Option<String> {
-        self.user_token.clone()
+    pub fn get_token(&self) -> Option<&String> {
+        self.user_token.as_ref()
     }
 
-    pub fn get_active_secret(&self) -> Option<String> {
-        self.active_secret.clone()
+    pub fn get_active_secret(&self) -> Option<&String> {
+        self.active_secret.as_ref()
     }
 
-    pub fn get_app_id(&self) -> Option<String> {
-        self.app_id.clone()
+    pub fn get_app_id(&self) -> Option<&String> {
+        self.app_id.as_ref()
     }
 
     fn client_headers(&self) -> HeaderMap {
@@ -578,8 +556,8 @@ impl Client {
     // Make a GET call to the API with the provided parameters
     async fn make_get_call(
         &self,
-        endpoint: String,
-        params: Option<Vec<(&str, &str)>>,
+        endpoint: &str,
+        params: Option<&[(&str, &str)]>,
     ) -> Result<String> {
         let headers = self.client_headers();
 
@@ -596,11 +574,7 @@ impl Client {
     }
 
     // Make a POST call to the API with form data
-    async fn make_post_call(
-        &self,
-        endpoint: String,
-        params: HashMap<&str, &str>,
-    ) -> Result<String> {
+    async fn make_post_call(&self, endpoint: &str, params: HashMap<&str, &str>) -> Result<String> {
         let headers = self.client_headers();
 
         debug!("calling {} endpoint, with params {params:?}", endpoint);
@@ -710,7 +684,7 @@ impl Client {
 
         for (timezone, secret) in secrets.iter() {
             let response = self
-                .track_url(64868955, Some(AudioQuality::Mp3), Some(secret.to_string()))
+                .track_url(64868955, Some(&AudioQuality::Mp3), Some(secret))
                 .await;
 
             if response.is_ok() {
@@ -768,7 +742,7 @@ async fn can_use_methods() {
             ".playlists.items[].tracks_count" => "0",
     });
     assert_yaml_snapshot!(client
-    .search_albums("a love supreme".to_string(), Some(10))
+    .search_albums("a love supreme", Some(10))
     .await
     .expect("failed to search for albums"),
     {
@@ -782,7 +756,7 @@ async fn can_use_methods() {
         .await
         .expect("failed to get album"));
     assert_yaml_snapshot!(client
-    .search_artists("pink floyd".to_string(), Some(10))
+    .search_artists("pink floyd", Some(10))
     .await
     .expect("failed to search artists"),
     {
@@ -794,7 +768,7 @@ async fn can_use_methods() {
         .expect("failed to get artist"));
     assert_yaml_snapshot!(client.track(155999429).await.expect("failed to get track"));
     assert_yaml_snapshot!(client
-        .track_url(64868955, Some(AudioQuality::HIFI96), None)
+        .track_url(64868955, Some(&AudioQuality::HIFI96), None)
         .await
         .expect("failed to get track url"), { ".url" => "[url]" });
 

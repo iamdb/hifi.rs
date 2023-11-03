@@ -110,7 +110,7 @@ pub async fn run() -> Result<(), Error> {
                     if let (Some(isrc), Some(track_position)) =
                         (existing_track.isrc, existing_track.position)
                     {
-                        let results = qobuz.search(isrc.to_lowercase()).await;
+                        let results = qobuz.search(&isrc.to_lowercase()).await;
                         if !results.is_empty() {
                             if let Some(found) = results.get(0) {
                                 qobuz
@@ -147,7 +147,7 @@ pub async fn run() -> Result<(), Error> {
 
         for missing in missing_tracks {
             if let Some(isrc) = missing.track.external_ids.get("isrc") {
-                let results = qobuz.search(isrc.to_lowercase()).await;
+                let results = qobuz.search(&isrc.to_lowercase()).await;
                 if !results.is_empty() {
                     if let Some(found) = results.get(0) {
                         qobuz

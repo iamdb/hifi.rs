@@ -63,8 +63,8 @@ pub struct Playlist {
 }
 
 impl Playlist {
-    pub fn set_tracks(&mut self, tracks: Tracks) {
-        self.tracks = Some(tracks);
+    pub fn set_tracks(&mut self, tracks: &Tracks) {
+        self.tracks = Some(tracks.clone());
     }
 
     pub fn reverse(&mut self) {
@@ -80,38 +80,4 @@ pub struct Playlists {
     pub limit: i64,
     pub total: i64,
     pub items: Vec<Playlist>,
-}
-
-impl From<Playlists> for Vec<Vec<String>> {
-    fn from(playlists: Playlists) -> Self {
-        playlists
-            .items
-            .into_iter()
-            .map(|i| vec![i.name])
-            .collect::<Vec<Vec<String>>>()
-    }
-}
-
-impl From<Playlist> for Vec<String> {
-    fn from(playlist: Playlist) -> Self {
-        vec![playlist.name]
-    }
-}
-
-impl From<Box<Playlist>> for Vec<String> {
-    fn from(playlist: Box<Playlist>) -> Self {
-        vec![playlist.name]
-    }
-}
-
-impl From<&Playlist> for Vec<String> {
-    fn from(playlist: &Playlist) -> Self {
-        vec![playlist.name.clone()]
-    }
-}
-
-impl From<Box<Playlist>> for Vec<Vec<String>> {
-    fn from(playlist: Box<Playlist>) -> Self {
-        vec![playlist.into()]
-    }
 }
