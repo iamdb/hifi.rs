@@ -55,15 +55,9 @@ pub struct TrackListValue {
 
 impl TrackListValue {
     #[instrument]
-    pub fn new(queue: Option<BTreeMap<u32, Track>>) -> TrackListValue {
-        let queue = if let Some(q) = queue {
-            q
-        } else {
-            BTreeMap::new()
-        };
-
+    pub fn new(queue: Option<&BTreeMap<u32, Track>>) -> TrackListValue {
         TrackListValue {
-            queue,
+            queue: queue.unwrap_or(&BTreeMap::new()).clone(),
             album: None,
             playlist: None,
             list_type: TrackListType::Unknown,
@@ -194,10 +188,10 @@ impl TrackListValue {
             .find(|&track| track.status == TrackStatus::Playing)
     }
 
-    pub fn cursive_list(&self) -> Vec<(String, i32)> {
+    pub fn cursive_list(&self) -> Vec<(&str, i32)> {
         self.queue
             .values()
-            .map(|i| (i.title.clone(), i.id as i32))
-            .collect::<Vec<(String, i32)>>()
+            .map(|i| (i.title.as_str(), i.id as i32))
+            .collect::<Vec<(&str, i32)>>()
     }
 }

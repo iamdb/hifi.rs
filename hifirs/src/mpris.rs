@@ -177,8 +177,8 @@ pub async fn receive_notifications(conn: Connection) {
                         let tracks = list
                             .cursive_list()
                             .iter()
-                            .map(|t| t.0.clone())
-                            .collect::<Vec<String>>();
+                            .map(|t| t.0)
+                            .collect::<Vec<&str>>();
 
                         MprisTrackList::track_list_replaced(
                             list_ref.signal_context(),
@@ -397,7 +397,7 @@ impl MprisTrackList {
     #[dbus_interface(signal, name = "TrackListReplaced")]
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
-        tracks: Vec<String>,
+        tracks: Vec<&str>,
         current: &str,
     ) -> zbus::Result<()>;
 

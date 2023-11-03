@@ -19,7 +19,7 @@ pub async fn init() {
         url.push("hifi-rs");
 
         if !url.exists() {
-            std::fs::create_dir_all(url.clone()).expect("failed to create database directory");
+            std::fs::create_dir_all(&url).expect("failed to create database directory");
         }
 
         url.push("data.db");
@@ -85,7 +85,7 @@ pub async fn set_password(password: String) {
     }
 }
 
-pub async fn set_user_token(token: String) {
+pub async fn set_user_token(token: &String) {
     if let Ok(mut conn) = acquire!() {
         query!(
             r#"
@@ -99,7 +99,7 @@ pub async fn set_user_token(token: String) {
     }
 }
 
-pub async fn set_app_id(id: String) {
+pub async fn set_app_id(id: &String) {
     if let Ok(mut conn) = acquire!() {
         query!(
             r#"
@@ -113,7 +113,7 @@ pub async fn set_app_id(id: String) {
     }
 }
 
-pub async fn set_active_secret(secret: String) {
+pub async fn set_active_secret(secret: &String) {
     if let Ok(mut conn) = acquire!() {
         query!(
             r#"

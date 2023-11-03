@@ -4,7 +4,7 @@ use hifirs_qobuz_api::client::track::Track as QobuzTrack;
 impl From<QobuzTrack> for Track {
     fn from(value: QobuzTrack) -> Self {
         let album = value.album.as_ref().map(|a| {
-            let album: Album = a.clone().into();
+            let album: Album = a.into();
 
             album
         });
@@ -45,5 +45,11 @@ impl From<QobuzTrack> for Track {
             cover_art,
             media_number: value.media_number as u32,
         }
+    }
+}
+
+impl From<&QobuzTrack> for Track {
+    fn from(value: &QobuzTrack) -> Self {
+        value.clone().into()
     }
 }

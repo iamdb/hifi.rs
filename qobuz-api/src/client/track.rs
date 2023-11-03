@@ -1,5 +1,4 @@
 use crate::client::album::Album;
-use gstreamer::ClockTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,28 +41,6 @@ pub struct Track {
     pub title: String,
     pub track_number: i64,
     pub version: Option<String>,
-}
-
-impl Track {
-    pub fn columns(&self) -> Vec<String> {
-        let duration = ClockTime::from_seconds(self.duration as u64)
-            .to_string()
-            .as_str()[2..7]
-            .to_string();
-
-        let performer = if let Some(performer) = &self.performer {
-            performer.name.clone()
-        } else {
-            "".to_string()
-        };
-
-        vec![
-            self.track_number.to_string(),
-            self.title.clone(),
-            performer,
-            duration,
-        ]
-    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

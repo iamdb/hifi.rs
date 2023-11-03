@@ -73,7 +73,7 @@ impl PlayerState {
         debug!("setting up album to play");
 
         if let Some(album) = self.service.album(album_id.as_str()).await {
-            let mut tracklist = TrackListValue::new(Some(album.tracks.clone()));
+            let mut tracklist = TrackListValue::new(Some(&album.tracks));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);
             tracklist.set_track_status(1, TrackStatus::Playing);
@@ -105,7 +105,7 @@ impl PlayerState {
             let mut queue = BTreeMap::new();
             queue.entry(track.position).or_insert_with(|| track.clone());
 
-            let mut tracklist = TrackListValue::new(Some(queue));
+            let mut tracklist = TrackListValue::new(Some(&queue));
             tracklist.set_list_type(TrackListType::Track);
 
             self.replace_list(tracklist.clone());
@@ -123,7 +123,7 @@ impl PlayerState {
         debug!("setting up playlist to play");
 
         if let Some(playlist) = self.service.playlist(playlist_id).await {
-            let mut tracklist = TrackListValue::new(Some(playlist.tracks.clone()));
+            let mut tracklist = TrackListValue::new(Some(&playlist.tracks));
 
             tracklist.set_playlist(playlist);
             tracklist.set_list_type(TrackListType::Playlist);
@@ -332,7 +332,7 @@ impl PlayerState {
             match entity_type {
                 TrackListType::Album => {
                     if let Some(album) = self.service.album(&last_state.playback_entity_id).await {
-                        self.replace_list(TrackListValue::new(Some(album.tracks.clone())));
+                        self.replace_list(TrackListValue::new(Some(&album.tracks)));
                         self.tracklist.set_list_type(TrackListType::Album);
                         self.tracklist.set_album(album);
 
@@ -355,7 +355,7 @@ impl PlayerState {
                         )
                         .await
                     {
-                        self.replace_list(TrackListValue::new(Some(playlist.tracks.clone())));
+                        self.replace_list(TrackListValue::new(Some(&playlist.tracks)));
                         self.tracklist.set_list_type(TrackListType::Playlist);
                         self.tracklist.set_playlist(playlist);
 
@@ -379,7 +379,7 @@ impl PlayerState {
                         let mut queue = BTreeMap::new();
                         queue.entry(track.position).or_insert_with(|| track);
 
-                        let mut tracklist = TrackListValue::new(Some(queue));
+                        let mut tracklist = TrackListValue::new(Some(&queue));
                         tracklist.set_list_type(TrackListType::Track);
 
                         self.replace_list(tracklist);

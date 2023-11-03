@@ -139,10 +139,10 @@ impl CursiveFormat for Album {
             style = style.combine(Effect::Dim).combine(Effect::Strikethrough);
         }
 
-        let mut title = StyledString::styled(self.title.clone(), style.combine(Effect::Bold));
+        let mut title = StyledString::styled(self.title.as_str(), style.combine(Effect::Bold));
 
         title.append_styled(" by ", style);
-        title.append_styled(self.artist.name.clone(), style);
+        title.append_styled(self.artist.name.as_str(), style);
         title.append_styled(" ", style);
 
         title.append_styled(self.release_year.to_string(), style.combine(Effect::Dim));
@@ -189,6 +189,6 @@ pub struct Playlist {
 
 impl CursiveFormat for Artist {
     fn list_item(&self) -> StyledString {
-        StyledString::plain(self.name.clone())
+        StyledString::plain(self.name.as_str())
     }
 }

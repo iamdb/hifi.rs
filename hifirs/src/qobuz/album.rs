@@ -51,3 +51,9 @@ impl From<QobuzAlbum> for Album {
         }
     }
 }
+
+impl From<&QobuzAlbum> for Album {
+    fn from(value: &QobuzAlbum) -> Self {
+        value.clone().into()
+    }
+}

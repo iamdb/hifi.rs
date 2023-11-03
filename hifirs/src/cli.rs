@@ -321,7 +321,7 @@ pub async fn run() -> Result<(), Error> {
             } => {
                 let client =
                     qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
-                let results = client.search_all(query, limit.unwrap_or_default()).await?;
+                let results = client.search_all(&query, limit.unwrap_or_default()).await?;
 
                 output!(results, output_format);
 
@@ -334,7 +334,7 @@ pub async fn run() -> Result<(), Error> {
             } => {
                 let client =
                     qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
-                let results = client.search_albums(query.clone(), limit).await?;
+                let results = client.search_albums(&query, limit).await?;
 
                 output!(results, output_format);
 
@@ -347,7 +347,7 @@ pub async fn run() -> Result<(), Error> {
             } => {
                 let client =
                     qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
-                let results = client.search_artists(query.clone(), limit).await?;
+                let results = client.search_artists(&query, limit).await?;
 
                 output!(results, output_format);
 
