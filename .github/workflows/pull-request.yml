@@ -54,7 +54,7 @@ jobs:
           components: rustfmt, clippy
           override: true
       - name: Install Cargo Plugins
-        uses: actions-rs/cargo@v0.1
+        uses: actions-rs/cargo@v1
         with:
           command: install
           args: cargo-make cargo-insta sqlx-cli
