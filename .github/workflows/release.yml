@@ -62,7 +62,7 @@ jobs:
           use-tool-cache: true
       - name: Create db file
         run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
-        env: 
+        env:
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Build ${{ matrix.target }}
         uses: actions-rs/cargo@v1
