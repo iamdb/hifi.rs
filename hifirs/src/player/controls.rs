@@ -75,11 +75,21 @@ impl Controls {
     pub async fn jump_backward(&self) {
         action!(self, Action::JumpBackward);
     }
-    pub async fn play_album(&self, album_id: String) {
-        action!(self, Action::PlayAlbum { album_id });
+    pub async fn play_album(&self, album_id: &str) {
+        action!(
+            self,
+            Action::PlayAlbum {
+                album_id: album_id.to_string()
+            }
+        );
     }
-    pub async fn play_uri(&self, uri: String) {
-        action!(self, Action::PlayUri { uri });
+    pub async fn play_uri(&self, uri: &str) {
+        action!(
+            self,
+            Action::PlayUri {
+                uri: uri.to_string()
+            }
+        );
     }
     pub async fn play_track(&self, track_id: i32) {
         action!(self, Action::PlayTrack { track_id });

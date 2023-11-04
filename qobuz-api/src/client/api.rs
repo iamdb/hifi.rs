@@ -319,15 +319,15 @@ impl Client {
     /// Add new track to playlist
     pub async fn playlist_add_track(
         &self,
-        playlist_id: String,
-        track_ids: Vec<String>,
+        playlist_id: &str,
+        track_ids: Vec<&str>,
     ) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistAddTracks);
 
         let track_ids = track_ids.join(",");
 
         let mut form_data = HashMap::new();
-        form_data.insert("playlist_id", playlist_id.as_str());
+        form_data.insert("playlist_id", playlist_id);
         form_data.insert("track_ids", track_ids.as_str());
         form_data.insert("no_duplicate", "true");
 
@@ -355,16 +355,16 @@ impl Client {
     pub async fn playlist_track_position(
         &self,
         index: usize,
-        playlist_id: String,
-        track_id: String,
+        playlist_id: &str,
+        track_id: &str,
     ) -> Result<Playlist> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::PlaylistUpdatePosition);
 
         let index = index.to_string();
 
         let mut form_data = HashMap::new();
-        form_data.insert("playlist_id", playlist_id.as_str());
-        form_data.insert("playlist_track_ids", track_id.as_str());
+        form_data.insert("playlist_id", playlist_id);
+        form_data.insert("playlist_track_ids", track_id);
         form_data.insert("insert_before", index.as_str());
 
         post!(self, &endpoint, form_data)

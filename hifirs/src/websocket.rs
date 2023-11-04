@@ -165,12 +165,12 @@ async fn handle_connection(socket: WebSocket) {
                                 Action::JumpForward => controls.jump_forward().await,
                                 Action::JumpBackward => controls.jump_backward().await,
                                 Action::PlayAlbum { album_id } => {
-                                    controls.play_album(album_id).await
+                                    controls.play_album(&album_id).await
                                 }
                                 Action::PlayTrack { track_id } => {
                                     controls.play_track(track_id).await
                                 }
-                                Action::PlayUri { uri } => controls.play_uri(uri).await,
+                                Action::PlayUri { uri } => controls.play_uri(&uri).await,
                                 Action::PlayPlaylist { playlist_id } => {
                                     controls.play_playlist(playlist_id).await
                                 }

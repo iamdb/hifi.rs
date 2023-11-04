@@ -273,7 +273,7 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            player::play_uri(url).await?;
+            player::play_uri(&url).await?;
 
             wait!(mut handles, cli.disable_tui);
 
@@ -307,7 +307,7 @@ pub async fn run() -> Result<(), Error> {
             )
             .await?;
 
-            player::play_album(album_id).await?;
+            player::play_album(&album_id).await?;
 
             wait!(mut handles, cli.disable_tui);
 
