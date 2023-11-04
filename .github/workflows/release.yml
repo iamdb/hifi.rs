@@ -17,13 +17,11 @@ jobs:
       fail-fast: true
       matrix:
         os: [ubuntu-latest, macos-latest]
-        target: [x86_64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
+        target: [x86_64-unknown-linux-gnu, x86_64-apple-darwin]
         rust: [stable]
         exclude:
           - os: ubuntu-latest
             target: x86_64-apple-darwin
-          - os: ubuntu-latest
-            target: aarch64-apple-darwin
           - os: macos-latest
             target: x86_64-unknown-linux-gnu
     env:
@@ -52,25 +50,27 @@ jobs:
       - name: Install Rust Toolchain
         uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
+          components: rust-src
       - name: Install Cargo Plugins
-        run: cargo install sqlx-cli
+        uses: actions-rs/install@v0.1
+        with:
+          crate: sqlx-cli
+          version: latest
+          use-tool-cache: true
       - name: Create db file
         run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
-        env: 
+        env:
           DATABASE_URL: "sqlite:///tmp/data.db"
       - name: Build ${{ matrix.target }}
         uses: actions-rs/cargo@v1
         env:
-          PKG_CONFIG_ALLOW_CROSS: 1
           SQLITE3_STATIC: true
           PKG_CONFIG_ALL_STATIC: true
           DATABASE_URL: "sqlite:///tmp/data.db"
         with:
-          use-cross: true
           command: build
           args: --bin hifi-rs --release --target=${{ matrix.target }}
       - name: Tar hifi-rs-${{ matrix.target }}.tar.gz

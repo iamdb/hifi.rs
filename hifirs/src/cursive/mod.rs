@@ -374,7 +374,7 @@ impl CursiveUI {
         let open = Arc::new(move |s: &mut Cursive| {
             let mut panel = CursiveUI::enter_url(move |s, url| {
                 let u = url.to_string();
-                tokio::spawn(async move { CONTROLS.play_uri(u).await });
+                tokio::spawn(async move { CONTROLS.play_uri(&u).await });
                 s.pop_layer();
                 ENTER_URL_OPEN.store(false, Ordering::Relaxed);
             });
@@ -549,8 +549,8 @@ fn load_search_results(item: &str, s: &mut Cursive) {
 
                     search_results.set_on_submit(move |_s: &mut Cursive, item: &String| {
                         if item != UNSTREAMABLE {
-                            let i = item.clone();
-                            tokio::spawn(async move { CONTROLS.play_album(i).await });
+                            let item = item.clone();
+                            tokio::spawn(async move { CONTROLS.play_album(&item).await });
                         }
                     });
                 }
@@ -671,7 +671,7 @@ fn submit_artist(s: &mut Cursive, item: i32) {
 
             tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
                 let id = a.id.clone();
-                tokio::spawn(async move { CONTROLS.play_album(id).await });
+                tokio::spawn(async move { CONTROLS.play_album(&id).await });
 
                 s.call_on_name(
                     "screens",
@@ -726,8 +726,8 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
         s.screen_mut().pop_layer();
 
         if let Some(album_id) = &item.1 {
-            let a = album_id.clone();
-            tokio::spawn(async move { CONTROLS.play_album(a).await });
+            let id = album_id.clone();
+            tokio::spawn(async move { CONTROLS.play_album(&id).await });
 
             s.call_on_name(
                 "screens",

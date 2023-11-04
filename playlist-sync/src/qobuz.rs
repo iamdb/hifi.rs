@@ -58,12 +58,12 @@ impl<'q> Qobuz<'q> {
         results.tracks.items
     }
 
-    pub async fn add_track(&self, playlist_id: String, track_id: String) {
+    pub async fn add_track(&self, playlist_id: &str, track_id: &str) {
         self.progress
             .set_message(format!("adding {track_id} to {playlist_id}"));
         match self
             .client
-            .playlist_add_track(playlist_id.clone(), vec![track_id.clone()])
+            .playlist_add_track(playlist_id, vec![track_id])
             .await
         {
             Ok(_) => debug!("track added"),
@@ -75,8 +75,8 @@ impl<'q> Qobuz<'q> {
 
     pub async fn update_track_position(
         &self,
-        playlist_id: String,
-        track_id: String,
+        playlist_id: &str,
+        track_id: &str,
         index: usize,
     ) -> hifirs_qobuz_api::Result<()> {
         self.client

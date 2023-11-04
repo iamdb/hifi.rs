@@ -69,10 +69,10 @@ impl From<PlayerState> for SavedState {
 }
 
 impl PlayerState {
-    pub async fn play_album(&mut self, album_id: String) -> Option<String> {
+    pub async fn play_album(&mut self, album_id: &str) -> Option<String> {
         debug!("setting up album to play");
 
-        if let Some(album) = self.service.album(album_id.as_str()).await {
+        if let Some(album) = self.service.album(album_id).await {
             let mut tracklist = TrackListValue::new(Some(&album.tracks));
             tracklist.set_album(album);
             tracklist.set_list_type(TrackListType::Album);

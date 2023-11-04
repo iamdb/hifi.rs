@@ -205,10 +205,10 @@ pub async fn set_player_state(state: gst::State) -> Result<()> {
 
     Ok(())
 }
-async fn broadcast_track_list<'a>(list: TrackListValue) -> Result<()> {
+async fn broadcast_track_list<'a>(list: &TrackListValue) -> Result<()> {
     BROADCAST_CHANNELS
         .tx
-        .broadcast(Notification::CurrentTrackList { list })
+        .broadcast(Notification::CurrentTrackList { list: list.clone() })
         .await?;
     Ok(())
 }
@@ -390,7 +390,7 @@ pub async fn skip(new_position: u32) -> Result<()> {
 
         drop(state);
 
-        broadcast_track_list(list).await?;
+        broadcast_track_list(&list).await?;
         BROADCAST_CHANNELS
             .tx
             .broadcast(Notification::Position {
@@ -415,7 +415,7 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 
     if let Some(track_url) = state.play_track(track_id).await {
         let list = state.track_list();
-        broadcast_track_list(list).await?;
+        broadcast_track_list(&list).await?;
 
         drop(state);
 
@@ -428,14 +428,14 @@ pub async fn play_track(track_id: i32) -> Result<()> {
 }
 #[instrument]
 /// Plays a full album.
-pub async fn play_album(album_id: String) -> Result<()> {
+pub async fn play_album(album_id: &str) -> Result<()> {
     ready().await?;
 
     let mut state = QUEUE.get().unwrap().write().await;
 
     if let Some(track_url) = state.play_album(album_id).await {
         let list = state.track_list();
-        broadcast_track_list(list).await?;
+        broadcast_track_list(&list).await?;
 
         drop(state);
 
@@ -454,7 +454,7 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
     if let Some(track_url) = state.play_playlist(playlist_id).await {
         let list = state.track_list();
-        broadcast_track_list(list).await?;
+        broadcast_track_list(&list).await?;
 
         drop(state);
 
@@ -467,11 +467,11 @@ pub async fn play_playlist(playlist_id: i64) -> Result<()> {
 }
 #[instrument]
 /// Play an item from Qobuz web uri
-pub async fn play_uri(uri: String) -> Result<()> {
-    match client::parse_url(uri.as_str()) {
+pub async fn play_uri(uri: &str) -> Result<()> {
+    match client::parse_url(uri) {
         Ok(url) => match url {
             UrlType::Album { id } => {
-                play_album(id).await?;
+                play_album(&id).await?;
             }
             UrlType::Playlist { id } => {
                 play_playlist(id).await?;
@@ -687,12 +687,12 @@ pub async fn player_loop() -> Result<()> {
             }
             Some(msg) = messages.next() => {
                 if msg.type_() == MessageType::Buffering {
-                    match handle_message(msg).await {
+                    match handle_message(&msg).await {
                         Ok(_) => {},
                         Err(error) => debug!(?error),
                     };
                 } else {
-                    tokio::spawn(async { match handle_message(msg).await {
+                    tokio::spawn(async move { match handle_message(&msg).await {
                             Ok(()) => {}
                             Err(error) => {debug!(?error);}
                         }
@@ -728,13 +728,13 @@ async fn handle_action(action: Action) -> Result<()> {
         }
         Action::Stop => stop().await?,
         Action::PlayAlbum { album_id } => {
-            play_album(album_id).await?;
+            play_album(&album_id).await?;
         }
         Action::PlayTrack { track_id } => {
             play_track(track_id).await?;
         }
         Action::PlayUri { uri } => {
-            play_uri(uri).await?;
+            play_uri(&uri).await?;
         }
         Action::PlayPlaylist { playlist_id } => {
             play_playlist(playlist_id).await?;
@@ -754,7 +754,7 @@ async fn handle_action(action: Action) -> Result<()> {
     Ok(())
 }
 
-async fn handle_message(msg: Message) -> Result<()> {
+async fn handle_message(msg: &Message) -> Result<()> {
     match msg.view() {
         MessageView::Eos(_) => {
             debug!("END OF STREAM");
@@ -771,7 +771,7 @@ async fn handle_message(msg: Message) -> Result<()> {
         MessageView::StreamStart(_) => {
             if is_playing() {
                 let list = QUEUE.get().unwrap().read().await.track_list();
-                broadcast_track_list(list).await?;
+                broadcast_track_list(&list).await?;
             }
         }
         MessageView::AsyncDone(msg) => {

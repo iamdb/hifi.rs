@@ -114,13 +114,13 @@ pub async fn run() -> Result<(), Error> {
                         if !results.is_empty() {
                             if let Some(found) = results.get(0) {
                                 qobuz
-                                    .add_track(qobuz_playlist.id(), found.id.to_string())
+                                    .add_track(&qobuz_playlist.id(), &found.id.to_string())
                                     .await;
 
                                 qobuz
                                     .update_track_position(
-                                        qobuz_playlist.id(),
-                                        found.id.to_string(),
+                                        &qobuz_playlist.id(),
+                                        &found.id.to_string(),
                                         track_position,
                                     )
                                     .await?;
@@ -151,14 +151,14 @@ pub async fn run() -> Result<(), Error> {
                 if !results.is_empty() {
                     if let Some(found) = results.get(0) {
                         qobuz
-                            .add_track(qobuz_playlist.id(), found.id.to_string())
+                            .add_track(&qobuz_playlist.id(), &found.id.to_string())
                             .await;
 
                         if missing.index < qobuz_playlist.track_count() {
                             qobuz
                                 .update_track_position(
-                                    qobuz_playlist.id(),
-                                    found.id.to_string(),
+                                    &qobuz_playlist.id(),
+                                    &found.id.to_string(),
                                     missing.index - 1,
                                 )
                                 .await?;

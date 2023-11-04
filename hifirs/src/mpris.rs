@@ -258,7 +258,7 @@ pub struct MprisPlayer {
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
-    async fn open_uri(&self, uri: String) {
+    async fn open_uri(&self, uri: &str) {
         self.controls.play_uri(uri).await;
     }
     async fn play(&self) {
@@ -280,13 +280,13 @@ impl MprisPlayer {
         self.controls.previous().await;
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
-    async fn playback_status(&self) -> String {
+    async fn playback_status(&self) -> &str {
         match self.status {
-            GstState::Playing => "Playing".to_string(),
-            GstState::Paused => "Paused".to_string(),
-            GstState::Null => "Stopped".to_string(),
-            GstState::VoidPending => "Stopped".to_string(),
-            GstState::Ready => "Ready".to_string(),
+            GstState::Playing => "Playing",
+            GstState::Paused => "Paused",
+            GstState::Null => "Stopped",
+            GstState::VoidPending => "Stopped",
+            GstState::Ready => "Ready",
         }
     }
     #[dbus_interface(property, name = "LoopStatus")]
