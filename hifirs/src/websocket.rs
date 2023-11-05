@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 use tokio::select;
 
-use crate::player::{self, controls::Action, notification::Notification};
+use crate::player::{self, actions::Action, notification::Notification};
 
 static SITE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../www/build");
 
@@ -145,7 +145,6 @@ async fn handle_connection(socket: WebSocket) {
 
     let mut recv_task = tokio::spawn(async move {
         debug!("spawning receive task");
-        let controls = player::controls();
 
         while let Some(data) = receiver.next().await {
             match data {
@@ -154,25 +153,25 @@ async fn handle_connection(socket: WebSocket) {
                         if let Ok(action) = serde_json::from_str::<Action>(&s) {
                             debug!(?action);
                             match action {
-                                Action::Play => controls.play().await,
-                                Action::Pause => controls.pause().await,
-                                Action::PlayPause => controls.play_pause().await,
-                                Action::Next => controls.next().await,
-                                Action::Previous => controls.previous().await,
-                                Action::Stop => controls.stop().await,
-                                Action::Quit => controls.quit().await,
-                                Action::SkipTo { num } => controls.skip_to(num).await,
-                                Action::JumpForward => controls.jump_forward().await,
-                                Action::JumpBackward => controls.jump_backward().await,
+                                Action::Play => player::play().await.expect(""),
+                                Action::Pause => player::pause().await.expect(""),
+                                Action::PlayPause => player::play_pause().await.expect(""),
+                                Action::Next => player::next().await.expect(""),
+                                Action::Previous => player::previous().await.expect(""),
+                                Action::Stop => player::stop().await.expect(""),
+                                Action::Quit => player::quit().await.expect(""),
+                                Action::SkipTo { num } => player::skip(num, true).await.expect(""),
+                                Action::JumpForward => player::jump_forward().await.expect(""),
+                                Action::JumpBackward => player::jump_backward().await.expect(""),
                                 Action::PlayAlbum { album_id } => {
-                                    controls.play_album(&album_id).await
+                                    player::play_album(&album_id).await.expect("")
                                 }
                                 Action::PlayTrack { track_id } => {
-                                    controls.play_track(track_id).await
+                                    player::play_track(track_id).await.expect("")
                                 }
-                                Action::PlayUri { uri } => controls.play_uri(&uri).await,
+                                Action::PlayUri { uri } => player::play_uri(&uri).await.expect(""),
                                 Action::PlayPlaylist { playlist_id } => {
-                                    controls.play_playlist(playlist_id).await
+                                    player::play_playlist(playlist_id).await.expect("")
                                 }
                                 Action::Search { query } => {
                                     let results = player::search(&query).await;

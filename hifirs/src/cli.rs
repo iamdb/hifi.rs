@@ -204,11 +204,10 @@ async fn setup_player(
 
     #[cfg(target_os = "linux")]
     {
-        let controls = player::controls();
-        let conn = mpris::init(controls).await;
+        let conn = mpris::init().await;
 
-        handles.push(tokio::spawn(async {
-            mpris::receive_notifications(conn).await;
+        handles.push(tokio::spawn(async move {
+            mpris::receive_notifications(&conn).await;
         }));
     }
 
@@ -453,7 +452,7 @@ macro_rules! wait {
             tui.run().await;
 
             debug!("tui exited, quitting");
-            player::controls().quit().await;
+            player::quit().await?;
 
             for h in $handles {
                 match h.await {
@@ -468,7 +467,7 @@ macro_rules! wait {
                 .expect("error waiting for ctrlc");
 
             debug!("ctrlc received, quitting");
-            player::controls().quit().await;
+            player::quit().await?;
 
             for h in $handles {
                 match h.await {

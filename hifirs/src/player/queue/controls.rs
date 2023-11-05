@@ -167,8 +167,8 @@ impl PlayerState {
         self.resume
     }
 
-    pub fn current_track(&self) -> Option<Track> {
-        self.current_track.clone()
+    pub fn current_track(&self) -> Option<&Track> {
+        self.tracklist.current_track()
     }
 
     pub fn current_track_position(&self) -> u32 {

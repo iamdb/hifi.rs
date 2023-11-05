@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    player::{self, controls::Controls, notification::Notification, queue::TrackListType},
+    player::{self, notification::Notification, queue::TrackListType},
     service::{SearchResults, Track, TrackStatus},
 };
 use cursive::{
@@ -27,14 +27,13 @@ use cursive::{
 };
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::OnceCell;
 use tokio::select;
 use tokio_stream::StreamExt;
 
 type CursiveSender = Sender<Box<dyn FnOnce(&mut Cursive) + Send>>;
 
 static SINK: OnceCell<CursiveSender> = OnceCell::new();
-static CONTROLS: Lazy<Controls> = Lazy::new(player::controls);
 
 static UNSTREAMABLE: &str = "UNSTREAMABLE";
 static ENTER_URL_OPEN: AtomicBool = AtomicBool::new(false);
@@ -170,7 +169,7 @@ impl CursiveUI {
 
         track_list.set_on_submit(move |_s, item| {
             let i = item.to_owned();
-            tokio::spawn(async move { CONTROLS.skip_to(i as u32).await });
+            tokio::spawn(async move { player::skip(i as u32, true).await });
         });
 
         let mut layout = LinearLayout::new(Orientation::Vertical).child(
@@ -219,23 +218,23 @@ impl CursiveUI {
         });
 
         self.root.add_global_callback(' ', move |_| {
-            block_on(async { CONTROLS.play_pause().await });
+            block_on(async { player::play_pause().await.expect("") });
         });
 
         self.root.add_global_callback('N', move |_| {
-            block_on(async { CONTROLS.next().await });
+            block_on(async { player::next().await.expect("") });
         });
 
         self.root.add_global_callback('P', move |_| {
-            block_on(async { CONTROLS.previous().await });
+            block_on(async { player::previous().await.expect("") });
         });
 
         self.root.add_global_callback('l', move |_| {
-            block_on(async { CONTROLS.jump_forward().await });
+            block_on(async { player::jump_forward().await.expect("") });
         });
 
         self.root.add_global_callback('h', move |_| {
-            block_on(async { CONTROLS.jump_backward().await });
+            block_on(async { player::jump_backward().await.expect("") });
         });
     }
 
@@ -374,7 +373,7 @@ impl CursiveUI {
         let open = Arc::new(move |s: &mut Cursive| {
             let mut panel = CursiveUI::enter_url(move |s, url| {
                 let u = url.to_string();
-                tokio::spawn(async move { CONTROLS.play_uri(&u).await });
+                tokio::spawn(async move { player::play_uri(&u).await });
                 s.pop_layer();
                 ENTER_URL_OPEN.store(false, Ordering::Relaxed);
             });
@@ -550,7 +549,7 @@ fn load_search_results(item: &str, s: &mut Cursive) {
                     search_results.set_on_submit(move |_s: &mut Cursive, item: &String| {
                         if item != UNSTREAMABLE {
                             let item = item.clone();
-                            tokio::spawn(async move { CONTROLS.play_album(&item).await });
+                            tokio::spawn(async move { player::play_album(&item).await });
                         }
                     });
                 }
@@ -644,7 +643,7 @@ fn submit_playlist(_s: &mut Cursive, item: u32) -> LinearLayout {
 
     let meta = LinearLayout::horizontal()
         .child(Button::new("play", move |_s| {
-            tokio::spawn(async move { CONTROLS.play_playlist(item as i64).await });
+            tokio::spawn(async move { player::play_playlist(item as i64).await });
         }))
         .child(
             TextView::new(format!("total tracks: {}", playlist_tracks.len()))
@@ -671,7 +670,7 @@ fn submit_artist(s: &mut Cursive, item: i32) {
 
             tree.add_leaf(a.list_item(), move |s: &mut Cursive| {
                 let id = a.id.clone();
-                tokio::spawn(async move { CONTROLS.play_album(&id).await });
+                tokio::spawn(async move { player::play_album(&id).await });
 
                 s.call_on_name(
                     "screens",
@@ -698,7 +697,7 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
     }
 
     if item.1.is_none() {
-        tokio::spawn(async move { CONTROLS.play_track(item.0).await });
+        tokio::spawn(async move { player::play_track(item.0).await });
 
         s.call_on_name(
             "screens",
@@ -712,7 +711,7 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
     let track = move |s: &mut Cursive| {
         s.screen_mut().pop_layer();
 
-        tokio::spawn(async move { CONTROLS.play_track(item.0).await });
+        tokio::spawn(async move { player::play_track(item.0).await });
 
         s.call_on_name(
             "screens",
@@ -727,7 +726,7 @@ fn submit_track(s: &mut Cursive, item: (i32, Option<String>)) {
 
         if let Some(album_id) = &item.1 {
             let id = album_id.clone();
-            tokio::spawn(async move { CONTROLS.play_album(&id).await });
+            tokio::spawn(async move { player::play_album(&id).await });
 
             s.call_on_name(
                 "screens",
