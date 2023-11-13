@@ -1447,9 +1447,9 @@ dependencies = [
 
 [[package]]
 name = "gstreamer"
-version = "0.21.1"
+version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b369a1eb2f7db49920d3d590bd988c5fb56dbf2347e1efb60307fe953546ee5d"
+checksum = "ed97f98d186e63e49079b26af1a1b73e70ab7a2f450eb46a136f2bffc2bf12d5"
 dependencies = [
  "cfg-if",
  "futures-channel",
@@ -1464,6 +1464,7 @@ dependencies = [
  "num-rational",
  "option-operations",
  "paste",
+ "pin-project-lite",
  "pretty-hex",
  "serde",
  "serde_bytes",
@@ -1473,9 +1474,9 @@ dependencies = [
 
 [[package]]
 name = "gstreamer-sys"
-version = "0.21.1"
+version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86bf9de67a6ab7af67ac11588f4939e984a936030437219f269fe969d79ad8c"
+checksum = "564cda782b3e6eed1b81cb4798a06794db56440fb05b422505be689f34ce3bc4"
 dependencies = [
  "glib-sys",
  "gobject-sys",
