@@ -25,7 +25,7 @@ jobs:
           shared-key: ${{ runner.target }}-rust-cache
       - uses: extractions/setup-just@v1
       - name: Build player ${{ matrix.arch }} 
-        run: just build-player ${{ matrix.arch }}
+        run: just build-player ${{ matrix.arch }}-unknown-linux-gnu
       - name: Tar hifi-rs-${{ matrix.arch }}.tar.gz
         run: tar -cvf hifi-rs-${{ matrix.arch }}.tar.gz -C ./target/${{ matrix.arch }}/release/ hifi-rs
       - name: Release ${{ matrix.target }}
