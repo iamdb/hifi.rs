@@ -44,7 +44,8 @@ build-www:
 install-deps target=detected_target:
   #!/usr/bin/env sh
   if ! just check-deps; then
-    {{ if target == "x86_64-unknown-linux-gnu" { "just install-deps-linux-x86_64" } else if target == "aarch64-unknown-linux-gnu" { "just install-deps-linux-aarch64" } else { error("unsupported arch") } }}
+    {{ if target == "x86_64-unknown-linux-gnu" { "just install-deps-linux-x86_64" } else if target ==
+    "aarch64-unknown-linux-gnu" { "just install-deps-linux-aarch64" } else if target == "x86_64-apple-darwin" { "just install-deps-macos" } else { error("unsupported arch") } }}
     echo "Dependencies installed successfully for {{target}}"
   fi
 
