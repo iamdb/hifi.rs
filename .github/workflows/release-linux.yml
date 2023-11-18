@@ -1,4 +1,4 @@
-name: Create release, build and upload artifacts
+name: Create release, build and upload artifacts (Linux)
 
 permissions:
   contents: write
@@ -17,6 +17,17 @@ jobs:
       fail-fast: true
       matrix:
         arch: [x86_64, aarch64]
+    container:
+      image: rust:1-bookworm
+      env:
+        PKG_CONFIG_ALLOW_CROSS: 1
+        PKG_CONFIG_PATH: /usr/lib/${{ matrix.arch }}-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH}
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+        CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++ 
+    env:
+      RUST_BACKTRACE: full
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
