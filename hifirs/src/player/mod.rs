@@ -258,11 +258,7 @@ pub fn duration() -> Option<ClockTime> {
 #[instrument]
 /// Seek to a specified time in the current track.
 pub async fn seek(time: ClockTime, flags: Option<SeekFlags>) -> Result<()> {
-    let flags = if let Some(flags) = flags {
-        flags
-    } else {
-        SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS
-    };
+    let flags = flags.unwrap_or(SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS);
 
     PLAYBIN.seek_simple(flags, time)?;
     Ok(())
@@ -379,7 +375,9 @@ pub async fn skip(new_position: u32, force: bool) -> Result<()> {
         }
     }
 
-    ready().await?;
+    if !is_ready() {
+        ready().await?;
+    }
 
     if let Some(next_track_to_play) = state.skip_track(new_position).await {
         let list = state.track_list();
@@ -531,25 +529,21 @@ async fn prep_next_track() -> Result<()> {
 pub fn notify_receiver() -> BroadcastReceiver {
     BROADCAST_CHANNELS.rx.clone()
 }
-
 #[instrument]
 /// Returns the current track list loaded in the player.
 pub async fn current_tracklist() -> TrackListValue {
     QUEUE.get().unwrap().read().await.track_list()
 }
-
 #[instrument]
 /// Returns the current track loaded in the player.
 pub async fn current_track() -> Option<Track> {
     QUEUE.get().unwrap().read().await.current_track().cloned()
 }
-
 #[instrument]
 /// Returns true if the player is currently buffering data.
 pub fn is_buffering() -> bool {
     IS_BUFFERING.load(Ordering::Relaxed)
 }
-
 #[instrument]
 /// Search the service.
 pub async fn search(query: &str) -> SearchResults {

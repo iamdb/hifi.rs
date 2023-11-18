@@ -11,23 +11,18 @@ on:
       - "**.ts"
     branches:
       - main
-env:
-  CLICOLOR_FORCE: 1
 jobs:
   pre-merge:
     name: Pre-merge checks
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        target: [x86_64-unknown-linux-gnu, x86_64-apple-darwin]
-        rust: [stable]
-        exclude:
-          - os: ubuntu-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: x86_64-unknown-linux-gnu
+        arch: [x86_64, aarch64]
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1-bookworm
+      env:
+        PKG_CONFIG_PATH: /usr/lib/${{ matrix.arch }}-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH}
     env:
       RUST_BACKTRACE: full
     steps:
@@ -36,38 +31,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ runner.target }}-rust-cache
-      - name: Install ${{ matrix.target }} packages (ubuntu-latest)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libunwind-dev libgstreamer1.0-dev
-      - name: Install packages (macos-latest)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install gstreamer
-      - name: Install Rust Toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          target: ${{ matrix.target }}
-          components: rustfmt, clippy
-          override: true
-      - name: Install Cargo Plugins
-        uses: actions-rs/cargo@v1
-        with:
-          command: install
-          args: cargo-make cargo-insta sqlx-cli
-      - name: Create db file
-        run: "touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y"
-        env: 
-          DATABASE_URL: "sqlite:///tmp/data.db"
-      - name: Run CI Flow
-        uses: actions-rs/cargo@v1
-        env:
-          QOBUZ_USERNAME: ${{secrets.QOBUZ_USERNAME}}
-          QOBUZ_PASSWORD: ${{secrets.QOBUZ_PASSWORD}}
-          DATABASE_URL: "sqlite:///tmp/data.db"
-        with:
-          command: make
-          args: ci-flow
+      - uses: extractions/setup-just@v1
+      - name: Build player
+        run: just build-player ${{ matrix.arch }}-unknown-linux-gnu
