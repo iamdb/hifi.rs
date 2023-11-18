@@ -21,6 +21,10 @@ detected_target := if os() == "linux" {
 default:
   @just --list
 
+docker-build-linux arch=arch():
+  docker build -f Dockerfile.{{arch}} -t hifirs .
+  docker cp $(docker create hifirs:latest):hifi-rs .
+
 build-player target=detected_target $DATABASE_URL="sqlite:///tmp/data.db":
   just install-deps {{target}}
   just build-www
@@ -85,12 +89,18 @@ check-deps:
 install-deps-linux-x86_64:
   #!/usr/bin/env sh
   echo Installing dependencies for x86_64-unknown-linux-gnu
+  sudo_cmd=''
+
+  if [ -x "$(command -v sudo)" ]; then
+    sudo_cmd='sudo '
+  fi
+
   if [ -x "$(command -v apt-get)" ]; then
-    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -qq libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev nodejs npm
+    eval $sudo_cmd apt-get update && DEBIAN_FRONTEND=noninteractive $sudo_cmd apt-get install -qq libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev nodejs npm
   elif [ -x "$(command -v pacman)" ]; then
-    sudo pacman -S gstreamer gst-plugins-base-libs nodejs
+    eval $sudo_cmd pacman -S gstreamer gst-plugins-base-libs nodejs
   elif [ -x "$(command -v dnf)" ]; then
-    dnf install gstreamer1-devel gstreamer1-plugins-base-devel nodejs18
+    eval $sudo_cmd dnf install gstreamer1-devel gstreamer1-plugins-base-devel nodejs18
   else
     echo "distro not supported for x86_64-unknown-linux-gnu"
     exit 1
@@ -100,9 +110,15 @@ install-deps-linux-x86_64:
 install-deps-linux-aarch64:
   #!/usr/bin/env sh
   echo Installing dependencies for aarch64-unknown-linux-gnu
+  sudo_cmd=''
+
+  if [ -x "$(command -v sudo)" ]; then
+    sudo_cmd='sudo '
+  fi
+
   if [ -x "$(command -v apt-get)" ]; then
-    dpkg --add-architecture arm64
-    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq install curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64 nodejs npm
+    eval $sudo_cmd dpkg --add-architecture arm64
+    eval $sudo_cmd apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq install curl libgstreamer1.0-dev:arm64 g++-aarch64-linux-gnu libc6-dev-arm64-cross libglib2.0-dev:arm64 nodejs npm
   else
     echo "distro not supported for aarch64-unknown-linux-gnu"
     exit 1
