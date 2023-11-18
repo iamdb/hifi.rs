@@ -1,4 +1,4 @@
-name: On Pull Request To Main
+name: On Pull Request To Main (Linux)
 on:
   pull_request:
     paths:
