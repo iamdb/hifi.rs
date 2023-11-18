@@ -1,32 +1,14 @@
-FROM node:18-bullseye as www
+FROM rust:1-bookworm as build
 
-RUN mkdir /app
+ARG PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH}"
 
-WORKDIR /app
-
-COPY www .
-
-RUN npm install && npm run build
-
-FROM rust:1-bullseye as build
-
-RUN apt-get update && apt-get install -y curl libgstreamer1.0-dev
-
-ENV PKG_CONFIG_PATH_x86_64_unknown_linux_gnu="/usr/lib/x86_64-linux-gnu/pkgconfig"
-ENV DATABASE_URL "sqlite:///tmp/data.db"
-
-RUN curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-RUN cargo binstall --no-confirm sqlx-cli
+RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /bin
 
 WORKDIR /app
 
 COPY . .
 
-COPY --from=www /app/build /app/www/build
-
-RUN touch /tmp/data.db && cd hifirs && cargo sqlx database reset -y
-
-RUN cargo build --bin hifi-rs --release --target x86_64-unknown-linux-gnu
+RUN just build-player x86_64-unknown-linux-gnu
 
 RUN mv target/x86_64-unknown-linux-gnu/release/hifi-rs /usr/local/bin
 

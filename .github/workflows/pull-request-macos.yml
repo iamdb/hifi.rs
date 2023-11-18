@@ -1,0 +1,26 @@
+name: On Pull Request To Main (MacOS)
+on:
+  pull_request:
+    paths:
+      - "**.rs"
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/package.json"
+      - "**.svelte"
+      - "**.js"
+      - "**.ts"
+    branches:
+      - main
+jobs:
+  pre-merge:
+    name: Pre-merge checks
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.target }}-rust-cache
+      - uses: extractions/setup-just@v1
+      - name: Build player
+        run: just build-player x86_64-apple-darwin

@@ -1,6 +1,5 @@
 use crate::{
     player::{
-        controls::{Action, Controls},
         error::Error,
         notification::{BroadcastReceiver, BroadcastSender, Notification},
         queue::{
@@ -32,7 +31,7 @@ use std::{
 use tokio::{select, sync::RwLock};
 
 #[macro_use]
-pub mod controls;
+pub mod actions;
 pub mod error;
 pub mod notification;
 #[macro_use]
@@ -103,7 +102,6 @@ static PLAYBIN: Lazy<Element> = Lazy::new(|| {
 
     playbin
 });
-static CONTROLS: Lazy<Controls> = Lazy::new(Controls::new);
 
 struct Broadcast {
     tx: BroadcastSender,
@@ -260,11 +258,7 @@ pub fn duration() -> Option<ClockTime> {
 #[instrument]
 /// Seek to a specified time in the current track.
 pub async fn seek(time: ClockTime, flags: Option<SeekFlags>) -> Result<()> {
-    let flags = if let Some(flags) = flags {
-        flags
-    } else {
-        SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS
-    };
+    let flags = flags.unwrap_or(SeekFlags::FLUSH | SeekFlags::TRICKMODE_KEY_UNITS);
 
     PLAYBIN.seek_simple(flags, time)?;
     Ok(())
@@ -280,7 +274,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
         let list = state.track_list();
         BROADCAST_CHANNELS
             .tx
-            .broadcast(Notification::CurrentTrackList { list })
+            .broadcast(Notification::CurrentTrackList { list: list.clone() })
             .await?;
 
         if autoplay {
@@ -290,7 +284,7 @@ pub async fn resume(autoplay: bool) -> Result<()> {
         }
 
         if let Some(track) = state.current_track() {
-            if let Some(url) = track.track_url {
+            if let Some(url) = &track.track_url {
                 PLAYBIN.set_property("uri", url);
 
                 ready().await?;
@@ -315,11 +309,6 @@ pub async fn resume(autoplay: bool) -> Result<()> {
     }
 
     Ok(())
-}
-#[instrument]
-/// Retreive controls for the player.
-pub fn controls() -> Controls {
-    CONTROLS.clone()
 }
 #[instrument]
 /// Jump forward in the currently playing track +10 seconds.
@@ -358,7 +347,7 @@ pub async fn jump_backward() -> Result<()> {
 }
 #[instrument]
 /// Skip to a specific track in the playlist.
-pub async fn skip(new_position: u32) -> Result<()> {
+pub async fn skip(new_position: u32, force: bool) -> Result<()> {
     let mut state = QUEUE.get().unwrap().write().await;
     let current_position = state.current_track_position();
     let total_tracks = state.track_list().total();
@@ -368,7 +357,11 @@ pub async fn skip(new_position: u32) -> Result<()> {
     // then it goes to the beginning. If triggered again
     // within a second after playing, it will skip to the previous track.
     // Ignore if going from the last track to the first (EOS).
-    if new_position < current_position && total_tracks != current_position && new_position != 1 {
+    if !force
+        && new_position < current_position
+        && total_tracks != current_position
+        && new_position != 1
+    {
         if let Some(current_player_position) = position() {
             if current_player_position.seconds() > 1 {
                 debug!("current track position >1s, seeking to start of track");
@@ -382,7 +375,9 @@ pub async fn skip(new_position: u32) -> Result<()> {
         }
     }
 
-    ready().await?;
+    if !is_ready() {
+        ready().await?;
+    }
 
     if let Some(next_track_to_play) = state.skip_track(new_position).await {
         let list = state.track_list();
@@ -406,6 +401,27 @@ pub async fn skip(new_position: u32) -> Result<()> {
 
     Ok(())
 }
+
+pub async fn next() -> Result<()> {
+    let state = QUEUE.get().unwrap().read().await;
+
+    let current_position = state.current_track_position();
+    drop(state);
+    skip(current_position + 1, true).await?;
+
+    Ok(())
+}
+
+pub async fn previous() -> Result<()> {
+    let state = QUEUE.get().unwrap().read().await;
+
+    let current_position = state.current_track_position();
+    drop(state);
+    skip(current_position - 1, false).await?;
+
+    Ok(())
+}
+
 #[instrument]
 /// Plays a single track.
 pub async fn play_track(track_id: i32) -> Result<()> {
@@ -513,25 +529,21 @@ async fn prep_next_track() -> Result<()> {
 pub fn notify_receiver() -> BroadcastReceiver {
     BROADCAST_CHANNELS.rx.clone()
 }
-
 #[instrument]
 /// Returns the current track list loaded in the player.
 pub async fn current_tracklist() -> TrackListValue {
     QUEUE.get().unwrap().read().await.track_list()
 }
-
 #[instrument]
 /// Returns the current track loaded in the player.
 pub async fn current_track() -> Option<Track> {
-    QUEUE.get().unwrap().read().await.current_track()
+    QUEUE.get().unwrap().read().await.current_track().cloned()
 }
-
 #[instrument]
 /// Returns true if the player is currently buffering data.
 pub fn is_buffering() -> bool {
     IS_BUFFERING.load(Ordering::Relaxed)
 }
-
 #[instrument]
 /// Search the service.
 pub async fn search(query: &str) -> SearchResults {
@@ -628,8 +640,10 @@ pub async fn clock_loop() {
     }
 }
 
-async fn quit() -> Result<()> {
+pub async fn quit() -> Result<()> {
     debug!("stopping player");
+
+    QUEUE.get().unwrap().read().await.quit();
 
     if is_playing() {
         debug!("pausing player");
@@ -662,8 +676,6 @@ pub async fn player_loop() -> Result<()> {
     let mut messages = PLAYBIN.bus().unwrap().stream();
     let mut about_to_finish = ABOUT_TO_FINISH.rx.stream();
 
-    let action_rx = CONTROLS.action_receiver();
-    let mut actions = action_rx.stream();
     let mut quitter = QUEUE.get().unwrap().read().await.quitter();
 
     let clock_handle = tokio::spawn(async { clock_loop().await });
@@ -673,7 +685,6 @@ pub async fn player_loop() -> Result<()> {
             Ok(should_quit)= quitter.recv() => {
                 if should_quit {
                     clock_handle.abort();
-                    quit().await?;
                     break;
                 }
             }
@@ -681,9 +692,6 @@ pub async fn player_loop() -> Result<()> {
                 if almost_done {
                     tokio::spawn(async { prep_next_track().await });
                 }
-            }
-            Some(action) = actions.next() => {
-                tokio::spawn(async { handle_action(action).await.expect("error handling action") });
             }
             Some(msg) = messages.next() => {
                 if msg.type_() == MessageType::Buffering {
@@ -705,55 +713,6 @@ pub async fn player_loop() -> Result<()> {
     Ok(())
 }
 
-async fn handle_action(action: Action) -> Result<()> {
-    match action {
-        Action::JumpBackward => jump_backward().await?,
-        Action::JumpForward => jump_forward().await?,
-        Action::Next => {
-            let state = QUEUE.get().unwrap().read().await;
-
-            let current_position = state.current_track_position();
-            drop(state);
-            skip(current_position + 1).await?;
-        }
-        Action::Pause => pause().await?,
-        Action::Play => play().await?,
-        Action::PlayPause => play_pause().await?,
-        Action::Previous => {
-            let state = QUEUE.get().unwrap().read().await;
-
-            let current_position = state.current_track_position();
-            drop(state);
-            skip(current_position - 1).await?;
-        }
-        Action::Stop => stop().await?,
-        Action::PlayAlbum { album_id } => {
-            play_album(&album_id).await?;
-        }
-        Action::PlayTrack { track_id } => {
-            play_track(track_id).await?;
-        }
-        Action::PlayUri { uri } => {
-            play_uri(&uri).await?;
-        }
-        Action::PlayPlaylist { playlist_id } => {
-            play_playlist(playlist_id).await?;
-        }
-        Action::Quit => QUEUE.get().unwrap().read().await.quit(),
-        Action::SkipTo { num } => {
-            skip(num).await?;
-        }
-        Action::Search { query } => {
-            search(&query).await;
-        }
-        Action::FetchArtistAlbums { artist_id: _ } => {}
-        Action::FetchPlaylistTracks { playlist_id: _ } => {}
-        Action::FetchUserPlaylists => {}
-    }
-
-    Ok(())
-}
-
 async fn handle_message(msg: &Message) -> Result<()> {
     match msg.view() {
         MessageView::Eos(_) => {
@@ -765,7 +724,7 @@ async fn handle_message(msg: &Message) -> Result<()> {
                 q.set_target_status(GstState::Paused);
                 drop(q);
 
-                skip(1).await?;
+                skip(1, true).await?;
             }
         }
         MessageView::StreamStart(_) => {

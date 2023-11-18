@@ -1,23 +1,19 @@
 use crate::{
-    player::{self, controls::Controls, notification::Notification, queue::TrackListValue},
+    player::{self, notification::Notification},
     service::{Album, Track},
 };
 use chrono::{DateTime, Duration, Local};
+use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
 use std::collections::HashMap;
 use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
-pub struct Mpris {
-    controls: Controls,
-}
+pub struct Mpris {}
 
-pub async fn init(controls: Controls) -> Connection {
-    let mpris = Mpris {
-        controls: controls.clone(),
-    };
+pub async fn init() -> Connection {
+    let mpris = Mpris {};
     let mpris_player = MprisPlayer {
-        controls: controls.clone(),
         status: GstState::Null,
         total_tracks: 0,
         position: ClockTime::default(),
@@ -27,12 +23,8 @@ pub async fn init(controls: Controls) -> Connection {
         can_stop: true,
         can_next: true,
         can_previous: true,
-        track_list: TrackListValue::default(),
     };
-    let mpris_tracklist = MprisTrackList {
-        controls,
-        track_list: TrackListValue::default(),
-    };
+    let mpris_tracklist = MprisTrackList {};
 
     let conn = ConnectionBuilder::session()
         .unwrap()
@@ -57,7 +49,7 @@ pub async fn init(controls: Controls) -> Connection {
     }
 }
 
-pub async fn receive_notifications(conn: Connection) {
+pub async fn receive_notifications(conn: &Connection) {
     let mut receiver = player::notify_receiver();
     let object_server = conn.object_server();
 
@@ -159,10 +151,6 @@ pub async fn receive_notifications(conn: Connection) {
                         .expect("failed to get object server");
 
                     let mut player_iface = player_ref.get_mut().await;
-                    player_iface.track_list = list.clone();
-
-                    let mut list_iface = list_ref.get_mut().await;
-                    list_iface.track_list = list.clone();
 
                     if let Some(album) = list.get_album() {
                         player_iface.total_tracks = album.total_tracks;
@@ -207,7 +195,10 @@ pub async fn receive_notifications(conn: Connection) {
 #[dbus_interface(name = "org.mpris.MediaPlayer2")]
 impl Mpris {
     async fn quit(&self) -> Result<()> {
-        self.controls.quit().await;
+        if let Err(error) = player::quit().await {
+            debug!(?error);
+        }
+
         Ok(())
     }
 
@@ -243,8 +234,6 @@ impl Mpris {
 
 #[derive(Debug)]
 pub struct MprisPlayer {
-    track_list: TrackListValue,
-    controls: Controls,
     status: GstState,
     position: ClockTime,
     position_ts: DateTime<Local>,
@@ -259,25 +248,39 @@ pub struct MprisPlayer {
 #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
     async fn open_uri(&self, uri: &str) {
-        self.controls.play_uri(uri).await;
+        if let Err(error) = player::play_uri(uri).await {
+            debug!(?error);
+        }
     }
     async fn play(&self) {
-        self.controls.play().await;
+        if let Err(error) = player::play().await {
+            debug!(?error);
+        }
     }
     async fn pause(&self) {
-        self.controls.pause().await;
+        if let Err(error) = player::pause().await {
+            debug!(?error);
+        }
     }
     async fn stop(&self) {
-        self.controls.stop().await;
+        if let Err(error) = player::stop().await {
+            debug!(?error);
+        }
     }
     async fn play_pause(&self) {
-        self.controls.play_pause().await;
+        if let Err(error) = player::play_pause().await {
+            debug!(?error);
+        }
     }
     async fn next(&self) {
-        self.controls.next().await;
+        if let Err(error) = player::next().await {
+            debug!(?error);
+        }
     }
     async fn previous(&self) {
-        self.controls.previous().await;
+        if let Err(error) = player::previous().await {
+            debug!(?error);
+        }
     }
     #[dbus_interface(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> &str {
@@ -304,8 +307,11 @@ impl MprisPlayer {
     #[dbus_interface(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&str, zvariant::Value> {
         debug!("signal metadata refresh");
-        if let Some(current_track) = &self.track_list.current_track() {
-            track_to_meta(current_track, self.track_list.get_album())
+        if let Some(current_track) = player::current_track().await {
+            track_to_meta(
+                current_track,
+                player::current_tracklist().await.get_album().cloned(),
+            )
         } else {
             HashMap::default()
         }
@@ -362,10 +368,7 @@ impl MprisPlayer {
 }
 
 #[derive(Debug)]
-pub struct MprisTrackList {
-    controls: Controls,
-    track_list: TrackListValue,
-}
+pub struct MprisTrackList {}
 
 #[dbus_interface(name = "org.mpris.MediaPlayer2.TrackList")]
 impl MprisTrackList {
@@ -375,12 +378,15 @@ impl MprisTrackList {
     ) -> Vec<HashMap<&str, zvariant::Value>> {
         debug!("get tracks metadata");
 
-        self.track_list
+        player::current_tracklist()
+            .await
             .all_tracks()
             .into_iter()
             .filter_map(|i| {
                 if tracks.contains(&i.position.to_string()) {
-                    Some(track_to_meta(i, self.track_list.get_album()))
+                    let album =
+                        block_on(async { player::current_tracklist().await.get_album().cloned() });
+                    Some(track_to_meta(i.clone(), album))
                 } else {
                     None
                 }
@@ -390,7 +396,9 @@ impl MprisTrackList {
 
     async fn go_to(&self, position: String) {
         if let Ok(p) = position.parse::<u32>() {
-            self.controls.skip_to(p).await;
+            if let Err(error) = player::skip(p, true).await {
+                debug!(?error);
+            }
         }
     }
 
@@ -403,7 +411,8 @@ impl MprisTrackList {
 
     #[dbus_interface(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
-        self.track_list
+        player::current_tracklist()
+            .await
             .unplayed_tracks()
             .iter()
             .map(|i| i.position.to_string())
@@ -417,8 +426,8 @@ impl MprisTrackList {
 }
 
 fn track_to_meta<'a>(
-    playlist_track: &'a Track,
-    album: Option<&'a Album>,
+    playlist_track: Track,
+    album: Option<Album>,
 ) -> HashMap<&'a str, zvariant::Value<'a>> {
     let mut meta = HashMap::new();
 
