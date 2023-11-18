@@ -35,11 +35,11 @@ jobs:
         with:
           shared-key: ${{ runner.target }}-rust-cache
       - uses: extractions/setup-just@v1
-      - name: Build player ${{ matrix.arch }} 
+      - name: Build player ${{ matrix.arch }}-unknown-linux-gnu
         run: just build-player ${{ matrix.arch }}-unknown-linux-gnu
-      - name: Tar hifi-rs-${{ matrix.arch }}.tar.gz
-        run: tar -cvf hifi-rs-${{ matrix.arch }}.tar.gz -C ./target/${{ matrix.arch }}/release/ hifi-rs
-      - name: Release ${{ matrix.target }}
+      - name: Tar hifi-rs-${{ matrix.arch }}-unknown-linux-gnu.tar.gz
+        run: tar -cvf hifi-rs-${{ matrix.arch }}-unknown-linux-gnu.tar.gz -C ./target/${{ matrix.arch }}-unknown-linux-gnu/release/ hifi-rs
+      - name: Release ${{ matrix.arch }}-unknown-linux-gnu
         uses: softprops/action-gh-release@v1
         with:
-          files: hifi-rs-${{ matrix.arch }}.tar.gz
+          files: hifi-rs-${{ matrix.arch }}-unknown-linux-gnu.tar.gz
