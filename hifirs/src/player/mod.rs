@@ -375,9 +375,7 @@ pub async fn skip(new_position: u32, force: bool) -> Result<()> {
         }
     }
 
-    if !is_ready() {
-        ready().await?;
-    }
+    ready().await?;
 
     if let Some(next_track_to_play) = state.skip_track(new_position).await {
         let list = state.track_list();
