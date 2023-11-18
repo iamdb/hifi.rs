@@ -1,4 +1,4 @@
-name: Create release, build and upload artifacts
+name: Create release, build and upload artifacts (MacOS)
 
 permissions:
   contents: write
