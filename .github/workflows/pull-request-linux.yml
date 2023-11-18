@@ -37,5 +37,5 @@ jobs:
         with:
           shared-key: ${{ runner.target }}-rust-cache
       - uses: extractions/setup-just@v1
-      - name: Build player
+      - name: Build player ${{ matrix.arch }} 
         run: just build-player ${{ matrix.arch }}-unknown-linux-gnu

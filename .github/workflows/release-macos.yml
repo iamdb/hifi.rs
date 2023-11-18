@@ -1,0 +1,30 @@
+name: Create release, build and upload artifacts
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - v[0-9]+.*
+env:
+  CLICOLOR_FORCE: 1
+jobs:
+  create-build-upload:
+    name: Build, package and publish
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.target }}-rust-cache
+      - uses: extractions/setup-just@v1
+      - name: Build player
+        run: just build-player x86_64-apple-darwin
+      - name: Tar hifi-rs-x86_64-apple-darwin.tar.gz
+        run: tar -cvf hifi-rs-x86_64-apple-darwin.tar.gz -C ./target/x86_64-apple-darwin/release/ hifi-rs
+      - name: Release ${{ matrix.target }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: hifi-rs-x86_64-apple-darwin.tar.gz
