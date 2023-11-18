@@ -23,18 +23,21 @@ In addition to the player, there is a Spotify to Qobuz playlist sync tool and an
 ## Requirements
 
 - [GStreamer v1.18+](https://gstreamer.freedesktop.org/documentation/installing/index.html) (comes with most/all current Linux and MacOS versions)
+- [Just](https://github.com/casey/just) (optional, useful for building and development)
 
 ## Installation
 
 ### Download Release
 
-Download the tar.gz file for your OS from the [releases page](https://github.com/iamdb/hifi.rs/releases), extract the file and execute `hifi-rs` or copy it to the your `$PATH`.
+Download the tar.gz file for your supported OS from the [releases page](https://github.com/iamdb/hifi.rs/releases), extract the file and execute `hifi-rs` or copy it to the your `$PATH`.
 
 ### Build from source
 
-To make building from source easier, there is a `Dockerfile` and `Dockerfile.arm64` to compile the project for Linux x86 and arm64 into a container.
+To make building Linux versions from source simpler, there is a `Dockerfile.x86_64` and `Dockerfile.aarch64` to compile the project for Linux x86 and arm64 into a container. After building the image, the file can be extracted to the local disk.
 
-Run `build_linux.sh` or `build_arm64.sh` to automatically build the app in Docker and output the file.
+Run `just docker-build-linux <x86_64 or aarch64>` to automate this.
+
+On MacOS, Debian, Arch and Fedora, `just build-player` should make a reasonable effort to install the necessary dependencies needed to build the app and then build it.
 
 ## Get started
 
