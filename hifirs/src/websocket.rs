@@ -69,21 +69,21 @@ async fn static_handler(req: Request<Body>) -> impl IntoResponse {
     };
 
     // Attempt to retreive the necessary file from the embedded path.
-    if let Some(file) = SITE.get_file(&path) {
-        let contents = file.contents_utf8().unwrap_or_default().to_string();
-
-        Response::builder()
-            .header(header::CONTENT_TYPE, mime_type)
-            .status(200)
-            .body(contents)
-            .expect("error making body")
+    let (body, mime_type, status) = if let Some(file) = SITE.get_file(&path) {
+        (Body::from(file.contents().to_vec()), mime_type, 200)
     } else {
-        Response::builder()
-            .header(header::CONTENT_TYPE, HTML.as_str())
-            .status(404)
-            .body("<html><body><h1>404</h1></body></html>".to_string())
-            .expect("error setting body")
-    }
+        (
+            Body::from("<html><body><h1>404</h1></body></html>"),
+            HTML.as_str().to_string(),
+            404,
+        )
+    };
+
+    Response::builder()
+        .header(header::CONTENT_TYPE, mime_type)
+        .status(status)
+        .body(body)
+        .expect("error making body")
 }
 
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
