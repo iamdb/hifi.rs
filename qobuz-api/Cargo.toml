@@ -11,16 +11,16 @@ exclude = [
 ]
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
-gstreamer = { version = "0.21", features = ["serde", "v1_16"] }
+gstreamer = { version = "0.22", features = ["serde", "v1_16"] }
 md5 = "0.7.0"
 regex = "1.5"
-reqwest = { version = "0.11", default-features = false, features = ["tokio-rustls", "serde_json", "cookies", "stream", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "stream", "multipart"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-snafu = "0.7"
+snafu = "0.8"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

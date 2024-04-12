@@ -112,7 +112,7 @@ pub async fn run() -> Result<(), Error> {
                     {
                         let results = qobuz.search(&isrc.to_lowercase()).await;
                         if !results.is_empty() {
-                            if let Some(found) = results.get(0) {
+                            if let Some(found) = results.first() {
                                 qobuz
                                     .add_track(&qobuz_playlist.id(), &found.id.to_string())
                                     .await;
@@ -149,7 +149,7 @@ pub async fn run() -> Result<(), Error> {
             if let Some(isrc) = missing.track.external_ids.get("isrc") {
                 let results = qobuz.search(&isrc.to_lowercase()).await;
                 if !results.is_empty() {
-                    if let Some(found) = results.get(0) {
+                    if let Some(found) = results.first() {
                         qobuz
                             .add_track(&qobuz_playlist.id(), &found.id.to_string())
                             .await;

@@ -25,23 +25,24 @@ pub async fn init(binding_interface: SocketAddr) {
 
     debug!("listening on {}", binding_interface);
 
-    let server = axum::Server::bind(&binding_interface).serve(app.into_make_service());
+    let listener = tokio::net::TcpListener::bind(&binding_interface)
+        .await
+        .unwrap();
 
-    let graceful = server.with_graceful_shutdown(async {
-        let mut broadcast_receiver = player::notify_receiver();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            let mut broadcast_receiver = player::notify_receiver();
 
-        loop {
-            if let Some(message) = broadcast_receiver.next().await {
-                if message == Notification::Quit {
-                    break;
+            loop {
+                if let Some(message) = broadcast_receiver.next().await {
+                    if message == Notification::Quit {
+                        break;
+                    }
                 }
             }
-        }
-    });
-
-    if let Err(e) = graceful.await {
-        debug!(?e)
-    }
+        })
+        .await
+        .unwrap();
 }
 
 async fn static_handler(req: Request<Body>) -> impl IntoResponse {

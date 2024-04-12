@@ -6,7 +6,7 @@ use chrono::{DateTime, Duration, Local};
 use futures::executor::block_on;
 use gstreamer::{ClockTime, State as GstState};
 use std::collections::HashMap;
-use zbus::{dbus_interface, fdo::Result, zvariant, Connection, ConnectionBuilder, SignalContext};
+use zbus::{fdo::Result, interface, zvariant, Connection, ConnectionBuilder, SignalContext};
 
 #[derive(Debug)]
 pub struct Mpris {}
@@ -192,7 +192,7 @@ pub async fn receive_notifications(conn: &Connection) {
     }
 }
 
-#[dbus_interface(name = "org.mpris.MediaPlayer2")]
+#[interface(name = "org.mpris.MediaPlayer2")]
 impl Mpris {
     async fn quit(&self) -> Result<()> {
         if let Err(error) = player::quit().await {
@@ -202,31 +202,31 @@ impl Mpris {
         Ok(())
     }
 
-    #[dbus_interface(property, name = "CanQuit")]
+    #[zbus(property, name = "CanQuit")]
     fn can_quit(&self) -> bool {
         true
     }
-    #[dbus_interface(property, name = "CanSetFullscreen")]
+    #[zbus(property, name = "CanSetFullscreen")]
     fn can_set_fullscreen(&self) -> bool {
         false
     }
-    #[dbus_interface(property, name = "CanRaise")]
+    #[zbus(property, name = "CanRaise")]
     fn can_raise(&self) -> bool {
         false
     }
-    #[dbus_interface(property, name = "SupportedMimeTypes")]
+    #[zbus(property, name = "SupportedMimeTypes")]
     fn supported_mime_types(&self) -> Vec<&str> {
         vec!["audio/mpeg", "audio/x-flac", "audio/flac"]
     }
-    #[dbus_interface(property, name = "SupportedUriSchemes")]
+    #[zbus(property, name = "SupportedUriSchemes")]
     fn supported_uri_schemes(&self) -> Vec<&str> {
         vec!["http"]
     }
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn identity(&self) -> &str {
         "hifi-rs"
     }
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn has_track_list(&self) -> bool {
         true
     }
@@ -245,7 +245,7 @@ pub struct MprisPlayer {
     can_previous: bool,
 }
 
-#[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
+#[interface(name = "org.mpris.MediaPlayer2.Player")]
 impl MprisPlayer {
     async fn open_uri(&self, uri: &str) {
         if let Err(error) = player::play_uri(uri).await {
@@ -282,7 +282,7 @@ impl MprisPlayer {
             debug!(?error);
         }
     }
-    #[dbus_interface(property, name = "PlaybackStatus")]
+    #[zbus(property, name = "PlaybackStatus")]
     async fn playback_status(&self) -> &str {
         match self.status {
             GstState::Playing => "Playing",
@@ -292,19 +292,19 @@ impl MprisPlayer {
             GstState::Ready => "Ready",
         }
     }
-    #[dbus_interface(property, name = "LoopStatus")]
+    #[zbus(property, name = "LoopStatus")]
     fn loop_status(&self) -> &str {
         "None"
     }
-    #[dbus_interface(property, name = "Rate")]
+    #[zbus(property, name = "Rate")]
     fn rate(&self) -> f64 {
         1.0
     }
-    #[dbus_interface(property, name = "Shuffle")]
+    #[zbus(property, name = "Shuffle")]
     fn shuffle(&self) -> bool {
         false
     }
-    #[dbus_interface(property, name = "Metadata")]
+    #[zbus(property, name = "Metadata")]
     async fn metadata(&self) -> HashMap<&str, zvariant::Value> {
         debug!("signal metadata refresh");
         if let Some(current_track) = player::current_track().await {
@@ -316,52 +316,52 @@ impl MprisPlayer {
             HashMap::default()
         }
     }
-    #[dbus_interface(property, name = "Volume")]
+    #[zbus(property, name = "Volume")]
     fn volume(&self) -> f64 {
         1.0
     }
-    #[dbus_interface(property, name = "Position")]
+    #[zbus(property, name = "Position")]
     async fn position(&self) -> i64 {
         self.position.useconds() as i64
     }
-    #[dbus_interface(signal, name = "Seeked")]
+    #[zbus(signal, name = "Seeked")]
     pub async fn seeked(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         message: i64,
     ) -> zbus::Result<()>;
-    #[dbus_interface(property, name = "MinimumRate")]
+    #[zbus(property, name = "MinimumRate")]
     fn minimum_rate(&self) -> f64 {
         1.0
     }
-    #[dbus_interface(property, name = "MaxiumumRate")]
+    #[zbus(property, name = "MaxiumumRate")]
     fn maximum_rate(&self) -> f64 {
         1.0
     }
-    #[dbus_interface(property, name = "CanGoNext")]
+    #[zbus(property, name = "CanGoNext")]
     fn can_go_next(&self) -> bool {
         self.can_next
     }
-    #[dbus_interface(property, name = "CanGoPrevious")]
+    #[zbus(property, name = "CanGoPrevious")]
     fn can_go_previous(&self) -> bool {
         self.can_previous
     }
-    #[dbus_interface(property, name = "CanPlay")]
+    #[zbus(property, name = "CanPlay")]
     fn can_play(&self) -> bool {
         self.can_play
     }
-    #[dbus_interface(property, name = "CanPause")]
+    #[zbus(property, name = "CanPause")]
     fn can_pause(&self) -> bool {
         self.can_pause
     }
-    #[dbus_interface(property, name = "CanStop")]
+    #[zbus(property, name = "CanStop")]
     fn can_stop(&self) -> bool {
         self.can_stop
     }
-    #[dbus_interface(property, name = "CanSeek")]
+    #[zbus(property, name = "CanSeek")]
     fn can_seek(&self) -> bool {
         true
     }
-    #[dbus_interface(property, name = "CanControl")]
+    #[zbus(property, name = "CanControl")]
     fn can_control(&self) -> bool {
         true
     }
@@ -370,7 +370,7 @@ impl MprisPlayer {
 #[derive(Debug)]
 pub struct MprisTrackList {}
 
-#[dbus_interface(name = "org.mpris.MediaPlayer2.TrackList")]
+#[interface(name = "org.mpris.MediaPlayer2.TrackList")]
 impl MprisTrackList {
     async fn get_tracks_metadata(
         &self,
@@ -402,14 +402,14 @@ impl MprisTrackList {
         }
     }
 
-    #[dbus_interface(signal, name = "TrackListReplaced")]
+    #[zbus(signal, name = "TrackListReplaced")]
     pub async fn track_list_replaced(
         #[zbus(signal_context)] ctxt: &SignalContext<'_>,
         tracks: Vec<&str>,
         current: &str,
     ) -> zbus::Result<()>;
 
-    #[dbus_interface(property, name = "Tracks")]
+    #[zbus(property, name = "Tracks")]
     async fn tracks(&self) -> Vec<String> {
         player::current_tracklist()
             .await
@@ -419,7 +419,7 @@ impl MprisTrackList {
             .collect::<Vec<String>>()
     }
 
-    #[dbus_interface(property, name = "CanEditTracks")]
+    #[zbus(property, name = "CanEditTracks")]
     async fn can_edit_tracks(&self) -> bool {
         false
     }
