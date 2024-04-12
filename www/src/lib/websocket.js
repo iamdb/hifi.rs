@@ -87,6 +87,8 @@ export const playlistTitle = writable('');
 export class WS {
   constructor(dev) {
     this.dev = dev;
+    this.secure = location.protocol === 'https:'
+    this.protocol = this.secure ? 'wss:' : 'ws:'
     this.host = dev ? 'localhost:9888' : window.location.host;
 
     this.playPause.bind(this)
@@ -98,7 +100,7 @@ export class WS {
   }
 
   connect() {
-    this.ws = new WebSocket(`ws://${this.host}/ws`);
+    this.ws = new WebSocket(`${this.protocol}//${this.host}/ws`);
     this.ws.onopen = () => {
       connected.set(true);
       this.fetchUserPlaylists()
