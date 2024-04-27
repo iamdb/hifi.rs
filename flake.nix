@@ -41,7 +41,7 @@
           pname = "hifirs";
           version = "0.1.0";
 
-          DATABASE_URL = "sqlite:///tmp/data.db";
+          DATABASE_URL = "sqlite://$TMPDIR/data.db";
 
           buildInputs = with pkgs; [
             gst_all_1.gstreamer
@@ -126,7 +126,10 @@
           # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
 
           # Extra inputs can be added here; cargo and rustc are provided by default.
-          packages = [
+          packages = with pkgs; [
+            gst_all_1.gstreamer.dev
+            gst_all_1.gst-plugins-base.dev
+            glib.dev
             # pkgs.ripgrep
           ];
         };

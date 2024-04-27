@@ -36,7 +36,7 @@ impl From<QobuzTrack> for Track {
             duration_seconds: value.duration as u32,
             explicit: value.parental_warning,
             hires_available: value.hires_streamable,
-            sampling_rate: value.maximum_sampling_rate as f32,
+            sampling_rate: value.maximum_sampling_rate.unwrap_or(0.0) as f32,
             bit_depth: value.maximum_bit_depth as u32,
             status,
             track_url: None,

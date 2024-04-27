@@ -23,7 +23,7 @@ pub struct Track {
     pub isrc: Option<String>,
     pub maximum_bit_depth: i64,
     pub maximum_channel_count: i64,
-    pub maximum_sampling_rate: f64,
+    pub maximum_sampling_rate: Option<f64>,
     pub media_number: i64,
     pub parental_warning: bool,
     pub performer: Option<Performer>,
@@ -45,8 +45,8 @@ pub struct Track {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AudioInfo {
-    pub replaygain_track_gain: f64,
-    pub replaygain_track_peak: f64,
+    pub replaygain_track_gain: Option<f64>,
+    pub replaygain_track_peak: Option<f64>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

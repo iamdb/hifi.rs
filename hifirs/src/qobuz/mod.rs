@@ -25,7 +25,10 @@ impl MusicService for QobuzClient {
     async fn album(&self, album_id: &str) -> Option<Album> {
         match self.album(album_id).await {
             Ok(album) => Some(album.into()),
-            Err(_) => None,
+            Err(err) => {
+                error!("failed to get album: {}", err);
+                None
+            }
         }
     }
 
@@ -117,22 +120,21 @@ pub async fn setup_client(
             refresh_config = true;
         }
 
+        if refresh_config {
+            client.refresh().await?;
+
+            if let Some(id) = client.get_app_id() {
+                db::set_app_id(id).await;
+            }
+
+            if let Some(secret) = client.get_active_secret() {
+                db::set_active_secret(secret).await;
+            }
+        }
+
         if let Some(token) = config.user_token {
             info!("using token from cache");
             client.set_token(token);
-
-            if refresh_config {
-                client.refresh().await?;
-                client.test_secrets().await?;
-
-                if let Some(id) = client.get_app_id() {
-                    db::set_app_id(id).await;
-                }
-
-                if let Some(secret) = client.get_active_secret() {
-                    db::set_active_secret(secret).await;
-                }
-            }
         } else {
             let (username, password): (Option<String>, Option<String>) =
                 if let (Some(u), Some(p)) = (username, password) {
@@ -145,14 +147,6 @@ pub async fn setup_client(
 
             if let (Some(username), Some(password)) = (username, password) {
                 info!("setting auth using username and password from cache");
-                if refresh_config {
-                    client.refresh().await?;
-
-                    if let Some(id) = client.get_app_id() {
-                        db::set_app_id(id).await;
-                    }
-                }
-
                 client.login(&username, &password).await?;
                 client.test_secrets().await?;
 

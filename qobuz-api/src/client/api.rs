@@ -17,7 +17,7 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 const BUNDLE_REGEX: &str =
     r#"<script src="(/resources/\d+\.\d+\.\d+-[a-z0-9]\d{3}/bundle\.js)"></script>"#;
@@ -436,7 +436,12 @@ impl Client {
     // Retrieve information about an album
     pub async fn album(&self, album_id: &str) -> Result<Album> {
         let endpoint = format!("{}{}", self.base_url, Endpoint::Album);
-        let params = vec![("album_id", album_id)];
+        let params = vec![
+            ("album_id", album_id),
+            ("extra", "track_ids"),
+            ("offset", "0"),
+            ("limit", "500"),
+        ];
 
         get!(self, &endpoint, Some(&params))
     }
@@ -549,6 +554,16 @@ impl Client {
                 HeaderValue::from_str(token.as_str()).unwrap(),
             );
         }
+
+        headers.insert(
+            "Access-Control-Request-Headers",
+            HeaderValue::from_str("x-app-id,x-user-auth-token").unwrap(),
+        );
+
+        headers.insert(
+            "Accept-Language",
+            HeaderValue::from_str("en,en-US;q=0.8,ko;q=0.6,zh;q=0.4,zh-CN;q=0.2").unwrap(),
+        );
 
         headers
     }
