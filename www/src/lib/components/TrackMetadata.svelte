@@ -41,7 +41,7 @@
 <div
 	bind:offsetWidth={titleWrapperWidth}
 	class:justify-center={!$enableMarquee}
-	class="bg-amber-900 flex flex-row relative"
+	class="bg-amber-900 flex flex-row relative overflow-hidden"
 >
 	<div
 		class:marquee={$enableMarquee}

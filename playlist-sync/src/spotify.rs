@@ -13,7 +13,6 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
-use tokio::select;
 use warp::Filter;
 
 const TOKEN_CACHE: &str = "/tmp/.spotify_token_cache.json";
@@ -120,16 +119,11 @@ impl<'s> Spotify<'s> {
         self.progress.set_message("waiting for authorization");
         let server_handle = tokio::spawn(warp::serve(oauth_callback).run(([127, 0, 0, 1], 8080)));
 
-        loop {
-            select! {
-                Ok(code) = rx.recv_async() => {
-                    debug!("received code: {}", code);
+        if let Ok(code) = rx.recv() {
+            debug!("received code: {}", code);
 
-                    self.client.request_token(code.as_str()).await?;
-                    server_handle.abort();
-                    break;
-                }
-            }
+            self.client.request_token(code.as_str()).await?;
+            server_handle.abort();
         }
 
         self.progress.set_message("authorization received");

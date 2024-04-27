@@ -1,4 +1,4 @@
-use gstreamer::{glib, traits::GstObjectExt, StateChangeError};
+use gstreamer::{glib, StateChangeError};
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 
@@ -24,7 +24,7 @@ pub enum Error {
     Client {
         message: String,
     },
-    NotificationError,
+    Notification,
     App,
 }
 
@@ -62,13 +62,13 @@ impl From<hifirs_qobuz_api::Error> for Error {
 
 impl From<flume::SendError<Notification>> for Error {
     fn from(_value: flume::SendError<Notification>) -> Self {
-        Self::NotificationError
+        Self::Notification
     }
 }
 
 impl From<async_broadcast::SendError<Notification>> for Error {
     fn from(_value: async_broadcast::SendError<Notification>) -> Self {
-        Self::NotificationError
+        Self::Notification
     }
 }
 
@@ -76,7 +76,7 @@ impl From<&gstreamer::message::Error> for Error {
     fn from(value: &gstreamer::message::Error) -> Self {
         let error = format!(
             "Error from {:?}: {} ({:?})",
-            value.src().map(|s| s.path_string()),
+            value.src().map(|s| s.to_string()),
             value.error(),
             value.debug()
         );
