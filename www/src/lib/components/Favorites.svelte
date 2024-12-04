@@ -10,7 +10,8 @@
 	const showPlaylistTracks = writable(false);
 </script>
 
-<div class="h-full p-4 relative flex flex-col">
+<div class="flex flex-col flex-grow gap-4 max-h-full">
+	<p class="p-4 text-lg text-center">Playlists</p>
 	<List>
 		{#each $userPlaylists as playlist}
 			<ListItem>
@@ -22,7 +23,7 @@
 						controls.fetchPlaylistTracks(playlist.id);
 						showPlaylistTracks.set(true);
 					}}
-					class="w-full py-4"
+					class="p-4 w-full text-center truncate"
 				>
 					{playlist.title}
 				</button>
