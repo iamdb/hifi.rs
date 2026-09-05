@@ -63,7 +63,7 @@ add-target target=detected_target:
   rustup target add {{target}}
 
 install-toolchain kind="stable" target=detected_target:
-  rustup toolchain install {{kind}}-{{target}}
+  rustup toolchain install --force-non-host {{kind}}-{{target}}
 
 install-sqlx:
   cargo install sqlx-cli
