@@ -46,8 +46,16 @@ Run `hifi-rs --help` or `hifi-rs <subcommand> --help` to see all available optio
 To get started:
 
 ```shell
-hifi-rs config username # enter username at prompt
-hifi-rs config password # enter password at prompt
+hifi-rs oauth # sign in via browser (OAuth)
+```
+A headless server or low-powered device may have difficulty opening a browser sufficiently full featured to support Qobuz's authentication interaction, which requires Javascript support and a Captcha. In this case, you can make `hifi-rs` print an authorisation URL that you can open with any machine on your local network.  For example, if your device has a local IP address of `192.168.1.100`, then you would start the authentication process with
+```shell
+hifi-rs oauth --advertise 192.168.1.100
+```
+Then copy and paste the printed URL into a full-featured browser on another device and follow the steps. At the end of the process, the final redirection should complete the authentication on the original device.
+
+Continue setting up with
+```shell
 hifi-rs config default-quality <quality> # mp3, cd, hifi96 or hifi192
 
 # play from the command line

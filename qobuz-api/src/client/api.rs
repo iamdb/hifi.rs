@@ -25,6 +25,7 @@ const APP_REGEX: &str =
     r#"production:\{api:\{appId:"(?P<app_id>\d{9})",appSecret:"(?P<app_secret>\w{32})""#;
 const SEED_REGEX: &str =
     r#"[a-z]\.initialSeed\("(?P<seed>[\w=]+)",window\.utimezone\.(?P<timezone>[a-z]+)\)"#;
+const PRIVATE_KEY_REGEX: &str = r#"privateKey:\s*"(?P<key>[A-Za-z0-9]{6,30})""#;
 
 macro_rules! info_regex {
     () => {
@@ -41,9 +42,11 @@ pub struct Client {
     client: reqwest::Client,
     default_quality: AudioQuality,
     user_token: Option<String>,
+    private_key: Option<String>,
     bundle_regex: regex::Regex,
     app_id_regex: regex::Regex,
     seed_regex: regex::Regex,
+    private_key_regex: regex::Regex,
 }
 
 pub async fn new(
@@ -78,12 +81,14 @@ pub async fn new(
         secrets: HashMap::new(),
         active_secret,
         user_token,
+        private_key: None,
         app_id,
         default_quality,
         base_url: "https://www.qobuz.com/api.json/0.2/".to_string(),
         bundle_regex: regex::Regex::new(BUNDLE_REGEX).unwrap(),
         app_id_regex: regex::Regex::new(APP_REGEX).unwrap(),
         seed_regex: regex::Regex::new(SEED_REGEX).unwrap(),
+        private_key_regex: regex::Regex::new(PRIVATE_KEY_REGEX).unwrap(),
     })
 }
 
@@ -206,6 +211,53 @@ impl Client {
         } else {
             Err(Error::Login)
         }
+    }
+
+    /// Exchange an OAuth authorization code (captured from the browser redirect)
+    /// for a user auth token, then validate it against the login endpoint.
+    pub async fn login_with_oauth_code(&mut self, code: &str) -> Result<()> {
+        let app_id = self.app_id.clone().ok_or(Error::AppID)?;
+        let private_key = self.private_key.clone().ok_or(Error::PrivateKey)?;
+
+        let endpoint = format!("{}oauth/callback", self.base_url);
+        let params = vec![
+            ("code", code),
+            ("private_key", private_key.as_str()),
+            ("app_id", app_id.as_str()),
+        ];
+
+        let response = self.make_get_call(&endpoint, Some(&params)).await?;
+        let json: Value = serde_json::from_str(response.as_str())
+            .map_err(|error| Error::DeserializeJSON {
+                message: error.to_string(),
+            })?;
+
+        let token = json
+            .get("token")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or(Error::OAuth)?;
+
+        self.user_token = Some(token);
+
+        let login_endpoint = format!("{}{}", self.base_url, Endpoint::Login);
+        let mut headers = self.client_headers();
+        headers.insert(
+            "Content-Type",
+            HeaderValue::from_static("text/plain;charset=UTF-8"),
+        );
+
+        let response = self
+            .client
+            .request(Method::POST, &login_endpoint)
+            .headers(headers)
+            .body("extra=partner")
+            .send()
+            .await?;
+
+        self.handle_response(response).await?;
+
+        Ok(())
     }
 
     /// Retrieve a list of the user's playlists
@@ -521,6 +573,11 @@ impl Client {
         self.active_secret = Some(active_secret);
     }
 
+    // Set a private key for OAuth authentication
+    pub fn set_private_key(&mut self, private_key: String) {
+        self.private_key = Some(private_key);
+    }
+
     pub fn set_default_quality(&mut self, quality: AudioQuality) {
         self.default_quality = quality;
     }
@@ -531,6 +588,10 @@ impl Client {
 
     pub fn get_active_secret(&self) -> Option<&String> {
         self.active_secret.as_ref()
+    }
+
+    pub fn get_private_key(&self) -> Option<&String> {
+        self.private_key.as_ref()
     }
 
     pub fn get_app_id(&self) -> Option<&String> {
@@ -636,6 +697,13 @@ impl Client {
                             .map_or("".to_string(), |m| m.as_str().to_string());
 
                         self.app_id = Some(app_id.clone());
+
+                        if let Some(captures) =
+                            self.private_key_regex.captures(bundle_contents.as_str())
+                        {
+                            self.private_key =
+                                captures.name("key").map(|m| m.as_str().to_string());
+                        }
 
                         let seed_data = self.seed_regex.captures_iter(bundle_contents.as_str());
 

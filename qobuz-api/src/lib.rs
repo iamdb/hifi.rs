@@ -25,8 +25,12 @@ pub enum Error {
     ActiveSecret,
     #[snafu(display("Failed to get an app id from Qobuz."))]
     AppID,
+    #[snafu(display("Failed to get a private key from Qobuz."))]
+    PrivateKey,
     #[snafu(display("Failed to login."))]
     Login,
+    #[snafu(display("Failed to complete OAuth login."))]
+    OAuth,
     #[snafu(display("Authorization missing."))]
     Authorization,
     #[snafu(display("Failed to create client"))]

@@ -57,30 +57,31 @@ pub async fn clear_state() {
     }
 }
 
-pub async fn set_username(username: String) {
+pub async fn clear_config() {
     if let Ok(mut conn) = acquire!() {
-        query!(
+        sqlx::query(
             r#"
             UPDATE config
-            SET username=?1
+            SET username=NULL, password=NULL, user_token=NULL, app_id=NULL, active_secret=NULL, private_key=NULL
             WHERE ROWID = 1
             "#,
-            conn,
-            username
-        );
+        )
+        .execute(&mut *conn)
+        .await
+        .expect("failed to clear config");
     }
 }
 
-pub async fn set_password(password: String) {
+pub async fn set_private_key(key: &String) {
     if let Ok(mut conn) = acquire!() {
         query!(
             r#"
             UPDATE config
-            SET password=?1
+            SET private_key=?1
             WHERE ROWID = 1
             "#,
             conn,
-            password
+            key
         );
     }
 }

@@ -13,15 +13,12 @@ pub type Result<T, E = hifirs_qobuz_api::Error> = std::result::Result<T, E>;
 
 pub mod album;
 pub mod artist;
+pub mod oauth;
 pub mod playlist;
 pub mod track;
 
 #[async_trait]
 impl MusicService for QobuzClient {
-    async fn login(&self, username: &str, password: &str) {
-        self.login(username, password).await;
-    }
-
     async fn album(&self, album_id: &str) -> Option<Album> {
         match self.album(album_id).await {
             Ok(album) => Some(album.into()),
@@ -81,18 +78,30 @@ impl MusicService for QobuzClient {
     }
 }
 
-pub async fn make_client(username: Option<&str>, password: Option<&str>) -> Result<QobuzClient> {
+pub async fn make_client() -> Result<QobuzClient> {
     let mut client = api::new(None, None, None, None).await?;
 
-    setup_client(&mut client, username, password).await
+    setup_client(&mut client).await
 }
 
-/// Setup app_id, secret and user credentials for authentication
-pub async fn setup_client(
-    client: &mut QobuzClient,
-    username: Option<&str>,
-    password: Option<&str>,
-) -> Result<QobuzClient> {
+/// Perform an explicit OAuth login and return a ready client. Used by the
+/// `oauth` subcommand to force (re-)authentication.
+pub async fn oauth_login(advertise: Option<&str>) -> Result<QobuzClient> {
+    let mut client = api::new(None, None, None, None).await?;
+
+    oauth::login(&mut client, advertise).await?;
+    client.test_secrets().await?;
+
+    if let Some(secret) = client.get_active_secret() {
+        db::set_active_secret(secret).await;
+    }
+
+    Ok(client)
+}
+
+/// Setup app_id, secret, private_key and user credentials for authentication.
+/// If no cached token is available, this falls back to an interactive OAuth login.
+pub async fn setup_client(client: &mut QobuzClient) -> Result<QobuzClient> {
     info!("setting up the api client");
 
     if let Some(config) = db::get_config().await {
@@ -120,6 +129,14 @@ pub async fn setup_client(
             refresh_config = true;
         }
 
+        if let Some(key) = config.private_key {
+            debug!("using private_key from cache");
+            client.set_private_key(key);
+        } else {
+            debug!("private_key not found, will have to refresh config");
+            refresh_config = true;
+        }
+
         if refresh_config {
             client.refresh().await?;
 
@@ -127,8 +144,8 @@ pub async fn setup_client(
                 db::set_app_id(id).await;
             }
 
-            if let Some(secret) = client.get_active_secret() {
-                db::set_active_secret(secret).await;
+            if let Some(key) = client.get_private_key() {
+                db::set_private_key(key).await;
             }
         }
 
@@ -136,27 +153,12 @@ pub async fn setup_client(
             info!("using token from cache");
             client.set_token(token);
         } else {
-            let (username, password): (Option<String>, Option<String>) =
-                if let (Some(u), Some(p)) = (username, password) {
-                    (Some(u.to_string()), Some(p.to_string()))
-                } else if let (Some(u), Some(p)) = (config.username, config.password) {
-                    (Some(u), Some(p))
-                } else {
-                    (None, None)
-                };
+            info!("no cached token, performing OAuth login");
+            oauth::login(client, None).await?;
+            client.test_secrets().await?;
 
-            if let (Some(username), Some(password)) = (username, password) {
-                info!("setting auth using username and password from cache");
-                client.login(&username, &password).await?;
-                client.test_secrets().await?;
-
-                if let Some(token) = client.get_token() {
-                    db::set_user_token(token).await;
-                }
-
-                if let Some(secret) = client.get_active_secret() {
-                    db::set_active_secret(secret).await;
-                }
+            if let Some(secret) = client.get_active_secret() {
+                db::set_active_secret(secret).await;
             }
         }
     }

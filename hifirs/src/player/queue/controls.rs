@@ -297,9 +297,9 @@ impl PlayerState {
         self.resume = false;
     }
 
-    pub async fn new(username: Option<&str>, password: Option<&str>) -> Self {
+    pub async fn new() -> Self {
         let client = Arc::new(
-            qobuz::make_client(username, password)
+            qobuz::make_client()
                 .await
                 .expect("error making client"),
         );

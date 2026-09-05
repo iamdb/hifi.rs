@@ -137,12 +137,8 @@ static USER_AGENTS: &[&str] = &[
 ];
 
 #[instrument]
-pub async fn init(
-    username: Option<&str>,
-    password: Option<&str>,
-    quit_when_done: bool,
-) -> Result<()> {
-    let state = Arc::new(RwLock::new(PlayerState::new(username, password).await));
+pub async fn init(quit_when_done: bool) -> Result<()> {
+    let state = Arc::new(RwLock::new(PlayerState::new().await));
     let version = gstreamer::version();
     debug!(?version);
 

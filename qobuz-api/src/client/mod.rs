@@ -18,6 +18,7 @@ pub struct ApiConfig {
     pub user_token: Option<String>,
     pub app_id: Option<String>,
     pub active_secret: Option<String>,
+    pub private_key: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

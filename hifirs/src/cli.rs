@@ -11,7 +11,7 @@ use crate::{
 };
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL, Table};
-use dialoguer::{Confirm, Input, Password};
+use dialoguer::Confirm;
 use hifirs_qobuz_api::client::{api::OutputFormat, AudioQuality};
 use snafu::prelude::*;
 use tokio::task::JoinHandle;
@@ -21,14 +21,6 @@ use tracing_subscriber::{fmt, prelude::*};
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Cli {
-    /// Provide a username. (overrides any database value)
-    #[clap(short, long)]
-    pub username: Option<String>,
-
-    #[clap(short, long)]
-    /// Provide a password. (overrides any database value)
-    pub password: Option<String>,
-
     #[clap(short, long, default_value_t = false)]
     /// Quit after done playing
     pub quit_when_done: bool,
@@ -79,6 +71,13 @@ enum Commands {
     Config {
         #[clap(subcommand)]
         command: ConfigCommands,
+    },
+    /// Authenticate with Qobuz via OAuth (browser-based)
+    Oauth {
+        #[clap(long)]
+        /// Host/IP placed in the redirect URL so other machines can reach the callback.
+        /// When set, the callback binds to 0.0.0.0 and no browser is opened automatically.
+        advertise: Option<String>,
     },
 }
 
@@ -140,13 +139,7 @@ pub enum ApiCommands {
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
-    /// Save username to database.
-    #[clap(value_parser)]
-    Username {},
-    /// Save password to database.
-    #[clap(value_parser)]
-    Password {},
-    /// Clear saved username and password.
+    /// Clear saved configuration and authentication state.
     Clear {},
     /// Target this quality when playing audio.
     DefaultQuality {
@@ -186,10 +179,8 @@ async fn setup_player(
     resume: bool,
     web: bool,
     interface: SocketAddr,
-    username: Option<&str>,
-    password: Option<&str>,
 ) -> Result<Vec<JoinHandle<()>>, Error> {
-    player::init(username, password, quit_when_done).await?;
+    player::init(quit_when_done).await?;
 
     let mut handles: Vec<JoinHandle<()>> = Vec::new();
 
@@ -252,8 +243,6 @@ pub async fn run() -> Result<(), Error> {
                 true,
                 cli.web,
                 cli.interface,
-                cli.username.as_deref(),
-                cli.password.as_deref(),
             )
             .await?;
 
@@ -267,8 +256,6 @@ pub async fn run() -> Result<(), Error> {
                 false,
                 cli.web,
                 cli.interface,
-                cli.username.as_deref(),
-                cli.password.as_deref(),
             )
             .await?;
 
@@ -284,8 +271,6 @@ pub async fn run() -> Result<(), Error> {
                 false,
                 cli.web,
                 cli.interface,
-                cli.username.as_deref(),
-                cli.password.as_deref(),
             )
             .await?;
 
@@ -301,8 +286,6 @@ pub async fn run() -> Result<(), Error> {
                 false,
                 cli.web,
                 cli.interface,
-                cli.username.as_deref(),
-                cli.password.as_deref(),
             )
             .await?;
 
@@ -319,7 +302,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
                 let results = client.search_all(&query, limit.unwrap_or_default()).await?;
 
                 output!(results, output_format);
@@ -332,7 +315,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
                 let results = client.search_albums(&query, limit).await?;
 
                 output!(results, output_format);
@@ -345,7 +328,7 @@ pub async fn run() -> Result<(), Error> {
                 output_format,
             } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
                 let results = client.search_artists(&query, limit).await?;
 
                 output!(results, output_format);
@@ -354,7 +337,7 @@ pub async fn run() -> Result<(), Error> {
             }
             ApiCommands::Playlist { id, output_format } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
 
                 let results = client.playlist(id).await?;
                 output!(results, output_format);
@@ -362,7 +345,7 @@ pub async fn run() -> Result<(), Error> {
             }
             ApiCommands::Album { id, output_format } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
 
                 let results = client.album(&id).await?;
                 output!(results, output_format);
@@ -370,7 +353,7 @@ pub async fn run() -> Result<(), Error> {
             }
             ApiCommands::Artist { id, output_format } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
 
                 let results = client.artist(id, Some(500)).await?;
                 output!(results, output_format);
@@ -378,7 +361,7 @@ pub async fn run() -> Result<(), Error> {
             }
             ApiCommands::Track { id, output_format } => {
                 let client =
-                    qobuz::make_client(cli.username.as_deref(), cli.password.as_deref()).await?;
+                    qobuz::make_client().await?;
 
                 let results = client.track(id).await?;
                 output!(results, output_format);
@@ -389,33 +372,14 @@ pub async fn run() -> Result<(), Error> {
             db::clear_state().await;
             Ok(())
         }
+        Commands::Oauth { advertise } => {
+            qobuz::oauth_login(advertise.as_deref()).await?;
+
+            println!("Signed in successfully.");
+
+            Ok(())
+        }
         Commands::Config { command } => match command {
-            ConfigCommands::Username {} => {
-                if let Ok(username) = Input::new()
-                    .with_prompt("Enter your username / email")
-                    .interact_text()
-                {
-                    db::set_username(username).await;
-
-                    println!("Username saved.");
-                }
-                Ok(())
-            }
-            ConfigCommands::Password {} => {
-                if let Ok(password) = Password::new()
-                    .with_prompt("Enter your password (hidden)")
-                    .interact()
-                {
-                    let md5_pw = format!("{:x}", md5::compute(password));
-
-                    debug!("saving password to database: {}", md5_pw);
-
-                    db::set_password(md5_pw).await;
-
-                    println!("Password saved.");
-                }
-                Ok(())
-            }
             ConfigCommands::DefaultQuality { quality } => {
                 db::set_default_quality(quality).await;
 
@@ -425,12 +389,12 @@ pub async fn run() -> Result<(), Error> {
             }
             ConfigCommands::Clear {} => {
                 if let Ok(ok) = Confirm::new()
-                    .with_prompt("This will clear the configuration in the database.\nDo you want to continue?")
+                    .with_prompt("This will clear the saved authentication and configuration.\nDo you want to continue?")
                     .interact()
                 {
                     if ok {
-                        db::clear_state().await;
-                        println!("Database cleared.");
+                        db::clear_config().await;
+                        println!("Configuration cleared.");
                     }
                 }
                 Ok(())
