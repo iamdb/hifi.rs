@@ -114,6 +114,7 @@ pub struct Label {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Genre {
     pub path: Vec<i64>,
+    #[serde(default)]
     pub color: String,
     pub name: String,
     pub id: i64,

@@ -577,6 +577,19 @@ impl Client {
         let headers = self.client_headers();
 
         debug!("calling {} endpoint, with params {params:?}", endpoint);
+        let url = if let Some(p) = params {
+            format!(
+                "{}?{}",
+                endpoint,
+                p.iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join("&")
+            )
+        } else {
+            endpoint.to_string()
+        };
+        debug!("GET {url}");
         let request = self.client.request(Method::GET, endpoint).headers(headers);
 
         if let Some(p) = params {
@@ -611,7 +624,11 @@ impl Client {
             Ok(res)
         } else {
             Err(Error::Api {
-                message: response.status().to_string(),
+                message: format!(
+                    "status {}; body: {}",
+                    response.status(),
+                    response.text().await.unwrap_or_default()
+                ),
             })
         }
     }
